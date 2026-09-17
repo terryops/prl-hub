@@ -105,6 +105,7 @@ final class WalletStore: ObservableObject {
     private let nameKey = "wallet.name"
     private let networkKey = "wallet.network"
     private let walletsKey = "wallet.list"     // local only: seeds never leave the device
+    private let walletsBackupKey = "wallet.list.unreadable"   // raw copy of a list this build couldn't decode
     private let activeWalletKey = "wallet.active"
     private var chainLoadToken = UUID()
 
@@ -196,9 +197,12 @@ final class WalletStore: ObservableObject {
         let d = UserDefaults.standard
         let raw = d.data(forKey: walletsKey)
         let decoded = raw.flatMap { try? JSONDecoder().decode([WalletRecord].self, from: $0) }
-        // A list that exists but can't be decoded is kept on disk untouched (names/order
-        // survive a bad build); this launch rebuilds a working list from the Keychain.
-        let listUnreadable = raw != nil && decoded == nil
+        // A list that exists but can't be decoded (e.g. written by a newer build) is copied
+        // aside before this launch rebuilds a working list from the Keychain — any later save
+        // (an address cache, a rename) would otherwise overwrite the only copy of the names.
+        if let raw, decoded == nil, d.data(forKey: walletsBackupKey) == nil {
+            d.set(raw, forKey: walletsBackupKey)
+        }
         let persisted = decoded ?? []
         let storedActive = d.string(forKey: activeWalletKey)
         guard let accounts = Keychain.accounts(prefix: "") else {
@@ -222,7 +226,7 @@ final class WalletStore: ObservableObject {
         }
         wallets = list
         activeWalletID = list.contains { $0.id == storedActive } ? storedActive : list.first?.id
-        if !listUnreadable, list != persisted || activeWalletID != storedActive { saveWallets() }
+        if list != persisted || activeWalletID != storedActive { saveWallets() }
     }
 
     private func saveWallets() {
@@ -416,7 +420,9 @@ final class WalletStore: ObservableObject {
         network = net
         saveNetwork()
         clearChainState()
-        restoreOverlay()
+        // Locked: leave the parked state where it is — unlock() restores the network then
+        // current. Pulling it into memory now would let a second locked switch clear it.
+        if mnemonic != nil { restoreOverlay() }
         if mnemonic != nil { Task { await loadChain() } }
     }
 
