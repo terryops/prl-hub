@@ -1,0 +1,10 @@
+# XcodeGen output (regenerate with `xcodegen generate`)
+*.xcodeproj/
+# Build artifacts
+build/
+build-*/
+DerivedData/
+.DS_Store
+*.log
+# Prebuilt signing framework — download from GitHub Releases (see README)
+vendor/*.xcframework/

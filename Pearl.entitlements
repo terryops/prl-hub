@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- iCloud key-value store for pool-config sync. Resolves to
+	     <TEAM_ID>.com.prl.wizard, matching the App Store bundle id. -->
+	<key>com.apple.developer.ubiquity-kvstore-identifier</key>
+	<string>$(TeamIdentifierPrefix)com.prl.wizard</string>
+	<!-- Shared container with the home-screen widget extension: the app writes a
+	     non-sensitive snapshot (balance, hashrate, public xpub/address) here for
+	     the widget to read and self-refresh. No Keychain / mnemonic crosses it. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.prl.wizard</string>
+	</array>
+</dict>
+</plist>

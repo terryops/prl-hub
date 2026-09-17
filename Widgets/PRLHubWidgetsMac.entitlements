@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS widget extension entitlements. Unlike the iOS widget (which only needs the
+  App Group), a Mac App Store extension must be sandboxed AND explicitly request
+  outbound network access, or the widget's self-refresh URLSession calls silently
+  fail. The App Group is the only shared surface with the host app: the app writes
+  a non-sensitive snapshot (xpub, public mining address, balance, hashrate) here
+  and the widget reads it. No Keychain, no mnemonic.
+-->
+<plist version="1.0">
+<dict>
+	<!-- Mac App Store requirement. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<!-- The widget self-fetches balance / price / pool hashrate over HTTPS. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.prl.wizard</string>
+	</array>
+</dict>
+</plist>

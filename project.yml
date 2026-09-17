@@ -1,0 +1,191 @@
+# Pearl Native — SwiftUI multiplatform app (macOS + iOS/iPadOS).
+# Set DEVELOPMENT_TEAM and the bundle ids to your own before building.
+# Generate with: xcodegen generate   (run from this directory)
+name: PRLHub
+options:
+  bundleIdPrefix: com.pearl.native
+  deploymentTarget:
+    iOS: "17.0"
+    macOS: "14.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  defaultConfig: Debug
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    # English is the base/development localization, so an unsupported system
+    # language (and any key missing from a translated table) falls back to
+    # English rather than to the Simplified-Chinese source strings.
+    DEVELOPMENT_LANGUAGE: en
+    INFOPLIST_KEY_CFBundleDevelopmentRegion: en
+    DEVELOPMENT_TEAM: ""   # your Apple team id
+    CODE_SIGN_STYLE: Automatic
+    GENERATE_INFOPLIST_FILE: YES
+    MARKETING_VERSION: "1.10"
+    CURRENT_PROJECT_VERSION: "94"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+schemes:
+  PRLHub_iOS:
+    build:
+      targets: { PRLHub_iOS: all }
+    run: { config: Debug }
+    archive: { config: Release }
+  PRLHub_macOS:
+    build:
+      targets: { PRLHub_macOS: all }
+    run: { config: Debug }
+    archive: { config: Release }
+  # App Store screenshot capture (XCUITest). Isolated from the production
+  # PRLHub_iOS scheme so deploy/archive flows are unaffected. Run with:
+  #   xcodebuild test -scheme PRLHubScreenshots -destination '<sim>'
+  PRLHubScreenshots:
+    build:
+      targets: { PRLHub_iOS: all, PRLHubUITests: all }
+    test:
+      targets: [PRLHubUITests]
+    run: { config: Debug }
+targets:
+  # Both targets compile the SAME shared SwiftUI codebase under Sources/.
+  PRLHub_iOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    supportedDestinations: [iOS, iPad]
+    sources:
+      - path: Sources
+        excludes: ["**/.DS_Store"]
+    dependencies:
+      - framework: vendor/OysterMobile.xcframework
+        embed: true
+        codeSign: true
+      # Home-screen widget extension, embedded into the app's PlugIns.
+      - target: PRLHubWidgets
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.prl.wizard
+        PRODUCT_NAME: Pearl
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ENABLE_PREVIEWS: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+        # iCloud KVS entitlement (pool-config sync between iPhone & Mac).
+        CODE_SIGN_ENTITLEMENTS: Pearl.entitlements
+        # Export compliance: the wallet uses only standard/exempt encryption
+        # (HTTPS + system crypto), so TestFlight clears it without a CCATS doc.
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: "NO"
+        # Required or iOS terminates the app the first time Face ID is invoked
+        # (查看助记词 / 确认转账) — without it biometric auth crashes, not prompts.
+        INFOPLIST_KEY_NSFaceIDUsageDescription: "验证身份以查看助记词或确认转账"
+        # Home-screen app name. NO leading "$" — iOS/macOS treat a leading $ as a
+        # build variable, drop the value, and fall back to CFBundleName.
+        INFOPLIST_KEY_CFBundleDisplayName: "Pearl Hub"
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        # Required by App Store validation (iPad multitasking needs all four iPad
+        # orientations declared, or the upload is rejected with error 90474).
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        # 120Hz / ProMotion: allow SwiftUI animations to run above 60fps on iPhone.
+        INFOPLIST_KEY_CADisableMinimumFrameDurationOnPhone: "YES"
+  PRLHub_macOS:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    supportedDestinations: [macOS]
+    sources:
+      - path: Sources
+        excludes: ["**/.DS_Store"]
+    dependencies:
+      - framework: vendor/OysterMobile.xcframework
+        embed: true
+        codeSign: true
+      # Desktop widget extension, embedded into the Mac app's PlugIns.
+      - target: PRLHubWidgetsMac
+        embed: true
+    settings:
+      base:
+        # Same bundle id as iOS → App Store Universal Purchase (one product across
+        # iPhone/iPad/Mac) AND a shared iCloud KVS container so 语言/货币/矿池配置
+        # actually sync iPhone↔Mac (the Mac target previously had no entitlement).
+        PRODUCT_BUNDLE_IDENTIFIER: com.prl.wizard
+        PRODUCT_NAME: Pearl
+        # macOS-specific: adds the App Sandbox (Mac App Store requirement) +
+        # network.client, alongside the iCloud KVS entitlement. The iOS target
+        # keeps Pearl.entitlements (app-sandbox is a macOS-only key).
+        CODE_SIGN_ENTITLEMENTS: Pearl-macOS.entitlements
+        ENABLE_PREVIEWS: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        COMBINE_HIDPI_IMAGES: YES
+        # Export compliance: only standard/exempt encryption (HTTPS + system crypto),
+        # so App Store clears it without a CCATS doc (mirrors the iOS target).
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: "NO"
+        INFOPLIST_KEY_CFBundleDisplayName: "Pearl Hub"
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.finance
+  # Home-screen widget extension (iOS). Compiles the widget UI (Widgets/) plus the
+  # shared snapshot/fetch code (Sources/WidgetShared/) — NOT the whole app, so the
+  # extension links nothing heavy (no OysterMobile). Talks to the app only through
+  # the App Group container.
+  PRLHubWidgets:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    supportedDestinations: [iOS, iPad]
+    sources:
+      - path: Widgets
+        excludes: ["**/.DS_Store", "Info.plist", "PRLHubWidgets.entitlements", "PRLHubWidgetsMac.entitlements"]
+      - path: Sources/WidgetShared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.prl.wizard.widgets
+        PRODUCT_NAME: PRLHubWidgets
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Widgets/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Widgets/PRLHubWidgets.entitlements
+        SWIFT_EMIT_LOC_STRINGS: YES
+        # The widget has no app icon of its own; don't let the global AppIcon
+        # setting make actool look for one.
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+  # Desktop widget extension (macOS) — the SAME code as the iOS widget (Widgets/ +
+  # Sources/WidgetShared/), embedded into the Mac app's PlugIns for a Universal
+  # Purchase. Differs only in entitlements: a Mac App Store extension must be
+  # sandboxed and explicitly request network.client (the iOS extension gets network
+  # for free). Reuses the shared Widgets/Info.plist (the widgetkit-extension point
+  # is identical across platforms).
+  PRLHubWidgetsMac:
+    type: app-extension
+    platform: macOS
+    deploymentTarget: "14.0"
+    supportedDestinations: [macOS]
+    sources:
+      - path: Widgets
+        excludes: ["**/.DS_Store", "Info.plist", "PRLHubWidgets.entitlements", "PRLHubWidgetsMac.entitlements"]
+      - path: Sources/WidgetShared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.prl.wizard.widgets
+        PRODUCT_NAME: PRLHubWidgetsMac
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Widgets/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Widgets/PRLHubWidgetsMac.entitlements
+        SWIFT_EMIT_LOC_STRINGS: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+  # XCUITest bundle used ONLY to capture App Store screenshots on the simulator.
+  # Not part of any archive/TestFlight build — see the PRLHubScreenshots scheme.
+  PRLHubUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    supportedDestinations: [iOS, iPad]
+    sources:
+      - path: UITests
+    dependencies:
+      - target: PRLHub_iOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.prl.wizard.uitests
+        TEST_TARGET_NAME: PRLHub_iOS
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"

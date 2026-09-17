@@ -1,0 +1,4 @@
+/* App display name — "Pearl Hub" for every language. No leading "$": iOS/macOS
+   treat a leading $ as a build variable and drop the name (falls back to CFBundleName). */
+"CFBundleDisplayName" = "Pearl Hub";
+"CFBundleName" = "Pearl Hub";

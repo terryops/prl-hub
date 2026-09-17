@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  App privacy manifest (com.prl.wizard).
+
+  Self-custody wallet: no analytics/ads/crash SDKs, no IDFA, no tracking, and no
+  user data collected by us. The recovery phrase stays in the device Keychain;
+  SafeTrade API keys go only to the exchange the user configures (iCloud Keychain,
+  end-to-end encrypted) — never to us. So NSPrivacyCollectedDataTypes is empty.
+
+  Required-reason APIs actually used by the app target (verified in source):
+    • UserDefaults — Currency.swift / PRLPrice.swift caches + @AppStorage settings.
+      Reason CA92.1: read/write info accessible only to this app itself.
+  Not used (so NOT declared): file timestamps, system boot time, disk space,
+  active keyboards. iCloud KVS (NSUbiquitousKeyValueStore) is not a required-reason API.
+-->
+<plist version="1.0">
+<dict>
+    <key>NSPrivacyTracking</key>
+    <false/>
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array/>
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>CA92.1</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>

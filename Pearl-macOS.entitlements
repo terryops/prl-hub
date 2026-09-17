@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS entitlements (com.prl.wizard).
+
+  Mac App Store REQUIRES the App Sandbox; this file adds it (the iOS target keeps
+  the separate, sandbox-free Pearl.entitlements — `app-sandbox` is a macOS-only
+  key). It is sandbox-compatible: the wallet only makes outbound HTTPS (price /
+  exchange / blockbook indexer), reads/writes its own Keychain items, and uses
+  iCloud key-value sync — no arbitrary file or server access.
+
+  The same file is used by BOTH the Mac App Store build and the Developer ID DMG
+  (package-dmg.sh): a Developer ID app may also be sandboxed, and neither
+  app-sandbox nor network.client is a profile-restricted entitlement, so the
+  Developer ID profile still signs cleanly. Only the iCloud KVS identifier is
+  profile-gated, and both profiles already carry it.
+-->
+<plist version="1.0">
+<dict>
+    <!-- Mac App Store requirement. -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <!-- Outbound connections: PRL price, SafeTrade, blockbook.pearlresearch.ai. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <!-- iCloud key-value store for 语言 / 货币 / 矿池配置 sync (iPhone ↔ Mac).
+         Resolves to <TEAM_ID>.com.prl.wizard, matching the App Store bundle id. -->
+    <key>com.apple.developer.ubiquity-kvstore-identifier</key>
+    <string>$(TeamIdentifierPrefix)com.prl.wizard</string>
+    <!-- Shared container with the desktop widget extension: the app writes a
+         non-sensitive snapshot (balance, hashrate, public xpub/address) here for
+         the widget to read. Same group id as iOS so the shared WidgetStore code
+         (suiteName "group.com.prl.wizard") works unchanged on both platforms. -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.com.prl.wizard</string>
+    </array>
+</dict>
+</plist>
