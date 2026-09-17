@@ -87,6 +87,12 @@ struct PearlProvider: TimelineProvider {
             }
             let (bal, usd, cny, poolResults) = await (balF, usdF, cnyF, poolsF)
 
+            // The fetches above can take many seconds, during which the app may have removed
+            // or switched the wallet (clearWallet) or changed the pool watches. Merge into the
+            // snapshot as it is NOW, and only onto the same wallet / pools the fetch was for —
+            // writing back the copy read at the start would resurrect a removed wallet.
+            snap = WidgetStore.load()
+
             // Track whether ANY self-fetch actually succeeded — the freshness timestamp
             // must only advance on success, otherwise a fully-offline refresh keeps the
             // stale balance/hashrate but stamps it "now", so it reads as just-refreshed.
@@ -95,32 +101,35 @@ struct PearlProvider: TimelineProvider {
             // app-published stranded internal-chain change so the widget can't show LESS
             // than the app's authoritative total. (recentTx still comes from the app's
             // last write — direction/amount need the app's full chain logic.)
-            if let bal { snap.balancePRL = bal + snap.changePRL; didRefresh = true }
+            if let bal, let xpub, snap.xpub == xpub, snap.network == network {
+                snap.balancePRL = bal + snap.changePRL; didRefresh = true
+            }
             if let usd { snap.prlUsd = usd; didRefresh = true }
             if let cny { snap.usdCny = cny; didRefresh = true }
 
-            var pools = poolsIn
-            for (i, live) in poolResults {
-                guard let live, pools.indices.contains(i) else { continue }
-                pools[i].hashrate = live.hashrate
-                pools[i].hashrateRaw = live.hashrateRaw
-                pools[i].online = live.online
-                pools[i].total = live.total
-                didRefresh = true
+            let sameWatches = snap.pools.map { "\($0.kind)|\($0.address)" } == poolsIn.map { "\($0.kind)|\($0.address)" }
+            if sameWatches {
+                for (i, live) in poolResults {
+                    guard let live, snap.pools.indices.contains(i) else { continue }
+                    snap.pools[i].hashrate = live.hashrate
+                    snap.pools[i].hashrateRaw = live.hashrateRaw
+                    snap.pools[i].online = live.online
+                    snap.pools[i].total = live.total
+                    didRefresh = true
+                }
             }
-            snap.pools = pools
             if didRefresh { snap.updatedAt = Date() }
             WidgetStore.save(snap)
 
             // Freshness is the last SUCCESSFUL refresh (not the timeline build time), so the
-            // shown age reflects how current the figures really are. Fall back to now only
-            // when nothing was ever loaded.
+            // shown age reflects how current the figures really are. When nothing was ever
+            // loaded the stamp stays .distantPast → no age label and no fresh badge.
             //
             // Emit one entry per minute, each carrying a precomputed minute-granularity age
             // string, so the label advances "1 分钟前 → 2 分钟前 …" by the MINUTE. WidgetKit
             // swaps these on schedule WITHOUT spending a reload, so it's free; cover an hour
             // in case the system delays the next reload past the 30-min request.
-            let stamp = snap.updatedAt > .distantPast ? snap.updatedAt : Date()
+            let stamp = snap.updatedAt
             let start = Date()
             var entries: [PearlEntry] = []
             for m in 0...60 {

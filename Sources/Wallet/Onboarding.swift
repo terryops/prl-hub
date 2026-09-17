@@ -4,14 +4,22 @@ import SwiftUI
 
 struct CreateWalletView: View {
     @ObservedObject var store: WalletStore
+    /// Extra close step after a successful commit (the add-wallet sheet closes itself).
+    var onCommitted: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
 
     enum Step { case form, seed, verify }
     @State private var step: Step = .form
-    @State private var name = "Pearl Wallet"
+    @State private var name: String
     @State private var phrase: [String] = []
     @State private var error: String?
     @State private var screenshotWarning = false
+
+    init(store: WalletStore, onCommitted: (() -> Void)? = nil) {
+        self.store = store
+        self.onCommitted = onCommitted
+        _name = State(initialValue: store.suggestedWalletName())
+    }
 
     private var stepIndex: Int { step == .form ? 0 : (step == .seed ? 1 : 2) }
 
@@ -124,6 +132,7 @@ struct CreateWalletView: View {
             // dashboard. Pop this pushed onboarding view too, or it stays orphaned
             // on top of the new root and the UI freezes until the app is relaunched.
             dismiss()
+            onCommitted?()
         } else {
             error = store.lastError ?? Loc("创建失败")
             step = .seed
@@ -203,14 +212,22 @@ private struct VerifyStep: View {
 
 struct ImportWalletView: View {
     @ObservedObject var store: WalletStore
+    /// Extra close step after a successful commit (the add-wallet sheet closes itself).
+    var onCommitted: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
-    @State private var name = "Pearl Wallet"
+    @State private var name: String
     @State private var text = ""
     @State private var error: String?
     @State private var working = false
     @State private var shot = false
     @FocusState private var focusedField: Field?
     private enum Field { case name, phrase }
+
+    init(store: WalletStore, onCommitted: (() -> Void)? = nil) {
+        self.store = store
+        self.onCommitted = onCommitted
+        _name = State(initialValue: store.suggestedWalletName())
+    }
 
     // Normalize like commitWallet does — split on spaces, newlines AND tabs so a
     // phrase pasted one-word-per-line still counts correctly.
@@ -292,6 +309,7 @@ struct ImportWalletView: View {
                             // stays orphaned on top of the new root and the UI freezes
                             // until the app is relaunched.
                             dismiss()
+                            onCommitted?()
                         } else {
                             error = store.lastError ?? Loc("恢复失败")
                             working = false

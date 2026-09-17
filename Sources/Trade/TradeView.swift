@@ -481,6 +481,30 @@ struct CandleChart: View {
     @State private var selected: STCandle?
     @Environment(\.colorScheme) private var scheme
 
+    /// Minutes between candles, read from the data itself so the axis always matches what
+    /// is drawn (the period picker can change a beat before the new candles arrive).
+    private var candleMinutes: Double {
+        guard candles.count >= 2 else { return 1440 }
+        return abs(candles[1].time.timeIntervalSince(candles[0].time)) / 60
+    }
+
+    /// Time labels fine enough that the ~4 ticks differ: 15-min candles span ~30 h (times),
+    /// hourly ~5 days (date + hour), 4-hour / daily candles weeks to months (dates).
+    private var timeAxisFormat: Date.FormatStyle {
+        switch candleMinutes {
+        case ..<30:  return .dateTime.hour().minute()
+        case ..<120: return .dateTime.month(.defaultDigits).day().hour()
+        default:     return .dateTime.month(.abbreviated).day()
+        }
+    }
+
+    /// Enough decimals that neighbouring price ticks (~¼ of the visible range apart) never
+    /// print the same label — a sub-dollar coin can move less than a cent in a window.
+    private func priceFractionDigits(lo: Double, hi: Double) -> Int {
+        let step = max(hi - lo, 0.0001) / 4
+        return min(6, max(2, Int(ceil(-log10(step)))))
+    }
+
     var body: some View {
         if candles.isEmpty {
             Text(Loc("加载 K 线…")).font(.caption).foregroundStyle(.secondary)
@@ -489,6 +513,7 @@ struct CandleChart: View {
             let lo = candles.map(\.low).min() ?? 0
             let hi = candles.map(\.high).max() ?? 1
             let pad = max((hi - lo) * 0.08, 0.0001)
+            let priceDigits = priceFractionDigits(lo: lo, hi: hi)
             Chart {
                 ForEach(candles) { c in
                     RuleMark(x: .value("时间", c.time),
@@ -524,7 +549,7 @@ struct CandleChart: View {
                 AxisMarks(values: .automatic(desiredCount: 4)) { v in
                     AxisValueLabel {
                         if let d = v.as(Date.self) {
-                            Text(d, format: .dateTime.month(.abbreviated).day())
+                            Text(d, format: timeAxisFormat)
                                 .font(.caption2).foregroundStyle(Color.secondary)
                         }
                     }
@@ -535,8 +560,11 @@ struct CandleChart: View {
                     AxisGridLine().foregroundStyle(Color.primary.opacity(0.06))
                     AxisValueLabel {
                         if let y = v.as(Double.self) {
-                            Text(y.formatted(.number.precision(.fractionLength(2))))
-                                .font(.caption2).foregroundStyle(Color.secondary)
+                            // Text(_:format:) formats with the app's locale from the environment.
+                            // A concrete gray, not .secondary: inside these AxisMarks the hierarchical
+                            // style resolves against the 6%-opacity grid line and the labels vanish.
+                            Text(y, format: .number.precision(.fractionLength(priceDigits)))
+                                .font(.caption2).foregroundStyle(Color.gray)
                         }
                     }
                 }

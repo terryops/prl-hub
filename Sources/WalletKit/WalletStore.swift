@@ -13,7 +13,6 @@ final class WalletStore: ObservableObject {
     enum Phase: Equatable { case loading, noWallet, locked, unlocked }
 
     @Published private(set) var phase: Phase = .loading
-    @Published var walletName: String = "Pearl Wallet"
     @Published var network: WalletNetwork = .mainnet
     @Published private(set) var mnemonic: String?      // in memory only while unlocked
     @Published private(set) var balance: WalletBalance = .zero
@@ -44,6 +43,9 @@ final class WalletStore: ObservableObject {
     var backendStatus: String { Loc("正在从链上同步余额与记录…") }
     var frameworkOK: Bool { OysterBridge.isAvailable() }
     static let sendFeeReserve = Decimal(string: "0.001")!
+    /// How far a MAX sweep may exceed the amount the user confirmed (0.01 PRL): the unused
+    /// fee reserve fits comfortably, newly arrived funds or a different wallet do not.
+    static let maxSweepSlackSat: Int64 = 1_000_000
     /// Fee rate (sat/kB) used for the ownership-oracle trial-sign. Deliberately the
     /// relay floor, not a realistic spend fee: the trial only needs to BUILD, so a low
     /// fee keeps small owned change from failing to cover it and being mis-tagged foreign.
@@ -63,20 +65,47 @@ final class WalletStore: ObservableObject {
     /// back off to a gentle keep-warm interval once everything has ≥1 confirmation.
     var pollInterval: Duration { hasUnconfirmedTx ? .seconds(15) : .seconds(60) }
 
+    /// Every wallet on this device, in display order, and which one is open.
+    @Published private(set) var wallets: [WalletRecord] = []
+    @Published private(set) var activeWalletID: String?
+
+    /// The wallet that predates multi-wallet support keeps its original Keychain
+    /// account, data dir and change-cache keys, so upgrading moves nothing on disk.
+    static let legacyWalletID = "primary"
+
     /// Persistent wallet db location (the gomobile side appends the network dir).
-    private var walletDataURL: URL {
+    ///
+    /// MUST be unique per seed: oyster keeps the keys in this db and re-opens an
+    /// existing one regardless of the mnemonic passed in, so a second seed pointed at
+    /// the first wallet's dir derives the FIRST wallet's addresses/xpub and can't sign
+    /// its own UTXOs (verified against the macOS slice).
+    private func walletDataURL(for id: String) -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("PearlWallet", isDirectory: true)
+            .appendingPathComponent(id == Self.legacyWalletID ? "PearlWallet" : "PearlWallet-\(id)", isDirectory: true)
     }
     private var walletDataDir: String {
-        let base = walletDataURL
+        let base = walletDataURL(for: activeWalletID ?? Self.legacyWalletID)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base.path
     }
 
-    private let mnemonicAccount = "primary.mnemonic"
+    private static let walletAccountPrefix = "wallet."
+    private func mnemonicAccount(for id: String) -> String {
+        id == Self.legacyWalletID ? "primary.mnemonic" : "\(Self.walletAccountPrefix)\(id).mnemonic"
+    }
+
+    /// UserDefaults key prefix for the per-wallet change-chain caches (`<prefix><net>.owned` …).
+    private func changeKeyPrefix(for id: String?) -> String {
+        guard let id, id != Self.legacyWalletID else { return "change." }
+        return "change.\(id)."
+    }
+    private var changeKeyPrefix: String { changeKeyPrefix(for: activeWalletID) }
+
+    /// iCloud-synced name of the legacy wallet (kept for older builds / other devices).
     private let nameKey = "wallet.name"
     private let networkKey = "wallet.network"
+    private let walletsKey = "wallet.list"     // local only: seeds never leave the device
+    private let activeWalletKey = "wallet.active"
     private var chainLoadToken = UUID()
 
     /// Last on-chain snapshot from Blockbook (the source of truth), kept separate
@@ -115,17 +144,27 @@ final class WalletStore: ObservableObject {
     private var loadInFlight = false
     private var loadAgain = false
 
+    /// One store per process: every window (macOS ⌘N, iPad scenes) must share the wallet
+    /// list, or each window's `saveWallets()` overwrites the others' changes.
+    static let shared = WalletStore()
+
     init() { loadMeta() }
 
     // MARK: lifecycle
 
     func bootstrap() {
         loadMeta()
+        loadWallets()
         // Personal-use: auto-unlock on launch (no biometric). Only sending asks for auth.
-        if let m = Keychain.get(account: mnemonicAccount) {
+        if let id = activeWalletID, let m = Keychain.get(account: mnemonicAccount(for: id)) {
             mnemonic = m
             phase = .unlocked
             Task { await loadChain() }
+        } else if activeWalletID != nil {
+            // The seed is listed in the Keychain but couldn't be read (macOS access prompt
+            // denied, keychain locked). Don't fall through to onboarding — let them retry.
+            lastError = Loc("无法读取钥匙串中的助记词，请重试解锁")
+            phase = .locked
         } else {
             #if DEBUG
             // Screenshot-only: SHOT_MNEMONIC imports a throwaway test wallet on launch, so a
@@ -139,26 +178,163 @@ final class WalletStore: ObservableObject {
 
     private func loadMeta() {
         let d = UserDefaults.standard
-        if let n = d.string(forKey: nameKey), !n.isEmpty { walletName = n }
         if let net = d.string(forKey: networkKey), let v = WalletNetwork(rawValue: net) { network = v }
     }
-    private func saveMeta() {
-        let d = UserDefaults.standard
-        d.set(walletName, forKey: nameKey)
-        d.set(network.rawValue, forKey: networkKey)
-        // Mirror the (non-secret) wallet name + chosen network to iCloud.
-        CloudSync.push(nameKey)
+    private func saveNetwork() {
+        UserDefaults.standard.set(network.rawValue, forKey: networkKey)
         CloudSync.push(networkKey)
     }
 
+    /// Rebuild the wallet list: the persisted index, plus any seed still in the Keychain
+    /// without an entry (upgrade from the single-wallet build, or an app reinstall that
+    /// wiped UserDefaults but not the Keychain), minus entries whose seed is gone.
+    ///
+    /// Presence is checked from Keychain ATTRIBUTES only — reading every seed would raise one
+    /// macOS access prompt per wallet, and a denied prompt must never count as "seed gone".
+    /// If the Keychain can't be listed at all, the persisted list is used untouched.
+    private func loadWallets() {
+        let d = UserDefaults.standard
+        let raw = d.data(forKey: walletsKey)
+        let decoded = raw.flatMap { try? JSONDecoder().decode([WalletRecord].self, from: $0) }
+        // A list that exists but can't be decoded is kept on disk untouched (names/order
+        // survive a bad build); this launch rebuilds a working list from the Keychain.
+        let listUnreadable = raw != nil && decoded == nil
+        let persisted = decoded ?? []
+        let storedActive = d.string(forKey: activeWalletKey)
+        guard let accounts = Keychain.accounts(prefix: "") else {
+            wallets = persisted
+            activeWalletID = persisted.contains { $0.id == storedActive } ? storedActive : persisted.first?.id
+            return
+        }
+        let present = Set(accounts)
+        var list = persisted.filter { present.contains(mnemonicAccount(for: $0.id)) }
+        var known = Set(list.map(\.id))
+        if !known.contains(Self.legacyWalletID), present.contains(mnemonicAccount(for: Self.legacyWalletID)) {
+            let legacyName = d.string(forKey: nameKey).flatMap { $0.isEmpty ? nil : $0 } ?? "Pearl Wallet"
+            list.insert(WalletRecord(id: Self.legacyWalletID, name: legacyName), at: 0)
+            known.insert(Self.legacyWalletID)
+        }
+        for account in accounts.sorted() where account.hasPrefix(Self.walletAccountPrefix) && account.hasSuffix(".mnemonic") {
+            let id = String(account.dropFirst(Self.walletAccountPrefix.count).dropLast(".mnemonic".count))
+            guard !id.isEmpty, !known.contains(id) else { continue }
+            list.append(WalletRecord(id: id, name: suggestedWalletName(in: list)))
+            known.insert(id)
+        }
+        wallets = list
+        activeWalletID = list.contains { $0.id == storedActive } ? storedActive : list.first?.id
+        if !listUnreadable, list != persisted || activeWalletID != storedActive { saveWallets() }
+    }
+
+    private func saveWallets() {
+        #if DEBUG
+        // Screenshot runs keep seeds in memory but share the real UserDefaults: writing
+        // here would prune the real wallet list down to the throwaway test wallet.
+        if Keychain.isMemoryOnly { return }
+        #endif
+        let d = UserDefaults.standard
+        if let data = try? JSONEncoder().encode(wallets) { d.set(data, forKey: walletsKey) }
+        d.set(activeWalletID, forKey: activeWalletKey)
+    }
+
+    /// The open wallet's entry in `wallets`.
+    var activeRecord: WalletRecord? { wallets.first { $0.id == activeWalletID } }
+    /// Display name of the open wallet (derived — `wallets` is the single source).
+    var walletName: String { activeRecord?.name ?? "Pearl Wallet" }
+
+    /// "Pearl Wallet", then "Pearl Wallet 2", "Pearl Wallet 3"… — the first name no wallet uses.
+    func suggestedWalletName() -> String { suggestedWalletName(in: wallets) }
+    private func suggestedWalletName(in list: [WalletRecord]) -> String {
+        let used = Set(list.map(\.name))
+        if !used.contains("Pearl Wallet") { return "Pearl Wallet" }
+        var n = 2
+        while used.contains("Pearl Wallet \(n)") { n += 1 }
+        return "Pearl Wallet \(n)"
+    }
+
     /// Adopt wallet name / network pushed in from another device via iCloud
-    /// (CloudSync has already written them into UserDefaults).
+    /// (CloudSync has already written them into UserDefaults). The synced name only
+    /// ever belonged to the legacy single wallet, so it never renames the others.
     func adoptSyncedMeta() {
         let d = UserDefaults.standard
-        if let n = d.string(forKey: nameKey), !n.isEmpty, n != walletName { walletName = n }
+        if let n = d.string(forKey: nameKey), !n.isEmpty,
+           let i = wallets.firstIndex(where: { $0.id == Self.legacyWalletID }), wallets[i].name != n {
+            wallets[i].name = n
+            saveWallets()
+        }
         if let net = d.string(forKey: networkKey), let v = WalletNetwork(rawValue: net), v != network {
             changeNetwork(v)   // re-derive address + re-sync for the new network
         }
+    }
+
+    /// Rename a wallet (display only — the seed and on-chain data are untouched).
+    func renameWallet(id: String, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let i = wallets.firstIndex(where: { $0.id == id }) else { return }
+        wallets[i].name = trimmed
+        if id == Self.legacyWalletID {
+            UserDefaults.standard.set(trimmed, forKey: nameKey)
+            CloudSync.push(nameKey)
+        }
+        saveWallets()
+        if id == activeWalletID { publishOverlay() }   // widget shows the new name
+    }
+
+    /// Open another wallet on this device: set the current wallet's chain state aside,
+    /// then load the chosen seed and re-sync. Returns false (nothing changes) if the seed
+    /// can't be read.
+    @discardableResult
+    func switchWallet(to id: String) -> Bool {
+        guard id != activeWalletID, wallets.contains(where: { $0.id == id }) else { return id == activeWalletID }
+        guard let m = Keychain.get(account: mnemonicAccount(for: id)) else {
+            lastError = Loc("无法读取该钱包的助记词（钥匙串拒绝了访问），请重试")
+            return false
+        }
+        invalidateChainLoads()
+        parkOverlay()
+        clearChainState()
+        activeWalletID = id
+        saveWallets()
+        restoreOverlay()
+        WidgetBridge.clearWallet()   // don't keep showing the previous wallet until the new one publishes
+        mnemonic = m
+        phase = .unlocked
+        lastError = nil
+        Task { await loadChain() }
+        return true
+    }
+
+    // MARK: per-wallet optimistic state
+
+    /// Optimistic sends and in-flight recovery guards of a wallet/network the user moved
+    /// away from before Blockbook indexed them. Restored on the way back so a quick A→B→A
+    /// can't re-show pre-send balances or re-offer already-swept change.
+    private struct ParkedOverlay {
+        var pendingSends: [String: WalletTx]
+        var recoveringOutpoints: Set<String>
+        var recoveringTxid: String?
+    }
+    private var parkedOverlays: [String: ParkedOverlay] = [:]
+    private func overlayKey(_ id: String?, _ net: WalletNetwork) -> String { "\(id ?? "")|\(net.rawValue)" }
+
+    private func parkOverlay() {
+        // Locked: lock() already parked this wallet's state and cleared it, so the empty
+        // state seen now must not overwrite (erase) that parked copy.
+        guard mnemonic != nil else { return }
+        let key = overlayKey(activeWalletID, network)
+        if pendingSends.isEmpty && recoveringOutpoints.isEmpty && recoveringTxid == nil {
+            parkedOverlays[key] = nil
+        } else {
+            parkedOverlays[key] = ParkedOverlay(pendingSends: pendingSends,
+                                                recoveringOutpoints: recoveringOutpoints,
+                                                recoveringTxid: recoveringTxid)
+        }
+    }
+
+    private func restoreOverlay() {
+        guard let p = parkedOverlays.removeValue(forKey: overlayKey(activeWalletID, network)) else { return }
+        pendingSends = p.pendingSends
+        recoveringOutpoints = p.recoveringOutpoints
+        recoveringTxid = p.recoveringTxid
     }
 
     /// Generate a brand-new mnemonic (not yet persisted — caller confirms backup first).
@@ -167,7 +343,8 @@ final class WalletStore: ObservableObject {
     /// Validate a user-entered recovery phrase.
     func isValidMnemonic(_ m: String) -> Bool { OysterBridge.validate(m) }
 
-    /// Persist a freshly created or imported wallet and unlock it.
+    /// Add a freshly created or imported wallet to this device and open it. Importing
+    /// a seed that is already here just switches to that wallet instead of duplicating it.
     func commitWallet(name: String, mnemonic: String) -> Bool {
         let phrase = mnemonic.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "\n", with: " ")
@@ -177,13 +354,38 @@ final class WalletStore: ObservableObject {
             lastError = Loc("助记词无效（BIP39 校验失败）")
             return false
         }
-        guard Keychain.set(phrase, account: mnemonicAccount) else {
+        if let existing = wallets.first(where: { Keychain.get(account: mnemonicAccount(for: $0.id)) == phrase }) {
+            // The phrase just matched this wallet's stored seed, so opening it can't hit a
+            // read failure — but only report success once it is actually open.
+            if existing.id == activeWalletID {
+                if self.mnemonic == nil {
+                    invalidateChainLoads()
+                    self.mnemonic = phrase
+                    Task { await loadChain() }
+                }
+                phase = .unlocked
+            } else if !switchWallet(to: existing.id) {
+                return false
+            }
+            lastError = nil
+            flashToast(Loc("该钱包已在本机，已切换到「%@」", existing.name))
+            return true
+        }
+        let id = UUID().uuidString.lowercased()
+        // A fresh id can't collide, but never let a new seed open a leftover db (see walletDataURL).
+        try? FileManager.default.removeItem(at: walletDataURL(for: id))
+        guard Keychain.set(phrase, account: mnemonicAccount(for: id)) else {
             lastError = Loc("无法写入钥匙串（Keychain）")
             return false
         }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         invalidateChainLoads()
-        walletName = name.isEmpty ? "Pearl Wallet" : name
-        saveMeta()
+        parkOverlay()
+        clearChainState()
+        wallets.append(WalletRecord(id: id, name: trimmed.isEmpty ? suggestedWalletName() : trimmed))
+        activeWalletID = id
+        saveWallets()
+        WidgetBridge.clearWallet()
         self.mnemonic = phrase
         phase = .unlocked
         lastError = nil
@@ -193,9 +395,14 @@ final class WalletStore: ObservableObject {
 
     /// Re-open the wallet after a manual lock (no biometric — personal use).
     func unlock() async {
-        guard let m = Keychain.get(account: mnemonicAccount) else { phase = .noWallet; return }
+        guard let id = activeWalletID else { phase = .noWallet; return }
+        guard let m = Keychain.get(account: mnemonicAccount(for: id)) else {
+            lastError = Loc("无法读取钥匙串中的助记词，请重试解锁")
+            return
+        }
         invalidateChainLoads()
         mnemonic = m
+        restoreOverlay()
         phase = .unlocked
         lastError = nil
         await loadChain()
@@ -205,12 +412,11 @@ final class WalletStore: ObservableObject {
     func changeNetwork(_ net: WalletNetwork) {
         guard net != network else { return }
         invalidateChainLoads()
+        parkOverlay()
         network = net
-        saveMeta()
-        address = nil; xpub = nil
-        balance = .zero; txs = []; backendReady = false; historyReady = false
-        serverBalance = .zero; serverTxs = []; pendingSends.removeAll()
-        clearChangeChainState()
+        saveNetwork()
+        clearChainState()
+        restoreOverlay()
         if mnemonic != nil { Task { await loadChain() } }
     }
 
@@ -267,6 +473,7 @@ final class WalletStore: ObservableObject {
             guard isCurrentChainLoad(token, mnemonic: mnemonic, network: expectedNetwork) else { return }
             if receiveIndex == expectedReceiveIndex { address = derived.0 }
             if xpub == nil { xpub = derived.1 }
+            if expectedReceiveIndex == 0, let a = derived.0 { cacheMainAddress(a, network: expectedNetwork) }
         }
         guard isCurrentChainLoad(token, mnemonic: mnemonic, network: expectedNetwork) else { return }
         guard let xp = xpub else { return }
@@ -357,6 +564,13 @@ final class WalletStore: ObservableObject {
         }
     }
 
+    private func cacheMainAddress(_ a: String, network net: WalletNetwork) {
+        guard let i = wallets.firstIndex(where: { $0.id == activeWalletID }),
+              wallets[i].addresses[net.rawValue] != a else { return }
+        wallets[i].addresses[net.rawValue] = a
+        saveWallets()
+    }
+
     /// Show the next external receive address (0→1→2…). Funds received on any
     /// index land in the same xpub-aggregated balance and remain spendable, so
     /// this only changes which fresh address you hand out. Choice persists.
@@ -406,6 +620,10 @@ final class WalletStore: ObservableObject {
         let recipient = recipient.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard PRLAddress.isValid(recipient, network: network) else { return (false, Loc("收款地址格式不正确")) }
         guard let mnemonic, let xp = xpub else { return (false, Loc("钱包未就绪")) }
+        // Everything this send uses is captured now; if the wallet, network or lock state
+        // changes during the network round-trips below, the send is abandoned.
+        let session = chainLoadToken
+        let changeSets = recoverable
         guard amountPRL + Self.sendFeeReserve <= balance.available else {
             return (false, Loc("余额不足：请预留至少 %@ PRL 作为手续费", "\(Self.sendFeeReserve)"))
         }
@@ -428,7 +646,7 @@ final class WalletStore: ObservableObject {
             }
             // Also offer internal-chain change UTXOs (invisible to the xpub scan) to coin
             // selection, with their address injected — oyster signs them like any other.
-            for s in recoverable {
+            for s in changeSets {
                 for u in s.utxos {
                     guard let value = Int64(u.value) else { continue }
                     utxoObjs.append(["txid": u.txid, "vout": u.vout, "value": value, "address": s.address])
@@ -436,6 +654,7 @@ final class WalletStore: ObservableObject {
             }
             guard !utxoObjs.isEmpty else { return (false, Loc("没有可用的 UTXO（余额不足或未确认）")) }
             let fee = (try? await bb.estimateFeePerKB()) ?? 50_000
+            guard chainLoadToken == session else { return (false, Loc("钱包或网络已切换，已取消本次转账")) }
             let utxosJSON = String(data: try JSONSerialization.data(withJSONObject: utxoObjs), encoding: .utf8) ?? "[]"
             // Full-balance ("MAX") send → true single-output sweep. Otherwise the fixed
             // `sendFeeReserve` (which far exceeds the real fee) would come back as a change
@@ -456,6 +675,13 @@ final class WalletStore: ObservableObject {
                 let totalInputSat = utxoObjs.reduce(Int64(0)) { $0 + (($1["value"] as? Int64) ?? 0) }
                 let startSat = totalInputSat - Self.estimateFeeSat(inputs: utxoObjs.count, outputs: 2, feePerKB: fee)
                 guard startSat > 0 else { return (false, Loc("余额不足：请预留至少 %@ PRL 作为手续费", "\(Self.sendFeeReserve)")) }
+                // The user confirmed `amountPRL`. The sweep pays out everything the inputs
+                // hold, which is only ever the fee reserve more than that — unless funds
+                // arrived (or the wallet changed) since MAX was tapped. Refuse rather than
+                // send a larger amount than the confirmation showed.
+                guard startSat <= amountSat + Self.maxSweepSlackSat else {
+                    return (false, Loc("余额已变化，请重新点 MAX 后再发送"))
+                }
                 hex = try await sweepConverge(mnemonic: mnemonic, dir: dir, net: net, to: recipient,
                                               amountSat: startSat, totalSat: totalInputSat,
                                               feePerKB: fee, utxosJSON: utxosJSON)
@@ -466,6 +692,9 @@ final class WalletStore: ObservableObject {
                 }
             }
             let txid = try await bb.broadcast(hex)
+            // Switched wallets while this one was signing/broadcasting: the send still went
+            // out from the original wallet, so don't overlay it onto the one now open.
+            guard chainLoadToken == session else { return (true, txid) }
             // Reflect the send IMMEDIATELY. Blockbook can take several refreshes to
             // index the mempool tx, so instead of blocking on a poll we overlay an
             // optimistic 待确认 row and drop the spent amount from the balance now.
@@ -566,6 +795,8 @@ final class WalletStore: ObservableObject {
                 guard isCurrentChainLoad(token, mnemonic: mnemonic, network: network) else { return }
                 if owned { changeOwned.insert(addr) } else { changeForeign.insert(addr) }
             }
+            // A wallet/network switch mid-scan cleared these sets; don't write them under the new wallet's keys.
+            guard isCurrentChainLoad(token, mnemonic: mnemonic, network: network) else { return }
             persistChangeClassification()
         }
         var sets: [RecoverableUTXOSet] = []   // offered to recover + coin selection (excludes in-flight-swept)
@@ -592,7 +823,7 @@ final class WalletStore: ObservableObject {
         // first publish — without this the hero briefly shows only the xpub (external)
         // balance, then "jumps up" seconds later when this slow scan completes.
         UserDefaults.standard.set(["\(changeBalance.total)", "\(changeBalance.available)"],
-                                  forKey: "change.\(net).balance")
+                                  forKey: "\(changeKeyPrefix)\(net).balance")
         recoverable = sets.sorted { $0.valueSat > $1.valueSat }
         recoveryScanned = true
         publishOverlay()
@@ -600,24 +831,24 @@ final class WalletStore: ObservableObject {
 
     private func persistChangeClassification() {
         let d = UserDefaults.standard
-        d.set(Array(changeOwned), forKey: "change.\(network.rawValue).owned")
-        d.set(Array(changeForeign), forKey: "change.\(network.rawValue).foreign")
+        d.set(Array(changeOwned), forKey: "\(changeKeyPrefix)\(network.rawValue).owned")
+        d.set(Array(changeForeign), forKey: "\(changeKeyPrefix)\(network.rawValue).foreign")
     }
     private func loadChangeClassification(for net: WalletNetwork) {
         let d = UserDefaults.standard
         // Drop a stale-versioned cache (the prior oracle could mis-tag small owned change
         // as foreign): start empty so every candidate is re-tested once with the new oracle.
-        if d.integer(forKey: "change.\(net.rawValue).ver") != Self.changeClassVersion {
+        if d.integer(forKey: "\(changeKeyPrefix)\(net.rawValue).ver") != Self.changeClassVersion {
             changeOwned = []; changeForeign = []
-            d.removeObject(forKey: "change.\(net.rawValue).balance")
-            d.set(Self.changeClassVersion, forKey: "change.\(net.rawValue).ver")
+            d.removeObject(forKey: "\(changeKeyPrefix)\(net.rawValue).balance")
+            d.set(Self.changeClassVersion, forKey: "\(changeKeyPrefix)\(net.rawValue).ver")
         } else {
-            changeOwned = Set((d.array(forKey: "change.\(net.rawValue).owned") as? [String]) ?? [])
-            changeForeign = Set((d.array(forKey: "change.\(net.rawValue).foreign") as? [String]) ?? [])
+            changeOwned = Set((d.array(forKey: "\(changeKeyPrefix)\(net.rawValue).owned") as? [String]) ?? [])
+            changeForeign = Set((d.array(forKey: "\(changeKeyPrefix)\(net.rawValue).foreign") as? [String]) ?? [])
             // Seed the change balance from the last scan so the first publish already
             // includes it (no 48→52 jump at launch); refreshChangeChain re-verifies and
             // overwrites it with live data shortly after.
-            if let cached = d.array(forKey: "change.\(net.rawValue).balance") as? [String], cached.count == 2,
+            if let cached = d.array(forKey: "\(changeKeyPrefix)\(net.rawValue).balance") as? [String], cached.count == 2,
                let total = Decimal(string: cached[0]), let available = Decimal(string: cached[1]) {
                 changeBalance = WalletBalance(total: total, available: available)
             }
@@ -639,6 +870,7 @@ final class WalletStore: ObservableObject {
         let destination = destination.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard PRLAddress.isValid(destination, network: network) else { return (false, Loc("收款地址格式不正确")) }
         guard let mnemonic else { return (false, Loc("钱包未就绪")) }
+        let session = chainLoadToken
         let sets = recoverable
         let total = sets.reduce(Int64(0)) { $0 + $1.valueSat }
         guard !sets.isEmpty, total > 0 else { return (false, Loc("没有可找回的找零")) }
@@ -646,6 +878,7 @@ final class WalletStore: ObservableObject {
         let net = network.rawValue
         let bb = BlockbookClient(network: network)
         let feePerKB = (try? await bb.estimateFeePerKB()) ?? 50_000
+        guard chainLoadToken == session else { return (false, Loc("钱包或网络已切换，已取消本次找回")) }
         let utxosJSON = Self.encodeUTXOs(sets)
         let inputCount = sets.reduce(0) { $0 + $1.utxos.count }
         do {
@@ -658,6 +891,7 @@ final class WalletStore: ObservableObject {
                                               amountSat: startSat, totalSat: total,
                                               feePerKB: feePerKB, utxosJSON: utxosJSON)
             let txid = try await bb.broadcast(hex)
+            guard chainLoadToken == session else { return (true, txid) }
             // Guard the just-swept outpoints so a refresh/re-scan before Blockbook indexes the
             // spend can't re-discover them and flip the screen back to "un-recovered". They stay
             // in `changeBalance`, so the total holds steady until the funds land on the destination.
@@ -703,42 +937,77 @@ final class WalletStore: ObservableObject {
 
     func lock() {
         invalidateChainLoads()
+        parkOverlay()
         mnemonic = nil
-        address = nil
-        xpub = nil
-        balance = .zero
-        backendReady = false; historyReady = false
-        txs = []
-        serverBalance = .zero; serverTxs = []; pendingSends.removeAll()
-        clearChangeChainState()
+        lastError = nil   // a stale send/switch error must not show up on the unlock screen
+        clearChainState()
         phase = .locked
     }
 
-    /// Wipe the wallet from this device (the seed is unrecoverable without backup).
-    func reset() {
-        invalidateChainLoads()
-        Keychain.delete(account: mnemonicAccount)
-        SafeTradeSecrets.clear()   // also de-provision the exchange API keys
-        UserDefaults.standard.removeObject(forKey: nameKey)
-        try? FileManager.default.removeItem(at: walletDataURL)
-        mnemonic = nil
-        balance = .zero
-        sync = SyncProgress()
-        txs = []
-        serverBalance = .zero; serverTxs = []; pendingSends.removeAll()
-        clearChangeChainState()
-        for n in WalletNetwork.allCases {
-            UserDefaults.standard.removeObject(forKey: "change.\(n.rawValue).owned")
-            UserDefaults.standard.removeObject(forKey: "change.\(n.rawValue).foreign")
-            UserDefaults.standard.removeObject(forKey: "change.\(n.rawValue).balance")
+    /// Remove the open wallet from this device (the seed is unrecoverable without backup).
+    @discardableResult
+    func reset() -> Bool {
+        guard let id = activeWalletID else { return false }
+        return removeWallet(id: id)
+    }
+
+    /// Remove one wallet from this device: its seed, wallet db and cached change data.
+    /// Opens the next remaining wallet whose seed can be read; removing the last one
+    /// returns to onboarding. Returns false — and changes nothing — if the seed couldn't
+    /// be deleted from the Keychain (it would otherwise reappear on the next launch).
+    @discardableResult
+    func removeWallet(id: String) -> Bool {
+        guard wallets.contains(where: { $0.id == id }) else { return false }
+        guard Keychain.delete(account: mnemonicAccount(for: id)) else {
+            lastError = Loc("无法从钥匙串删除助记词，钱包未移除")
+            return false
         }
-        address = nil
-        xpub = nil
-        backendReady = false; historyReady = false
-        receiveIndex = 0
-        walletName = "Pearl Wallet"
+        let wasActive = id == activeWalletID
+        if wasActive {
+            invalidateChainLoads()
+            clearChainState()
+            mnemonic = nil
+            WidgetBridge.clearWallet()
+        }
+        try? FileManager.default.removeItem(at: walletDataURL(for: id))
+        let d = UserDefaults.standard
+        for n in WalletNetwork.allCases {
+            for field in ["owned", "foreign", "balance", "ver"] {
+                d.removeObject(forKey: "\(changeKeyPrefix(for: id))\(n.rawValue).\(field)")
+            }
+            parkedOverlays[overlayKey(id, n)] = nil
+        }
+        if id == Self.legacyWalletID { d.removeObject(forKey: nameKey) }
+        wallets.removeAll { $0.id == id }
         lastError = nil
-        phase = .noWallet
+        guard wasActive else { saveWallets(); return true }
+
+        guard !wallets.isEmpty else {
+            activeWalletID = nil
+            saveWallets()
+            SafeTradeSecrets.clear()   // last wallet gone → also de-provision the exchange API keys
+            sync = SyncProgress()
+            phase = .noWallet
+            return true
+        }
+        // Open the first remaining wallet whose seed reads; if none can be read right now
+        // (locked keychain, denied prompt), keep them all and wait on the unlock screen.
+        for w in wallets {
+            if let m = Keychain.get(account: mnemonicAccount(for: w.id)) {
+                activeWalletID = w.id
+                saveWallets()
+                restoreOverlay()
+                mnemonic = m
+                phase = .unlocked
+                Task { await loadChain() }
+                return true
+            }
+        }
+        activeWalletID = wallets.first?.id
+        saveWallets()
+        lastError = Loc("无法读取钥匙串中的助记词，请重试解锁")
+        phase = .locked
+        return true
     }
 
     private static func satoshis(from amountPRL: Decimal) -> Int64? {
@@ -825,6 +1094,18 @@ final class WalletStore: ObservableObject {
             out.append(UInt8(hi << 4 | lo)); k += 2
         }
         return out
+    }
+
+    /// Forget the open wallet's derived keys and chain data (lock, wallet/network switch, removal).
+    private func clearChainState() {
+        address = nil
+        xpub = nil
+        receiveIndex = 0
+        balance = .zero
+        txs = []
+        backendReady = false; historyReady = false
+        serverBalance = .zero; serverTxs = []; pendingSends.removeAll()
+        clearChangeChainState()
     }
 
     private func clearChangeChainState() {

@@ -6,7 +6,7 @@ A self-custody **Pearl ($PRL)** wallet and mining monitor for iPhone, iPad and M
 
 ## Features
 
-- **Self-custody wallet**: create or restore a wallet (12 or 24 words), receive, and send. The recovery phrase is encrypted in the Keychain, and viewing it or confirming a transfer requires Face ID / Touch ID. Transactions are signed on the device.
+- **Self-custody wallet**: create or restore wallets (12 or 24 words), keep several on one device and switch between them, receive, and send. The recovery phrase is encrypted in the Keychain, and viewing it or confirming a transfer requires Face ID / Touch ID. Transactions are signed on the device.
 - **Mining monitor**: network hashrate and difficulty, a pools overview, and per-address monitors for AlphaPool, F2Pool, HeroMiners, Kryptex, Lucky Pool, Pearl Fortune and PearlHash.
 - **Widgets**: an iOS home-screen widget and a macOS desktop widget.
 - **Trading (optional)**: a SafeTrade PRL/USDT trading tab that uses your own API keys (stored in the Keychain). It is compiled in only when the `TRADE_ENABLED` condition is set.

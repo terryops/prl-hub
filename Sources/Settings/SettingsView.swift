@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var keyMsgIsWarning = false   // green check vs. orange warning
     @State private var verifyingKey = false      // a save+verify request is in flight
     @State private var confirmingReset = false
+    @State private var resetError: String?
     @State private var credTick = 0             // bump to re-read SafeTradeSecrets after an iCloud pull
     @State private var headerProgress: CGFloat = 0   // 0 = expanded vertical logo, 1 = inline (scroll-driven)
     @FocusState private var focusedField: Field?
@@ -19,9 +20,6 @@ struct SettingsView: View {
     @EnvironmentObject private var loc: LocalizationManager
     @EnvironmentObject private var currency: CurrencyManager
     private var marketValid: Bool { SafeTradeMarket.isValid(market) }
-
-    private static let telegramURL = URL(string: "https://t.me/prl_hub")!
-    private static let githubURL = URL(string: "https://github.com/terryops/prl-hub")!
 
     private var appVersion: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -80,6 +78,15 @@ struct SettingsView: View {
 
                 if wallet.phase == .unlocked {
                     Section(Loc("钱包")) {
+                        NavigationLink {
+                            ManageWalletsView(store: wallet)
+                        } label: {
+                            LabeledContent {
+                                Text("\(wallet.wallets.count)")
+                            } label: {
+                                Label(Loc("管理钱包"), systemImage: "wallet.pass")
+                            }
+                        }
                         NavigationLink {
                             ContactsView()
                         } label: { Label(Loc("地址簿"), systemImage: "person.crop.circle") }
@@ -234,10 +241,10 @@ struct SettingsView: View {
                         }
                     }
                     LabeledContent(Loc("开发者"), value: "Cyber Corner")
-                    Link(destination: Self.telegramURL) {
+                    Link(destination: AppLinks.telegram) {
                         Label(Loc("加入 Telegram 频道 @prl_hub，获取更新公告与帮助"), systemImage: "paperplane.fill")
                     }
-                    Link(destination: Self.githubURL) {
+                    Link(destination: AppLinks.github) {
                         Label(Loc("GitHub 开源代码"), systemImage: "chevron.left.forwardslash.chevron.right")
                     }
                     NavigationLink {
@@ -287,11 +294,20 @@ struct SettingsView: View {
             .onReceive(NotificationCenter.default.publisher(for: .cloudSyncDidUpdate)) { _ in credTick += 1 }
             // .alert (not .confirmationDialog) — centered on every platform; a
             // confirmationDialog mis-anchors as a popover over the nav bar on iPad/Mac.
-            .alert(Loc("确定要移除此设备上的钱包吗？"), isPresented: $confirmingReset) {
-                Button(Loc("移除钱包"), role: .destructive) { withAnimation { wallet.reset() } }
+            .alert(Loc("确定要移除钱包「%@」吗？", wallet.walletName), isPresented: $confirmingReset) {
+                Button(Loc("移除钱包"), role: .destructive) {
+                    let ok = withAnimation { wallet.reset() }
+                    if !ok { resetError = wallet.lastError ?? Loc("移除失败"); wallet.lastError = nil }
+                }
                 Button(Loc("取消"), role: .cancel) {}
             } message: {
                 Text(Loc("助记词将从本机删除且无法恢复。请确认你已安全备份助记词，否则资产将永久丢失。"))
+            }
+            .alert(Loc("移除失败"), isPresented: Binding(
+                get: { resetError != nil }, set: { if !$0 { resetError = nil } })) {
+                Button(Loc("知道了"), role: .cancel) { resetError = nil }
+            } message: {
+                Text(resetError ?? "")
             }
         }
     }

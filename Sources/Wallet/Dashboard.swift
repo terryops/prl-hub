@@ -7,6 +7,54 @@ struct DashboardView: View {
     @StateObject private var price = PRLPriceManager.shared
     @EnvironmentObject private var currency: CurrencyManager
     @Environment(\.scenePhase) private var scenePhase
+    @State private var addingWallet = false
+    @State private var managingWallets = false
+    @State private var donating = false
+    @State private var donationPromptPending = false
+    /// False while a pushed screen (收款 / 转账 / 记录) or another tab covers the dashboard.
+    @State private var dashboardVisible = false
+
+    // 币价 chip text. macOS text styles run ~4pt smaller than iOS (body is 13pt there),
+    // so the Mac gets the next sizes up to read at the same weight beside the balance.
+    #if os(macOS)
+    private static let chipLabelFont = Font.callout.weight(.bold)
+    private static let chipPriceFont = Font.title2.weight(.bold)
+    #else
+    private static let chipLabelFont = Font.footnote.weight(.bold)
+    private static let chipPriceFont = Font.body.weight(.bold)
+    #endif
+
+    /// Donations go to a mainnet address, so the entry only shows on mainnet — and never
+    /// while the open wallet IS the donation wallet (that would just pay itself a fee).
+    private var canDonate: Bool {
+        guard Donation.isConfigured, store.network == .mainnet else { return false }
+        let mainAddress = store.activeRecord?.addresses[WalletNetwork.mainnet.rawValue]
+        return mainAddress != Donation.address && store.address != Donation.address
+    }
+
+    /// The one-time donation ask (see `DonationPrompt`). Everything is re-checked right
+    /// before presenting, and the ask is only recorded once the sheet is actually going up.
+    private var donationPromptReady: Bool {
+        canDonate && dashboardVisible && scenePhase == .active && store.backendReady
+            && !donating && !addingWallet && !managingWallets
+            // Right after the user's own send (pending/unconfirmed tx) is not the moment.
+            && !store.hasUnconfirmedTx
+            // Asking someone who can't give just spends the single ask.
+            && store.balance.available >= Donation.minimum + WalletStore.sendFeeReserve
+            && DonationPrompt.isEligible
+    }
+
+    private func promptDonationIfDue() {
+        guard !donationPromptPending, donationPromptReady else { return }
+        donationPromptPending = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.5))   // let the balance settle in first
+            donationPromptPending = false
+            guard donationPromptReady else { return }
+            DonationPrompt.markShown()
+            donating = true
+        }
+    }
 
     /// Spot price of 1 PRL in USD, formatted like the mining monitor's "PRL 币价"
     /// card (adaptive precision for a sub-dollar coin) so the number matches
@@ -56,30 +104,24 @@ struct DashboardView: View {
                 // real balance / fiat / address fade in without shoving anything.
                 PearlHero(minHeight: 0, padding: Pearl.Space.md, showSparkle: false) {
                     VStack(spacing: Pearl.Space.xs) {
-                        // Top row: wallet name small on the LEFT, the gold 币价 chip on the
-                        // right. The chip carries the 24h change (green ↑ / red ↓); gold +
-                        // top placement keep it clear of the white balance hero below.
+                        // Top row: the gold 币价 chip on the right (the wallet name lives in the
+                        // toolbar switcher). The chip always holds its slot — "—" until the first
+                        // price loads — so the hero never changes height.
                         HStack(spacing: Pearl.Space.sm) {
-                            Text(store.walletName)
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(.white.opacity(0.7))
-                                .lineLimit(1)
                             Spacer(minLength: Pearl.Space.xs)
-                            if let unit = unitPriceText {
-                                HStack(spacing: 6) {
-                                    Text(verbatim: "PRL").font(.caption2.weight(.bold))
-                                        .foregroundStyle(.white.opacity(0.6))
-                                    Text(unit).font(.subheadline.weight(.bold)).monospacedDigit()
-                                        .foregroundStyle(Pearl.gold)
-                                        .contentTransition(.numericText())
-                                }
-                                .lineLimit(1).minimumScaleFactor(0.7)
-                                .padding(.horizontal, 10).padding(.vertical, 4)
-                                .background(.white.opacity(0.12), in: Capsule())
-                                .accessibilityElement(children: .combine)
-                                .accessibilityLabel(Loc("PRL 币价 %@", unit))
-                                .animation(.snappy, value: unitPriceText)
+                            HStack(spacing: 6) {
+                                Text(verbatim: "PRL").font(Self.chipLabelFont)
+                                    .foregroundStyle(.white.opacity(0.6))
+                                Text(unitPriceText ?? "—").font(Self.chipPriceFont).monospacedDigit()
+                                    .foregroundStyle(unitPriceText == nil ? Color.white.opacity(0.45) : Pearl.gold)
+                                    .contentTransition(.numericText())
                             }
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                            .padding(.horizontal, 12).padding(.vertical, 5)
+                            .background(.white.opacity(0.12), in: Capsule())
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel(Loc("PRL 币价 %@", unitPriceText ?? "—"))
+                            .animation(.snappy, value: unitPriceText)
                         }
 
                         // Balance — always-present slot; dimmed dashes until the chain syncs.
@@ -109,6 +151,9 @@ struct DashboardView: View {
                         .monospacedDigit()
                         .lineLimit(1).minimumScaleFactor(0.5)
                         .accessibilityLabel(store.backendReady ? Loc("余额 %@ PRL", store.balance.total.formatted()) : Loc("同步余额…"))
+                        // Tuck the balance up under the chip row: with only a right-aligned chip
+                        // above it, the full row gap made the number read as sitting low.
+                        .padding(.top, -6)
 
                         // Fiat — slot reserved; shows the sync hint until balance+price are in.
                         Group {
@@ -186,6 +231,32 @@ struct DashboardView: View {
             #endif
         }
         .navigationTitle(Loc("钱包"))
+        .toolbar {
+            #if os(iOS)
+            ToolbarItem(placement: .topBarLeading) {
+                WalletSwitcherMenu(store: store, addingWallet: $addingWallet, managingWallets: $managingWallets)
+            }
+            #else
+            ToolbarItem(placement: .navigation) {
+                WalletSwitcherMenu(store: store, addingWallet: $addingWallet, managingWallets: $managingWallets)
+            }
+            #endif
+            if canDonate {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { donating = true } label: {
+                        Image(systemName: "heart.fill").foregroundStyle(Pearl.rose)
+                    }
+                    .accessibilityLabel(Loc("支持开发者"))
+                }
+            }
+        }
+        .sheet(isPresented: $addingWallet) { AddWalletView(store: store) }
+        .sheet(isPresented: $donating) { DonateView(store: store) }
+        .onChange(of: store.backendReady) { _, _ in promptDonationIfDue() }
+        .onChange(of: store.balance) { _, _ in promptDonationIfDue() }
+        .onAppear { dashboardVisible = true; promptDonationIfDue() }
+        .onDisappear { dashboardVisible = false }
+        .navigationDestination(isPresented: $managingWallets) { ManageWalletsView(store: store) }
         .task { await store.loadChain(); await price.refreshIfStale() }
         .refreshable { await store.loadChain(); await price.refresh() }
         // 自适应自动轮询：App 在前台时按 store.pollInterval 周期重拉链上数据——有未确认
@@ -368,26 +439,18 @@ struct SendView: View {
     /// sweep ONLY when `amount` still equals this — i.e. the user explicitly chose MAX
     /// and hasn't edited it — never inferred from the (racy) live balance.
     @State private var maxString: String?
+    /// Wallet + network the MAX was computed for; a switch voids it (see onChange below).
+    @State private var maxSession: String?
+    private var session: String { "\(store.activeWalletID ?? "")|\(store.network.rawValue)" }
 
-    static let posix = Locale(identifier: "en_US_POSIX")
     // Reserved for the network fee; any unused part returns as change (nothing is lost).
     private let feeReserve = WalletStore.sendFeeReserve
     private var feeReserveText: String { NSDecimalNumber(decimal: feeReserve).stringValue }
     private var amountText: String { amount.trimmingCharacters(in: .whitespacesAndNewlines) }
-    /// Normalize the locale's comma decimal separator to a period so a comma-region
-    /// keypad (ru/vi…) parses correctly. Parse with a fixed POSIX locale so "1.5"
-    /// is always 1.5 regardless of the device region.
-    private var normalizedAmount: String { amountText.replacingOccurrences(of: ",", with: ".") }
-    private var amountDec: Decimal { Decimal(string: normalizedAmount, locale: Self.posix) ?? 0 }
+    private var parsedAmount: Decimal? { PRLAmount.parse(amountText) }
+    private var amountDec: Decimal { parsedAmount ?? 0 }
     private var addr: String { address.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var amountPrecisionOK: Bool {
-        let allowed = CharacterSet(charactersIn: "0123456789.,")
-        guard amountText.rangeOfCharacter(from: allowed.inverted) == nil else { return false }
-        let norm = normalizedAmount
-        guard !norm.isEmpty, Decimal(string: norm, locale: Self.posix) != nil else { return false }
-        let parts = norm.split(separator: ".", omittingEmptySubsequences: false)
-        return parts.count <= 2 && (parts.count == 1 || parts[1].count <= BlockbookClient.decimals)
-    }
+    private var amountPrecisionOK: Bool { parsedAmount != nil }
     private var overBalance: Bool { amountDec > 0 && amountDec + feeReserve > store.balance.available }
     private var addressValid: Bool { PRLAddress.isValid(addr, network: store.network) }
     private var canSend: Bool { !sending && amountDec > 0 && amountPrecisionOK && !overBalance && addressValid }
@@ -447,7 +510,7 @@ struct SendView: View {
                         Button("MAX") {
                             let m = store.balance.available - feeReserve
                             let s = NSDecimalNumber(decimal: m > 0 ? m : 0).stringValue
-                            amount = s; maxString = s   // arm explicit sweep intent
+                            amount = s; maxString = s; maxSession = session   // arm explicit sweep intent
                         }.font(.caption)
                     }
                     TextField("0.0", text: $amount).textFieldStyle(.roundedBorder)
@@ -495,11 +558,17 @@ struct SendView: View {
             Text(Loc("发送 %@ PRL 至\n%@\n手续费将从余额扣除，交易不可撤销。", amount, addr))
         }
         .sheet(isPresented: $savingContact) { ContactEditor(draft: ContactDraft(prefillAddress: addr)) }
+        // This screen can stay pushed while the wallet or network is switched from Settings:
+        // an amount (and above all a MAX) computed for the old one must not carry over.
+        .onChange(of: session) { _, _ in
+            amount = ""; maxString = nil; maxSession = nil; result = nil
+        }
     }
 
     private func send() {
-        guard let amt = Decimal(string: normalizedAmount, locale: Self.posix) else { return }
-        let isMax = maxString != nil && amount == maxString   // user tapped MAX and didn't edit
+        guard let amt = parsedAmount else { return }
+        // User tapped MAX, didn't edit it, and is still on the wallet/network it was tapped for.
+        let isMax = maxString != nil && amount == maxString && maxSession == session
         sending = true; result = nil
         Task {
             let r = await store.send(to: addr, amountPRL: amt, isMax: isMax)

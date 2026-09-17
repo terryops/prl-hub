@@ -1,6 +1,12 @@
 import SwiftUI
 import StoreKit
 
+/// Public places the app points people to.
+enum AppLinks {
+    static let telegram = URL(string: "https://t.me/prl_hub")!
+    static let github = URL(string: "https://github.com/terryops/prl-hub")!
+}
+
 // MARK: - App Store 评分提醒
 //
 // Apple's prompt makes this a question of WHEN, not how: the system shows it at most three
@@ -39,6 +45,15 @@ enum ReviewPrompt {
         if d.double(forKey: firstLaunchKey) <= 0 {
             d.set(Date().timeIntervalSince1970, forKey: firstLaunchKey)
         }
+    }
+
+    /// Launches counted so far (also gates the donation prompt).
+    static var launchCount: Int { UserDefaults.standard.integer(forKey: launchesKey) }
+
+    /// Days since the first counted launch; 0 before it is recorded.
+    static var daysSinceFirstLaunch: Double {
+        let first = UserDefaults.standard.double(forKey: firstLaunchKey)
+        return first > 0 ? (Date().timeIntervalSince1970 - first) / 86400 : 0
     }
 
     /// Whether asking now is reasonable. Deliberately conservative: a prompt the user dismisses

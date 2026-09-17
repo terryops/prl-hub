@@ -115,6 +115,11 @@ struct UnlockView: View {
             VStack(spacing: Pearl.Space.xs) {
                 Text(Loc("%@ 已锁定", store.walletName)).font(.title.bold())
                 Text(Loc("点按解锁继续")).font(.callout).foregroundStyle(.secondary)
+                if let err = store.lastError {
+                    Label(err, systemImage: "exclamationmark.triangle")
+                        .font(.footnote).foregroundStyle(.orange)
+                        .multilineTextAlignment(.center)
+                }
             }
             Button {
                 working = true
@@ -125,6 +130,17 @@ struct UnlockView: View {
             .buttonStyle(.pearl).disabled(working)
             .frame(maxWidth: 320)
             .padding(.top, Pearl.Space.sm)
+            // A seed that can't be read shouldn't strand the others: offer them here.
+            if store.wallets.count > 1 {
+                Menu {
+                    ForEach(store.wallets.filter { $0.id != store.activeWalletID }) { w in
+                        Button(w.name) { store.switchWallet(to: w.id) }
+                    }
+                } label: {
+                    Label(Loc("切换钱包"), systemImage: "wallet.pass")
+                }
+                .fixedSize()
+            }
             Spacer()
         }
         .padding(Pearl.Space.screen)

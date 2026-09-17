@@ -20,7 +20,7 @@ struct RootView: View {
     }
     @AppStorage("ui.appearance") private var appearance = "system"   // system | light | dark
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var wallet = WalletStore()
+    @StateObject private var wallet = WalletStore.shared
     @StateObject private var contacts = ContactsStore()
     @StateObject private var loc = LocalizationManager.shared
     @StateObject private var currency = CurrencyManager.shared

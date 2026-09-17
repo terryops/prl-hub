@@ -13,6 +13,54 @@ enum WalletNetwork: String, CaseIterable, Identifiable, Codable {
     var defaultPeerPort: Int { self == .mainnet ? 44108 : 44112 }
 }
 
+// MARK: - Wallet list
+
+/// One wallet on this device. The seed lives only in the Keychain; this record is the
+/// non-secret index entry (persisted locally, never synced — seeds are device-only).
+struct WalletRecord: Codable, Identifiable, Equatable {
+    let id: String
+    var name: String
+    /// Receive address at index 0 per network (`WalletNetwork.rawValue` → address),
+    /// cached when the wallet is loaded so the switcher can tell wallets apart
+    /// without opening each one's wallet db.
+    var addresses: [String: String] = [:]
+
+    init(id: String, name: String, addresses: [String: String] = [:]) {
+        self.id = id; self.name = name; self.addresses = addresses
+    }
+
+    // Synthesized Decodable ignores property defaults, so a list saved before a field
+    // existed would fail to decode as a whole. Decode optional-by-default fields leniently.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        addresses = try c.decodeIfPresent([String: String].self, forKey: .addresses) ?? [:]
+    }
+}
+
+// MARK: - Amounts
+
+/// User-typed PRL amounts — the one parser behind every amount field (转账, 捐赠).
+enum PRLAmount {
+    private static let posix = Locale(identifier: "en_US_POSIX")
+
+    /// Digits with at most one decimal mark and at most 8 decimals → the amount, else nil.
+    /// A comma is accepted as the decimal mark (ru/vi/id keypads type one), and parsing
+    /// uses a fixed POSIX locale so "1.5" is 1.5 whatever the device region. Zero parses;
+    /// callers decide whether it is allowed.
+    static func parse(_ raw: String) -> Decimal? {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.contains(where: { $0.isASCII && $0.isNumber }),
+              text.rangeOfCharacter(from: CharacterSet(charactersIn: "0123456789.,").inverted) == nil
+        else { return nil }
+        let norm = text.replacingOccurrences(of: ",", with: ".")
+        let parts = norm.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count <= 2, parts.count == 1 || parts[1].count <= BlockbookClient.decimals else { return nil }
+        return Decimal(string: norm, locale: posix)
+    }
+}
+
 enum PRLAddress {
     private static let charset = Array("qpzry9x8gf2tvdw0s3jn54khce6mua7l")
     private static let bech32mConstant = 0x2bc830a3

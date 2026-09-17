@@ -36,15 +36,32 @@ enum WidgetBridge {
         // recovery loops poll every ~3s); only persist + nudge WidgetKit when a
         // displayed field actually changed, so identical re-publishes don't burn the
         // system's timeline-reload budget or rewrite the App Group for nothing.
-        guard s.walletName != before.walletName || s.balancePRL != before.balancePRL
-            || s.changePRL != before.changePRL || s.xpub != before.xpub
-            || s.network != before.network || s.recentTx != before.recentTx
+        let dataChanged = s.balancePRL != before.balancePRL || s.changePRL != before.changePRL
+            || s.xpub != before.xpub || s.network != before.network
+            || s.recentTx != before.recentTx || !before.hasWallet
+        let labelsChanged = s.walletName != before.walletName
             || s.labelBalance != before.labelBalance
             || s.labelRecentTx != before.labelRecentTx || s.labelNoTx != before.labelNoTx
             || s.languageCode != before.languageCode
-            || !before.hasWallet
-        else { return }
-        s.updatedAt = Date()
+        guard dataChanged || labelsChanged else { return }
+        // Only new figures move the freshness stamp: a rename or language switch re-publishes
+        // the same (possibly hours-old) balance, which must not read as just refreshed.
+        if dataChanged { s.updatedAt = Date() }
+        WidgetStore.save(s)
+        reload()
+    }
+
+    /// The open wallet was removed or replaced: drop its xpub, balance and transfers so the
+    /// widget stops fetching and showing them. The next wallet's first publish fills it in.
+    static func clearWallet() {
+        var s = WidgetStore.load()
+        guard s.hasWallet || s.xpub != nil else { return }
+        s.hasWallet = false
+        s.xpub = nil
+        s.walletName = WidgetSnapshot().walletName
+        s.balancePRL = 0
+        s.changePRL = 0
+        s.recentTx = []
         WidgetStore.save(s)
         reload()
     }

@@ -20,6 +20,7 @@ enum Keychain {
     /// real wallet seed / SafeTrade keys in this Mac's keychain (the seed lives in the
     /// legacy file keychain, which any same-service lookup would hit). Never in Release.
     private static let memoryOnly = ProcessInfo.processInfo.environment["SHOT_MEMORY_KEYCHAIN"] == "1"
+    static var isMemoryOnly: Bool { memoryOnly }
     private static var memory: [String: String] = [:]
     private static func memoryKey(_ account: String, _ synchronizable: Bool) -> String {
         "\(synchronizable ? "sync" : "local")|\(account)"
@@ -79,12 +80,48 @@ enum Keychain {
         get(account: account, synchronizable: synchronizable) != nil
     }
 
+    /// Account names of every NON-synchronizable item under our service whose account
+    /// starts with `prefix`. Attributes only — never reads the secret data, so it can't
+    /// trigger a macOS keychain access prompt. Lets the wallet list be rebuilt from seeds
+    /// that outlived the app's UserDefaults (the iOS keychain survives an uninstall).
+    ///
+    /// Returns nil when the keychain couldn't be queried (locked, interaction not
+    /// allowed…), which callers must NOT read as "no items".
+    static func accounts(prefix: String) -> [String]? {
+        #if DEBUG
+        if memoryOnly {
+            return memory.keys.compactMap { k in
+                k.hasPrefix("local|") ? String(k.dropFirst("local|".count)) : nil
+            }.filter { $0.hasPrefix(prefix) }
+        }
+        #endif
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrSynchronizable as String: kCFBooleanFalse!,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+        ]
+        var items: CFTypeRef?
+        switch SecItemCopyMatching(query as CFDictionary, &items) {
+        case errSecSuccess:
+            let rows = items as? [[String: Any]] ?? []
+            return rows.compactMap { $0[kSecAttrAccount as String] as? String }.filter { $0.hasPrefix(prefix) }
+        case errSecItemNotFound:
+            return []
+        default:
+            return nil
+        }
+    }
+
     @discardableResult
     static func delete(account: String, synchronizable: Bool = false) -> Bool {
         #if DEBUG
         if memoryOnly { return memory.removeValue(forKey: memoryKey(account, synchronizable)) != nil }
         #endif
-        return SecItemDelete(baseQuery(account: account, synchronizable: synchronizable) as CFDictionary) == errSecSuccess
+        let status = SecItemDelete(baseQuery(account: account, synchronizable: synchronizable) as CFDictionary)
+        // Already absent counts as deleted: the caller's goal (no such item) holds.
+        return status == errSecSuccess || status == errSecItemNotFound
     }
 
     /// Remove an item in EVERY variant: synchronizable OR not, in the data-protection
