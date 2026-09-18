@@ -36,10 +36,13 @@ final class SafeTradeStore: ObservableObject {
     #endif
     var hasCredentials: Bool { Self.shotDemo || SafeTradeSecrets.hasCredentials }
 
+    /// K-line periods offered by the chart picker, in minutes.
+    static let periods = [5, 15, 60, 240, 1440]
+
     init() {
         // Restore the last-used chart period (persisted + iCloud-synced).
         let stored = UserDefaults.standard.integer(forKey: "safetrade.period")
-        if [15, 60, 240, 1440].contains(stored) { period = stored }
+        if SafeTradeStore.periods.contains(stored) { period = stored }
         #if DEBUG
         if Self.shotDemo { seedDemo() }
         #endif
@@ -96,7 +99,7 @@ final class SafeTradeStore: ObservableObject {
     /// Adopt a chart period synced in from another device (re-fetches candles).
     func adoptSyncedPeriod() {
         let stored = UserDefaults.standard.integer(forKey: "safetrade.period")
-        guard [15, 60, 240, 1440].contains(stored), stored != period else { return }
+        guard SafeTradeStore.periods.contains(stored), stored != period else { return }
         setPeriod(stored)
     }
 
@@ -205,10 +208,31 @@ final class SafeTradeStore: ObservableObject {
 
     private func applyCandles(_ nextCandles: [STCandle], requestID: Int, period requestedPeriod: Int) {
         guard requestID == candleRequestID, period == requestedPeriod else { return }
+        #if DEBUG
+        // Demo runs where SafeTrade is unreachable (its WAF blocks datacenter/proxy IPs):
+        // draw a synthetic series so the chart can still be checked.
+        if Self.shotDemo && nextCandles.isEmpty { candles = Self.demoCandles(period: requestedPeriod); return }
+        #endif
         candles = nextCandles
     }
 
     #if DEBUG
+    /// 120 deterministic candles ending now, `period` minutes apart (a gentle random walk
+    /// around $0.85), for SHOT_TRADE_DEMO runs without network access to SafeTrade.
+    static func demoCandles(period: Int) -> [STCandle] {
+        let step = TimeInterval(period * 60)
+        let end = (Date().timeIntervalSince1970 / step).rounded(.down) * step
+        var price = 0.85, seed: UInt64 = 0x9E3779B97F4A7C15
+        func rnd() -> Double { seed = seed &* 6364136223846793005 &+ 1442695040888963407; return Double(seed >> 11) / Double(1 << 53) }
+        return (0..<120).map { i in
+            let open = price
+            price = max(0.3, price * (1 + (rnd() - 0.5) * 0.04))
+            let hi = max(open, price) * (1 + rnd() * 0.01), lo = min(open, price) * (1 - rnd() * 0.01)
+            return STCandle(time: Date(timeIntervalSince1970: end - Double(119 - i) * step),
+                            open: open, high: hi, low: lo, close: price, volume: 1000 + rnd() * 5000)
+        }
+    }
+
     /// Believable demo account for SHOT_TRADE_DEMO App Store captures (DEBUG only).
     private func seedDemo() {
         balances = [

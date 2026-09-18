@@ -21,20 +21,21 @@ settings:
     DEVELOPMENT_TEAM: ""   # your Apple team id
     CODE_SIGN_STYLE: Automatic
     GENERATE_INFOPLIST_FILE: YES
-    MARKETING_VERSION: "1.11"
-    CURRENT_PROJECT_VERSION: "95"
+    MARKETING_VERSION: "1.12"
+    CURRENT_PROJECT_VERSION: "103"
     ENABLE_USER_SCRIPT_SANDBOXING: NO
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 schemes:
   PRLHub_iOS:
     build:
       targets: { PRLHub_iOS: all }
-    run: { config: Debug }
+    # Local StoreKit testing for the Pearl Hub Pro IAP (no App Store Connect needed).
+    run: { config: Debug, storeKitConfiguration: StoreKit/Pearl.storekit }
     archive: { config: Release }
   PRLHub_macOS:
     build:
       targets: { PRLHub_macOS: all }
-    run: { config: Debug }
+    run: { config: Debug, storeKitConfiguration: StoreKit/Pearl.storekit }
     archive: { config: Release }
   # App Store screenshot capture (XCUITest). Isolated from the production
   # PRLHub_iOS scheme so deploy/archive flows are unaffected. Run with:
@@ -44,7 +45,7 @@ schemes:
       targets: { PRLHub_iOS: all, PRLHubUITests: all }
     test:
       targets: [PRLHubUITests]
-    run: { config: Debug }
+    run: { config: Debug, storeKitConfiguration: StoreKit/Pearl.storekit }
 targets:
   # Both targets compile the SAME shared SwiftUI codebase under Sources/.
   PRLHub_iOS:

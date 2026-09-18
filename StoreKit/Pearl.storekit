@@ -1,0 +1,37 @@
+{
+  "identifier" : "5F3C8A21",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "2.99",
+      "familyShareable" : false,
+      "internalID" : "6760000001",
+      "localizations" : [
+        {
+          "description" : "Unlock server-monitored PRL price alerts",
+          "displayName" : "Pearl Hub Pro",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.prl.wizard.pro",
+      "referenceName" : "Pearl Hub Pro",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

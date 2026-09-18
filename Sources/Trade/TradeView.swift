@@ -4,6 +4,8 @@ import Combine
 
 struct TradeView: View {
     @StateObject private var store = SafeTradeStore()
+    @ObservedObject private var upsell = UpsellPrompt.shared
+    @State private var openAlerts = false      // after buying Pro from the upsell, land on 价格提醒
     @Environment(\.horizontalSizeClass) private var hsc
 
     @State private var side = "sell"         // buy | sell — default to 卖出
@@ -84,6 +86,10 @@ struct TradeView: View {
             .scrollDismissesKeyboard(.interactively)
             #endif
             .navigationTitle(Loc("交易 · SafeTrade"))
+            .navigationDestination(isPresented: $openAlerts) { PriceAlertsView() }
+            .sheet(isPresented: $upsell.showing, onDismiss: {
+                if ProStore.shared.isPro { openAlerts = true }
+            }) { ProUpsellSheet() }
             .toolbar {
                 ToolbarItem {
                     Button { Task { await store.refresh() } } label: { Image(systemName: "arrow.clockwise") }
@@ -158,7 +164,7 @@ struct TradeView: View {
             VStack(spacing: Pearl.Space.lg) {
                 if !store.hasCredentials { credWarning }
                 HStack(alignment: .top, spacing: Pearl.Space.lg) {
-                    VStack(spacing: Pearl.Space.lg) { balancesRow; MarketSection(store: store) }
+                    VStack(spacing: Pearl.Space.lg) { balancesRow; MarketSection(store: store); PriceAlertPromoCard() }
                         .frame(maxWidth: .infinity)
                     VStack(spacing: Pearl.Space.lg) { orderForm; statusMessages; ordersList }
                         .frame(width: 360)
@@ -169,6 +175,7 @@ struct TradeView: View {
                 if !store.hasCredentials { credWarning }
                 balancesRow
                 MarketSection(store: store)
+                PriceAlertPromoCard()
                 orderForm
                 statusMessages
                 ordersList
@@ -455,7 +462,7 @@ struct MarketSection: View {
             HStack {
                 Spacer()
                 Picker(Loc("周期"), selection: Binding(get: { store.period }, set: { store.setPeriod($0) })) {
-                    Text(Loc("15分")).tag(15); Text(Loc("1时")).tag(60); Text(Loc("4时")).tag(240); Text(Loc("1日")).tag(1440)
+                    Text(Loc("5分")).tag(5); Text(Loc("15分")).tag(15); Text(Loc("1时")).tag(60); Text(Loc("4时")).tag(240); Text(Loc("1日")).tag(1440)
                 }
                 .pickerStyle(.segmented).labelsHidden().controlSize(.small)
                 .fixedSize()
@@ -476,6 +483,42 @@ struct MarketSection: View {
     }
 }
 
+#if os(iOS)
+/// UIKit long-press → scrub for the K-line crosshair. A SwiftUI gesture on the chart
+/// (a zero-distance drag, and even a LongPress→Drag sequence) swallowed every swipe that
+/// began on the chart, so the page wouldn't scroll there. UILongPressGestureRecognizer
+/// fails as soon as the finger moves before 0.2 s, handing the touch to the enclosing
+/// scroll view; once it has begun, the drag moves only the crosshair.
+private struct HoldToScrub: UIViewRepresentable {
+    var onChange: (CGPoint?) -> Void
+
+    func makeUIView(context: Context) -> UIView {
+        let v = UIView()
+        v.backgroundColor = .clear
+        let g = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handle(_:)))
+        g.minimumPressDuration = 0.2
+        v.addGestureRecognizer(g)
+        return v
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) { context.coordinator.onChange = onChange }
+
+    func makeCoordinator() -> Coordinator { Coordinator(onChange: onChange) }
+
+    final class Coordinator: NSObject {
+        var onChange: (CGPoint?) -> Void
+        init(onChange: @escaping (CGPoint?) -> Void) { self.onChange = onChange }
+
+        @objc func handle(_ g: UILongPressGestureRecognizer) {
+            switch g.state {
+            case .began, .changed: onChange(g.location(in: g.view))
+            default: onChange(nil)
+            }
+        }
+    }
+}
+#endif
+
 struct CandleChart: View {
     let candles: [STCandle]
     @State private var selected: STCandle?
@@ -488,15 +531,21 @@ struct CandleChart: View {
         return abs(candles[1].time.timeIntervalSince(candles[0].time)) / 60
     }
 
-    /// Time labels fine enough that the ~4 ticks differ: 15-min candles span ~30 h (times),
-    /// hourly ~5 days (date + hour), 4-hour / daily candles weeks to months (dates).
+    /// Time labels fine enough that the ~4 ticks differ: 5-min candles span ~10 h and
+    /// 15-min ~30 h (times),
+    /// hourly ~5 days (one tick per day, date only), 4-hour / daily candles weeks to months
+    /// (dates).
     private var timeAxisFormat: Date.FormatStyle {
         switch candleMinutes {
         case ..<30:  return .dateTime.hour().minute()
-        case ..<120: return .dateTime.month(.defaultDigits).day().hour()
+        case ..<120: return .dateTime.month(.defaultDigits).day()
         default:     return .dateTime.month(.abbreviated).day()
         }
     }
+
+    /// Hourly candles get a fixed midnight tick per day. The automatic ticks landed on
+    /// midnight anyway, and "9/14, 12 AM" ×5 overflowed an iPhone-width axis and overlapped.
+    private var dailyTicks: Bool { (30..<120).contains(candleMinutes) }
 
     /// Enough decimals that neighbouring price ticks (~¼ of the visible range apart) never
     /// print the same label — a sub-dollar coin can move less than a cent in a window.
@@ -546,11 +595,22 @@ struct CandleChart: View {
             // Labels are built explicitly so they can't inherit the app tint (a bare
             // AxisValueLabel picked up the accent blue on the date axis).
             .chartXAxis {
-                AxisMarks(values: .automatic(desiredCount: 4)) { v in
-                    AxisValueLabel {
-                        if let d = v.as(Date.self) {
-                            Text(d, format: timeAxisFormat)
-                                .font(.caption2).foregroundStyle(Color.secondary)
+                if dailyTicks {
+                    AxisMarks(values: .stride(by: .day)) { v in
+                        AxisValueLabel {
+                            if let d = v.as(Date.self) {
+                                Text(d, format: timeAxisFormat)
+                                    .font(.caption2).foregroundStyle(Color.secondary)
+                            }
+                        }
+                    }
+                } else {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { v in
+                        AxisValueLabel {
+                            if let d = v.as(Date.self) {
+                                Text(d, format: timeAxisFormat)
+                                    .font(.caption2).foregroundStyle(Color.secondary)
+                            }
                         }
                     }
                 }
@@ -571,23 +631,29 @@ struct CandleChart: View {
             }
             .chartOverlay { proxy in
                 GeometryReader { geo in
-                    Rectangle().fill(.clear).contentShape(Rectangle())
                     #if os(macOS)
+                    Rectangle().fill(.clear).contentShape(Rectangle())
                         .onContinuousHover { phase in
                             switch phase {
-                            case .active(let loc): selected = candle(at: loc, proxy, geo)
-                            case .ended: selected = nil
+                            case .active(let loc): select(candle(at: loc, proxy, geo))
+                            case .ended: select(nil)
                             }
                         }
                     #else
-                        .gesture(DragGesture(minimumDistance: 0)
-                            .onChanged { selected = candle(at: $0.location, proxy, geo) }
-                            .onEnded { _ in selected = nil })
+                    // Press-and-hold (0.2 s) arms the crosshair, then drag to scrub; a plain
+                    // swipe that starts on the chart scrolls the page. See HoldToScrub.
+                    HoldToScrub { p in select(p.flatMap { candle(at: $0, proxy, geo) }) }
                     #endif
                 }
             }
             .frame(height: 260)   // fixed so the chart doesn't stretch to fill the column
         }
+    }
+
+    /// Only touch `selected` when the candle under the cursor actually changes, so a drag
+    /// doesn't re-render all 120 candles on every point it moves.
+    private func select(_ c: STCandle?) {
+        if c?.id != selected?.id { selected = c }
     }
 
     /// Nearest candle to the cursor's x-position.
@@ -605,12 +671,14 @@ struct CandleChart: View {
             // 对齐成 2×2 网格，标签弱化、数值加粗，避免挤在一起看不清。
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 4) {
                 GridRow {
-                    ohlc(Loc("开"), pf(c.open), .primary)
+                    // Own keys: the bare "开"/"收" keys are the On-toggle and Receive
+                    // strings elsewhere ("On" / "Receive" in English).
+                    ohlc(Loc("开盘价"), pf(c.open), .primary)
                     ohlc(Loc("高"), pf(c.high), .green)
                 }
                 GridRow {
                     ohlc(Loc("低"), pf(c.low), .red)
-                    ohlc(Loc("收"), pf(c.close), c.up ? .green : .red)
+                    ohlc(Loc("收盘价"), pf(c.close), c.up ? .green : .red)
                 }
             }
         }

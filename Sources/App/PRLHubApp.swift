@@ -5,6 +5,13 @@ import SwiftUI
 /// with `#if os(...)` rather than separate app structs.
 @main
 struct PRLHubApp: App {
+    // APNs token callbacks + foreground banners for price alerts (PriceAlerts.swift).
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #else
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #endif
+
     var body: some Scene {
         WindowGroup {
             RootView()

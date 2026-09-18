@@ -232,14 +232,17 @@ struct DashboardView: View {
         }
         .navigationTitle(Loc("钱包"))
         .toolbar {
+            // Both items opt out of the system's glass capsule (user preference).
             #if os(iOS)
             ToolbarItem(placement: .topBarLeading) {
                 WalletSwitcherMenu(store: store, addingWallet: $addingWallet, managingWallets: $managingWallets)
             }
+            .noGlassBackground()
             #else
             ToolbarItem(placement: .navigation) {
                 WalletSwitcherMenu(store: store, addingWallet: $addingWallet, managingWallets: $managingWallets)
             }
+            .noGlassBackground()
             #endif
             if canDonate {
                 ToolbarItem(placement: .primaryAction) {
@@ -248,6 +251,7 @@ struct DashboardView: View {
                     }
                     .accessibilityLabel(Loc("支持开发者"))
                 }
+                .noGlassBackground()
             }
         }
         .sheet(isPresented: $addingWallet) { AddWalletView(store: store) }

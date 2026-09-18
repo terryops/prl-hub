@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Privacy Policy — Pearl Hub</title>
-<meta name="description" content="Pearl Hub privacy policy. A self-custody wallet that collects no personal data.">
+<meta name="description" content="Pearl Hub privacy policy. A self-custody wallet that keeps your data on your device.">
 <style>
   :root { --indigo:#1B2A6B; --blue:#527AF2; }
   body { margin:0; font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -26,23 +26,38 @@
 <body>
 <header><div class="in"><img src="/logo.png" alt="Pearl Hub"><div><h1>Privacy Policy</h1><a href="/">← Pearl Hub</a></div></div></header>
 <main>
-  <p class="muted">Last updated: June 8, 2026</p>
+  <p class="muted">Last updated: September 18, 2026</p>
 
   <p><strong>Pearl Hub</strong> ("the app") is a self-custody cryptocurrency wallet and mining
   monitor for the Pearl ($PRL) network. We designed it to keep your data on your device.
-  <strong>We do not collect, store, sell, or share any personal information.</strong></p>
+  <strong>We do not sell or share any data, and we collect none unless you turn on Price
+  Alerts</strong> (see below).</p>
 
   <div class="box">
-  <h2>No data collection</h2>
+  <h2>No accounts, no tracking</h2>
   <p>The app has no user accounts, no analytics, no advertising, and no third-party tracking
-  SDKs. We — the developer — operate no servers that receive your personal data, and we have
-  no way to identify you.</p>
+  SDKs, and we have no way to identify you. The only server we — the developer — operate is
+  the optional price-alert service described below.</p>
 
   <h2>Your keys stay on your device</h2>
   <p>Your wallet recovery phrase and private keys are generated on your device and stored,
   encrypted, in the device Keychain / Secure Enclave. They never leave your device and are
   never transmitted to us. Viewing your recovery phrase or sending funds is protected by
   Face ID / Touch ID.</p>
+
+  <h2>Price Alerts (optional, Pearl Hub Pro)</h2>
+  <p>If you unlock Pearl Hub Pro and add price alerts, the app sends our alert server
+  (<code>prl.tools.video</code>, hosted on Cloudflare) three things: this device's Apple push
+  notification token, the alert conditions you set (for example "PRL rises to $1.20"), and
+  the app's display language. The server uses them only to check the $PRL price every minute
+  and notify you through Apple's push service when a condition is met. It never receives your
+  wallet addresses, balances, recovery phrase or any account information, and the push token
+  cannot be used to identify you. Removing all your alerts deletes this data from the server;
+  tokens that Apple reports as no longer valid are deleted automatically.</p>
+
+  <h2>In-app purchases</h2>
+  <p>Pearl Hub Pro is a one-time in-app purchase processed entirely by Apple. We never receive
+  your payment details; the app checks your purchase on-device with Apple's StoreKit.</p>
 
   <h2>Third-party services the app contacts</h2>
   <p>To provide its features, the app makes direct requests from your device to public
@@ -51,14 +66,16 @@
   <ul>
     <li><strong>Pearl blockchain indexer</strong> (<code>blockbook.pearlresearch.ai</code>) — to read balances and broadcast transactions.</li>
     <li><strong>Public market data</strong> (e.g. SafeTrade public ticker, CoinGecko) — to display the $PRL price and charts, for reference only.</li>
-    <li><strong>Mining pool public APIs</strong> (AlphaPool, Lucky Pool, TW-Pool, HeroMiners, Pearl Fortune) — to show stats for a mining address you choose to monitor.</li>
+    <li><strong>SafeTrade trading API</strong> (<code>safetrade.com</code>) — only if you add your own SafeTrade API key, to show your exchange balances and place or cancel your orders.</li>
+    <li><strong>Mining pool public APIs</strong> (AlphaPool, Lucky Pool, HeroMiners, Pearl Fortune, PearlHash, Kryptex, F2Pool) — to show stats for a mining address you choose to monitor.</li>
   </ul>
   <p>We do not control these services and receive no data from them.</p>
 
   <h2>iCloud sync (optional, Apple-encrypted)</h2>
   <p>If you use iCloud, your preferences (language, currency, pool setup) sync across your own
-  devices through Apple iCloud. This data is handled by Apple under Apple's privacy policy;
-  we have no access to it.</p>
+  devices through Apple iCloud, and a SafeTrade API key you add is kept in your iCloud
+  Keychain. This data is handled by Apple under Apple's privacy policy; we have no access to
+  it.</p>
 
   <h2>Children</h2>
   <p>The app is not directed to children and does not knowingly collect any information from

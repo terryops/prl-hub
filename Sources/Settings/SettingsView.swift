@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @AppStorage("ui.appearance") private var appearance = "system"   // system | light | dark
+    @AppStorage("ui.lockPortrait") private var lockPortrait = true   // iPhone 锁定竖屏 — same key as OrientationLock.key
     @AppStorage("safetrade.market") private var market = "prlusdt"
 
     @State private var apiKeyInput = ""
@@ -19,6 +20,8 @@ struct SettingsView: View {
     @EnvironmentObject private var wallet: WalletStore
     @EnvironmentObject private var loc: LocalizationManager
     @EnvironmentObject private var currency: CurrencyManager
+    @ObservedObject private var alerts = PriceAlertStore.shared
+    @ObservedObject private var pro = ProStore.shared
     private var marketValid: Bool { SafeTradeMarket.isValid(market) }
 
     private var appVersion: String {
@@ -105,6 +108,27 @@ struct SettingsView: View {
                     }
                 }
 
+                Section(Loc("通知")) {
+                    NavigationLink {
+                        PriceAlertsView()
+                    } label: {
+                        LabeledContent {
+                            let on = alerts.rules.filter(\.enabled).count
+                            if !pro.isPro {
+                                Text(Loc("高级版"))
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Pearl.accent)
+                                    .padding(.horizontal, 7).padding(.vertical, 2)
+                                    .background(Pearl.accent.opacity(0.12), in: Capsule())
+                            } else if on > 0 {
+                                Text("\(on)")
+                            }
+                        } label: {
+                            Label(Loc("价格提醒"), systemImage: "bell.badge")
+                        }
+                    }
+                }
+
                 Section(Loc("网络")) {
                     Picker(Loc("Pearl 网络"), selection: Binding(
                         get: { wallet.network },
@@ -121,6 +145,11 @@ struct SettingsView: View {
                         Text(Loc("浅色")).tag("light")
                         Text(Loc("深色")).tag("dark")
                     }
+                    #if os(iOS)
+                    if UIDevice.current.userInterfaceIdiom == .phone {
+                        Toggle(Loc("锁定竖屏"), isOn: $lockPortrait)
+                    }
+                    #endif
                 }
 
                 Section(Loc("语言")) {
@@ -290,6 +319,9 @@ struct SettingsView: View {
                 if SafeTradeMarket.isValid(cleaned) { CloudSync.push("safetrade.market") }
             }
             .onChange(of: appearance) { _, _ in CloudSync.push("ui.appearance") }
+            #if os(iOS)
+            .onChange(of: lockPortrait) { _, _ in OrientationLock.apply() }
+            #endif
             // Re-read SafeTradeSecrets when iCloud pulls keys in (the @State bump re-renders the body).
             .onReceive(NotificationCenter.default.publisher(for: .cloudSyncDidUpdate)) { _ in credTick += 1 }
             // .alert (not .confirmationDialog) — centered on every platform; a

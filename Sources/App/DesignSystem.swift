@@ -275,3 +275,19 @@ extension View {
             .background { PearlBackground() }
     }
 }
+
+// MARK: - No glass on toolbar items
+
+extension ToolbarContent {
+    /// Opts a toolbar item out of the automatic Liquid Glass capsule that the
+    /// iOS/macOS 26+ SDK draws behind toolbar buttons — the user doesn't want the
+    /// glass look (reverted 2026-09-17). Earlier systems never drew one.
+    @ToolbarContentBuilder
+    func noGlassBackground() -> some ToolbarContent {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            sharedBackgroundVisibility(.hidden)
+        } else {
+            self
+        }
+    }
+}
