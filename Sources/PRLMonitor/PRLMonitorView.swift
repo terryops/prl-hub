@@ -103,6 +103,9 @@ struct PRLMonitorView: View {
                 Text(Loc("先到「我的监控」添加你的矿池和挖矿地址；再回到「我的设备」点『从矿池同步』，即可一键把矿机同步成设备。"))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                Text(Loc("Pearl Hub 本身不挖矿，仅读取矿池公开数据。"))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
             Button { withAnimation(.snappy) { introSeen = true } } label: {

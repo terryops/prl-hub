@@ -139,12 +139,13 @@ struct WatchData {
     var workers: [WatchWorker] = [] {
         didSet {
             #if DEBUG
-            // Screenshot-only: SHOT_ANON_WORKERS=1 lists rigs as rig-01, rig-02 … so an App Store
-            // capture of a real watch doesn't publish the owner's machine hostnames. Every pool
-            // parser assigns `d.workers = …`, so this one observer covers them all.
+            // Screenshot-only: SHOT_ANON_WORKERS=1 lists workers as worker-01, worker-02 … so an
+            // App Store capture of a real watch doesn't publish the owner's machine hostnames
+            // (and carries no "rig" wording — see guideline 3.1.5(ii)). Every pool parser
+            // assigns `d.workers = …`, so this one observer covers them all.
             if Self.anonymizeWorkers {
                 workers = workers.enumerated().map { i, w in
-                    WatchWorker(name: String(format: "rig-%02d", i + 1), online: w.online, rates: w.rates)
+                    WatchWorker(name: String(format: "worker-%02d", i + 1), online: w.online, rates: w.rates)
                 }
             }
             #endif

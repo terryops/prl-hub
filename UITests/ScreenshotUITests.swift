@@ -47,6 +47,11 @@ final class ScreenshotUITests: XCTestCase {
             app.launchEnvironment["SHOT_WATCH_ADDR"] = addr
             app.launchEnvironment["SHOT_WATCH_POOL"] = env["SHOT_POOL"] ?? "AlphaPool"
         }
+        // Worker names on a real watch are the owner's machine hostnames — list them as
+        // worker-01, worker-02 … instead (DEBUG seam in WatchData.workers).
+        if env["SHOT_ANON_WORKERS"] == "1" {
+            app.launchEnvironment["SHOT_ANON_WORKERS"] = "1"
+        }
         // Populate the Trade tab with a believable demo account (DEBUG seam) so the
         // promo shot shows balances + open orders, not the "configure API key" warning.
         app.launchEnvironment["SHOT_TRADE_DEMO"] = "1"
@@ -57,11 +62,16 @@ final class ScreenshotUITests: XCTestCase {
         // 1) Wallet dashboard — wait until it's up (its Receive action exists).
         let receive = app.buttons["Receive"]
         XCTAssertTrue(receive.waitForExistence(timeout: 30), "dashboard did not appear")
-        sleep(6)                       // balance hero + address capsule settle
+        // A fresh import shows "Syncing balance…" in the hero until the first chain scan
+        // lands — wait it out so the first store screenshot shows a settled wallet.
+        let syncing = app.staticTexts["Syncing balance\u{2026}"]
+        wait(for: [expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: syncing)],
+             timeout: 60)
+        sleep(4)                       // balance hero + address capsule settle
         capture("01-wallet")
 
-        // 2) Mining monitor → Overview (live PRL price / hashrate / difficulty / chart).
-        tapTab(app, "Mining")
+        // 2) Pools → Overview (live PRL price / hashrate / difficulty / chart).
+        tapTab(app, "Pools")
         dismissIntroBanner(app)
         _ = app.buttons["Overview"].waitForExistence(timeout: 10)
         sleep(8)                       // network fetch for the overview cards + chart

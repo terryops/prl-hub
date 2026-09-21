@@ -44,7 +44,7 @@
 "PRL 余额不足" = "Số dư PRL không đủ";
 "PRL 币价" = "Giá PRL";
 "PRL 币价 $" = "Giá PRL $";
-"PRL 挖矿监控" = "Giám sát đào PRL";
+"PRL 挖矿监控" = "Pool PRL";
 "PRL/算力·天" = "PRL/hashrate·ngày";
 "PRL/P·天" = "PRL/P·ngày";
 "单位日产 PRL/P" = "Sản lượng PRL/P mỗi ngày";
@@ -108,7 +108,7 @@
 "关于" = "Giới thiệu";
 "应用" = "Ứng dụng";
 "内存机·不划算" = "Máy RAM · không lời";
-"内置 PRL 挖矿监控" = "Tích hợp giám sát đào PRL";
+"内置 PRL 挖矿监控" = "Tích hợp giám sát pool PRL";
 "写下来并妥善保管后再继续。" = "Hãy ghi lại và cất giữ an toàn trước khi tiếp tục.";
 "出块奖励" = "Thưởng khối";
 "出币" = "Sản lượng";
@@ -241,8 +241,8 @@
 "按算力" = "Theo hashrate";
 "按能效 P/W" = "Theo hiệu suất P/W";
 "按自有净利" = "Theo lợi nhuận ròng khi sở hữu";
-"挖矿地址" = "Địa chỉ đào";
-"挖矿监控" = "Đào";
+"挖矿地址" = "Địa chỉ nhận thưởng";
+"挖矿监控" = "Pool";
 "换一个地址" = "Đổi địa chỉ khác";
 "排序" = "Sắp xếp";
 "提示：自动保存。每台可选『自有』(付电费+计硬件成本) 或『租用』(按 ¥/小时 付租，全包价不另计电费/功率)。『可用h』= 每天实际挖矿小时，按比例缩放出币/电费/租金。租金单价可在此逐台调，默认值在【显卡对比】选中卡后设。" = "Lưu ý: Tự động lưu. Mỗi máy có thể chọn『Sở hữu』(trả tiền điện + tính chi phí phần cứng) hoặc『Thuê』(trả thuê theo ¥/giờ, giá trọn gói không tính thêm tiền điện/công suất).『Giờ khả dụng』= số giờ đào thực tế mỗi ngày, co giãn theo tỷ lệ sản lượng/tiền điện/tiền thuê. Đơn giá thuê có thể chỉnh từng máy tại đây, giá trị mặc định đặt sau khi chọn card ở【So sánh GPU】.";
@@ -312,7 +312,7 @@
 "浅色" = "Sáng";
 "深色" = "Tối";
 "添加" = "Thêm";
-"添加挖矿监控" = "Thêm giám sát đào";
+"添加挖矿监控" = "Thêm giám sát pool";
 "添加监控" = "Thêm giám sát";
 "编辑监控" = "Sửa giám sát";
 "更换矿池后将按新矿池重新查询该地址的挖矿数据。" = "Sau khi đổi pool, dữ liệu khai thác của địa chỉ này sẽ được truy vấn lại theo pool mới.";
@@ -337,9 +337,9 @@
 "电费自付" = "Tự trả tiền điện";
 "界面语言" = "Ngôn ngữ giao diện";
 "监控选项" = "Tùy chọn giám sát";
-"矿工" = "Thợ đào";
-"矿机" = "Máy đào";
-"矿机 %@ 台" = "%@ máy đào";
+"矿工" = "Worker";
+"矿机" = "Worker";
+"矿机 %@ 台" = "%@ worker";
 "矿池" = "Pool";
 "矿池同步能效 W/(TH/s)" = "Đồng bộ hiệu suất pool W/(TH/s)";
 "矿池总览" = "Tổng quan pool";
@@ -410,7 +410,7 @@
 "记录" = "Lịch sử";
 "设备" = "Thiết bị";
 "设置" = "Cài đặt";
-"该地址未在 %@ 挖矿" = "Địa chỉ này chưa đào tại %@";
+"该地址未在 %@ 挖矿" = "Không tìm thấy worker cho địa chỉ này tại %@";
 "该矿池暂未公开统计" = "Pool này chưa công khai thống kê";
 "语言" = "Ngôn ngữ";
 "请按顺序离线抄写" = "Hãy chép tay theo đúng thứ tự khi ngoại tuyến";
@@ -521,7 +521,7 @@
 "出块时间" = "Thời gian khối";
 "链上数据加载失败" = "Không tải được dữ liệu chuỗi";
 "重试" = "Thử lại";
-"挖矿难度" = "Độ khó đào";
+"挖矿难度" = "Độ khó mạng";
 "难度 (M)" = "Độ khó (M)";
 "暂无难度趋势数据" = "Chưa có dữ liệu xu hướng độ khó";
 "联网后显示难度趋势" = "Xu hướng độ khó hiển thị khi trực tuyến";
@@ -540,7 +540,7 @@
 
 /* Backfill: strings used in code but missing from every translation table (showed raw Chinese to non-CN users) */
 "24H收益/PH = 该池24h出块奖励 ÷ 矿池算力（PRL per PH·天）；绿色 = 最高。" = "Lợi/PH 24h = phần thưởng khối 24h của pool ÷ hashrate pool (PRL mỗi PH·ngày); xanh = cao nhất.";
-"HeroMiners：矿池 0%，需 SRBMiner（矿工端抽水约 3%）。" = "HeroMiners: pool 0%, cần SRBMiner (phí phía miner ~3%).";
+"HeroMiners：矿池 0%，需 SRBMiner（矿工端抽水约 3%）。" = "HeroMiners: phí pool 0%, phí phần mềm ~3%.";
 "PearlHash 未公开按池出块数据，故出块/收益显示「—」。" = "PearlHash không công bố dữ liệu khối theo pool, nên khối/lợi nhuận hiển thị \"—\".";
 "「~」= 该池未公开 24h 总数，由近几小时出块按 24h 折算。" = "\"~\" = pool không công bố tổng 24h; quy đổi sang 24h từ khối vài giờ gần đây.";
 "交易在本机签名（私钥不离开设备），合并到一笔扫回，剩余不再搁浅。" = "Ký trên thiết bị (khóa riêng không rời thiết bị), gộp thành một giao dịch quét, không còn dư mắc kẹt.";
@@ -756,5 +756,6 @@
 "跌到 %@" = "Giảm xuống %@";
 "新功能：价格提醒" = "Mới: Cảnh báo giá";
 "5分" = "5 phút";
+"Pearl Hub 本身不挖矿，仅读取矿池公开数据。" = "Pearl Hub không đào coin — ứng dụng chỉ đọc dữ liệu công khai từ pool.";
 "成交时通知你？" = "Báo khi khớp lệnh?";
 "PRL 到达 %@ USDT 时给你推送通知，也就是这笔限价单大概率成交的时候。价格提醒是高级版功能。" = "Pro có thể gửi thông báo khi PRL đạt %@ USDT — khoảng lúc lệnh giới hạn này khớp. Cảnh báo giá là tính năng Pro.";

@@ -44,7 +44,7 @@
 "PRL 余额不足" = "Saldo PRL tidak cukup";
 "PRL 币价" = "Harga PRL";
 "PRL 币价 $" = "Harga PRL $";
-"PRL 挖矿监控" = "Monitor Penambangan PRL";
+"PRL 挖矿监控" = "Pool PRL";
 "PRL/算力·天" = "PRL/Hashrate·hari";
 "PRL/P·天" = "PRL/P·hari";
 "单位日产 PRL/P" = "Hasil Harian/Unit PRL/P";
@@ -108,7 +108,7 @@
 "关于" = "Tentang";
 "应用" = "Aplikasi";
 "内存机·不划算" = "Terbatas memori · Tidak layak";
-"内置 PRL 挖矿监控" = "Monitor Penambangan PRL Bawaan";
+"内置 PRL 挖矿监控" = "Monitor Pool PRL Bawaan";
 "写下来并妥善保管后再继续。" = "Catat dan simpan dengan aman sebelum melanjutkan.";
 "出块奖励" = "Hadiah Blok";
 "出币" = "Koin Dihasilkan";
@@ -150,7 +150,7 @@
 "取消" = "Batal";
 "可提+待确认" = "Dapat ditarik + Tertunda";
 "可用余额 %@ PRL" = "Saldo Tersedia %@ PRL";
-"各 Pearl 矿池的公开算力与费率（无需地址）" = "Hashrate dan biaya publik tiap pool penambangan Pearl (tanpa alamat)";
+"各 Pearl 矿池的公开算力与费率（无需地址）" = "Hashrate dan biaya publik tiap pool Pearl (tanpa alamat)";
 "各显卡租金不同 → 在【显卡对比】选中某卡后于详情逐卡设置" = "Harga sewa berbeda per GPU → pilih kartu di Banding GPU, lalu atur tiap kartu di detailnya";
 "同步中…" = "Menyinkron…";
 "同步余额…" = "Menyinkron saldo…";
@@ -241,8 +241,8 @@
 "按算力" = "Berdasarkan Hashrate";
 "按能效 P/W" = "Berdasarkan Efisiensi P/W";
 "按自有净利" = "Berdasarkan Laba Bersih Milik Sendiri";
-"挖矿地址" = "Alamat Penambangan";
-"挖矿监控" = "Tambang";
+"挖矿地址" = "Alamat Pembayaran";
+"挖矿监控" = "Pool";
 "换一个地址" = "Ganti Alamat";
 "排序" = "Urutkan";
 "提示：自动保存。每台可选『自有』(付电费+计硬件成本) 或『租用』(按 ¥/小时 付租，全包价不另计电费/功率)。『可用h』= 每天实际挖矿小时，按比例缩放出币/电费/租金。租金单价可在此逐台调，默认值在【显卡对比】选中卡后设。" = "Tips: Tersimpan otomatis. Tiap perangkat dapat diatur 'Milik sendiri' (bayar listrik + hitung biaya perangkat keras) atau 'Sewa' (bayar ¥/jam, all-in tanpa tambahan listrik/daya). 'Jam tersedia' = jam menambang aktual per hari, menyesuaikan hasil/listrik/sewa secara proporsional. Harga sewa per unit dapat diatur per perangkat di sini; setel default di Banding GPU setelah memilih kartu.";
@@ -312,7 +312,7 @@
 "浅色" = "Terang";
 "深色" = "Gelap";
 "添加" = "Tambah";
-"添加挖矿监控" = "Tambah Monitor Penambangan";
+"添加挖矿监控" = "Tambah Monitor Pool";
 "添加监控" = "Tambah Monitor";
 "编辑监控" = "Edit Monitor";
 "更换矿池后将按新矿池重新查询该地址的挖矿数据。" = "Setelah mengganti pool, data penambangan alamat ini akan dikueri ulang pada pool baru.";
@@ -337,9 +337,9 @@
 "电费自付" = "Listrik Ditanggung Sendiri";
 "界面语言" = "Bahasa";
 "监控选项" = "Opsi Monitor";
-"矿工" = "Penambang";
-"矿机" = "Penambang";
-"矿机 %@ 台" = "%@ Penambang";
+"矿工" = "Worker";
+"矿机" = "Worker";
+"矿机 %@ 台" = "%@ Worker";
 "矿池" = "Pool";
 "矿池同步能效 W/(TH/s)" = "Efisiensi Sinkron Pool W/(TH/s)";
 "矿池总览" = "Ikhtisar Pool";
@@ -410,7 +410,7 @@
 "记录" = "Riwayat";
 "设备" = "Perangkat";
 "设置" = "Pengaturan";
-"该地址未在 %@ 挖矿" = "Alamat ini tidak menambang di %@";
+"该地址未在 %@ 挖矿" = "Tidak ada worker untuk alamat ini di %@";
 "该矿池暂未公开统计" = "Pool ini belum memiliki statistik publik";
 "语言" = "Bahasa";
 "请按顺序离线抄写" = "Catat secara berurutan, luring";
@@ -520,7 +520,7 @@
 "出块时间" = "Waktu blok";
 "链上数据加载失败" = "Gagal memuat data rantai";
 "重试" = "Coba lagi";
-"挖矿难度" = "Kesulitan penambangan";
+"挖矿难度" = "Kesulitan jaringan";
 "难度 (M)" = "Kesulitan (M)";
 "暂无难度趋势数据" = "Belum ada tren kesulitan";
 "联网后显示难度趋势" = "Tren kesulitan tampil saat daring";
@@ -539,7 +539,7 @@
 
 /* Backfill: strings used in code but missing from every translation table (showed raw Chinese to non-CN users) */
 "24H收益/PH = 该池24h出块奖励 ÷ 矿池算力（PRL per PH·天）；绿色 = 最高。" = "Hasil/PH 24j = hadiah blok 24j pool ÷ hashrate pool (PRL per PH·hari); hijau = tertinggi.";
-"HeroMiners：矿池 0%，需 SRBMiner（矿工端抽水约 3%）。" = "HeroMiners: pool 0%, perlu SRBMiner (potongan sisi miner ~3%).";
+"HeroMiners：矿池 0%，需 SRBMiner（矿工端抽水约 3%）。" = "HeroMiners: biaya pool 0%, biaya perangkat lunak ~3%.";
 "PearlHash 未公开按池出块数据，故出块/收益显示「—」。" = "PearlHash tidak mempublikasikan data blok per-pool, jadi blok/hasil menampilkan \"—\".";
 "「~」= 该池未公开 24h 总数，由近几小时出块按 24h 折算。" = "\"~\" = pool tidak mempublikasikan total 24j; diekstrapolasi ke 24j dari blok beberapa jam terakhir.";
 "交易在本机签名（私钥不离开设备），合并到一笔扫回，剩余不再搁浅。" = "Ditandatangani di perangkat (kunci privat tidak keluar), digabung jadi satu sapuan, tak ada sisa tertahan.";
@@ -755,5 +755,6 @@
 "跌到 %@" = "Turun ke %@";
 "新功能：价格提醒" = "Baru: Peringatan Harga";
 "5分" = "5m";
+"Pearl Hub 本身不挖矿，仅读取矿池公开数据。" = "Pearl Hub tidak menambang — aplikasi hanya membaca statistik publik dari pool.";
 "成交时通知你？" = "Beri tahu saat terisi?";
 "PRL 到达 %@ USDT 时给你推送通知，也就是这笔限价单大概率成交的时候。价格提醒是高级版功能。" = "Pro dapat mengirim notifikasi saat PRL mencapai %@ USDT — kira-kira saat order limit ini terisi. Peringatan harga adalah fitur Pro.";

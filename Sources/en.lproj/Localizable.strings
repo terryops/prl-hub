@@ -44,7 +44,7 @@
 "PRL 余额不足" = "Insufficient PRL balance";
 "PRL 币价" = "PRL Price";
 "PRL 币价 $" = "PRL Price $";
-"PRL 挖矿监控" = "PRL Mining Monitor";
+"PRL 挖矿监控" = "PRL Pool Stats";
 "PRL/算力·天" = "PRL/Hashrate·day";
 "PRL/P·天" = "PRL/P·day";
 "单位日产 PRL/P" = "Daily Yield/Unit PRL/P";
@@ -84,7 +84,7 @@
 "交易（SafeTrade）" = "Trade (SafeTrade)";
 "从左侧列表挑一张显卡，查看收益与盈亏平衡分析" = "Pick a GPU from the list on the left to see earnings and break-even analysis";
 "从矿池同步" = "Sync from Pool";
-"从矿池同步：按 24h 算力把矿机同步成设备" = "Sync from pool: turn miners into devices using 24h hashrate";
+"从矿池同步：按 24h 算力把矿机同步成设备" = "Sync from pool: create devices from your workers' 24h hashrate";
 "价格 %@ USDT" = "Price %@ USDT";
 "价格 (USDT)" = "Price (USDT)";
 "估算" = "Estimate";
@@ -108,7 +108,7 @@
 "关于" = "About";
 "应用" = "App";
 "内存机·不划算" = "Memory-bound · Not worth it";
-"内置 PRL 挖矿监控" = "Built-in PRL Mining Monitor";
+"内置 PRL 挖矿监控" = "Built-in PRL pool monitor";
 "写下来并妥善保管后再继续。" = "Write it down and store it safely before continuing.";
 "出块奖励" = "Block Reward";
 "出币" = "Coins Produced";
@@ -150,7 +150,7 @@
 "取消" = "Cancel";
 "可提+待确认" = "Withdrawable + Pending";
 "可用余额 %@ PRL" = "Available Balance %@ PRL";
-"各 Pearl 矿池的公开算力与费率（无需地址）" = "Public hashrate and fees for each Pearl mining pool (no address needed)";
+"各 Pearl 矿池的公开算力与费率（无需地址）" = "Public hashrate and fees for each Pearl pool (no address needed)";
 "各显卡租金不同 → 在【显卡对比】选中某卡后于详情逐卡设置" = "Rental prices vary by GPU → select a card in GPU Compare, then set each one in its details";
 "同步中…" = "Syncing…";
 "同步余额…" = "Syncing balance…";
@@ -241,11 +241,11 @@
 "按算力" = "By Hashrate";
 "按能效 P/W" = "By Efficiency P/W";
 "按自有净利" = "By Owned Net Profit";
-"挖矿地址" = "Mining Address";
-"挖矿监控" = "Mining";
+"挖矿地址" = "Payout Address";
+"挖矿监控" = "Pools";
 "换一个地址" = "Switch Address";
 "排序" = "Sort";
-"提示：自动保存。每台可选『自有』(付电费+计硬件成本) 或『租用』(按 ¥/小时 付租，全包价不另计电费/功率)。『可用h』= 每天实际挖矿小时，按比例缩放出币/电费/租金。租金单价可在此逐台调，默认值在【显卡对比】选中卡后设。" = "Tip: Auto-saved. Each device can be set to 'Owned' (pay Power Cost + count hardware cost) or 'Rent' (pay ¥/hour, all-inclusive with no extra power/wattage). 'Available h' = actual mining hours per day, scaling yield/power cost/rent proportionally. Rent per unit can be adjusted per device here; set defaults in GPU Compare after selecting a card.";
+"提示：自动保存。每台可选『自有』(付电费+计硬件成本) 或『租用』(按 ¥/小时 付租，全包价不另计电费/功率)。『可用h』= 每天实际挖矿小时，按比例缩放出币/电费/租金。租金单价可在此逐台调，默认值在【显卡对比】选中卡后设。" = "Tip: Auto-saved. Each device can be set to 'Owned' (pay Power Cost + count hardware cost) or 'Rent' (pay ¥/hour, all-inclusive with no extra power/wattage). 'Available h' = hours per day the device runs, scaling yield/power cost/rent proportionally. Rent per unit can be adjusted per device here; set defaults in GPU Compare after selecting a card.";
 "收" = "Receive";
 "收入=链上实际到账（已自动扣除你各地址之间的互转，避免重复计入）；净利=到账×币价 − 你设备的电费/租金。" = "Income = actual on-chain received (transfers between your own addresses are auto-excluded to avoid double-counting); Net Profit = received × price − your devices' power cost/rent.";
 "收到" = "Received";
@@ -312,7 +312,7 @@
 "浅色" = "Light";
 "深色" = "Dark";
 "添加" = "Add";
-"添加挖矿监控" = "Add Mining Monitor";
+"添加挖矿监控" = "Add Pool Monitor";
 "添加监控" = "Add Monitor";
 "编辑监控" = "Edit Monitor";
 "更换矿池后将按新矿池重新查询该地址的挖矿数据。" = "Changing the pool re-queries this address against the new pool.";
@@ -337,9 +337,9 @@
 "电费自付" = "Power Cost on You";
 "界面语言" = "Language";
 "监控选项" = "Monitor Options";
-"矿工" = "Miner";
-"矿机" = "Miner";
-"矿机 %@ 台" = "%@ Miners";
+"矿工" = "Worker";
+"矿机" = "Worker";
+"矿机 %@ 台" = "%@ Workers";
 "矿池" = "Pool";
 "矿池同步能效 W/(TH/s)" = "Pool-synced Efficiency W/(TH/s)";
 "矿池总览" = "Pool Overview";
@@ -410,7 +410,7 @@
 "记录" = "History";
 "设备" = "Device";
 "设置" = "Settings";
-"该地址未在 %@ 挖矿" = "This address is not mining on %@";
+"该地址未在 %@ 挖矿" = "No workers found for this address on %@";
 "该矿池暂未公开统计" = "This pool has no public stats yet";
 "语言" = "Language";
 "请按顺序离线抄写" = "Write down in order, offline";
@@ -468,7 +468,7 @@
 /* PRLMonitor fx ↔ secondary currency */
 "自动汇率（跟随副货币 · 每日更新）" = "Auto rate (follows secondary currency · daily)";
 "汇率 → %@" = "Rate → %@";
-"未选副货币：挖矿金额按美元（USD）显示。可在「设置 → 货币」选择副货币后在此换算。" = "No secondary currency: mining amounts show in USD. Pick a secondary currency in Settings → Currency to convert here.";
+"未选副货币：挖矿金额按美元（USD）显示。可在「设置 → 货币」选择副货币后在此换算。" = "No secondary currency: pool amounts show in USD. Pick a secondary currency in Settings → Currency to convert here.";
 
 /* Fiat currency names (shown via Loc(nameKey)) */
 "人民币" = "Chinese Yuan";
@@ -495,13 +495,13 @@
 "已发送 ✓" = "Sent ✓";
 "添加新地址" = "Add New Address";
 "新手提示" = "Tip";
-"先到「我的监控」添加你的矿池和挖矿地址；再回到「我的设备」点『从矿池同步』，即可一键把矿机同步成设备。" = "First add your pools and mining addresses in \"My Monitor\", then return to \"My Devices\" and tap \"Sync from Pool\" to turn your miners into devices in one tap.";
+"先到「我的监控」添加你的矿池和挖矿地址；再回到「我的设备」点『从矿池同步』，即可一键把矿机同步成设备。" = "First add your pools and payout addresses in \"My Monitor\", then return to \"My Devices\" and tap \"Sync from Pool\" to turn those workers into devices in one tap.";
 "知道了" = "Got it";
 "还没有可同步的矿池监控" = "No pool watches to sync yet";
-"同步矿池矿机为设备？" = "Sync pool miners as devices?";
+"同步矿池矿机为设备？" = "Sync pool workers as devices?";
 "一键同步" = "Sync Now";
 "暂不" = "Not Now";
-"检测到 %@ 个矿池监控，可按 24h 算力一键把矿机同步成设备。" = "Found %@ pool monitor(s). One tap turns the miners into devices by their 24h hashrate.";
+"检测到 %@ 个矿池监控，可按 24h 算力一键把矿机同步成设备。" = "Found %@ pool monitor(s). One tap turns those workers into devices by their 24h hashrate.";
 
 /* 2026-06-06 session: previously-untranslated seed warnings + UTXO send guard */
 "切勿截图、拍照或发给任何人。" = "Never screenshot, photograph, or share it with anyone.";
@@ -521,7 +521,7 @@
 "出块时间" = "Block time";
 "链上数据加载失败" = "Failed to load chain data";
 "重试" = "Retry";
-"挖矿难度" = "Mining difficulty";
+"挖矿难度" = "Network difficulty";
 "难度 (M)" = "Difficulty (M)";
 "暂无难度趋势数据" = "No difficulty trend yet";
 "联网后显示难度趋势" = "Difficulty trend appears once online";
@@ -540,7 +540,7 @@
 
 /* Backfill: strings used in code but missing from every translation table (showed raw Chinese to non-CN users) */
 "24H收益/PH = 该池24h出块奖励 ÷ 矿池算力（PRL per PH·天）；绿色 = 最高。" = "24h Yield/PH = pool's 24h block rewards ÷ pool hashrate (PRL per PH·day); green = highest.";
-"HeroMiners：矿池 0%，需 SRBMiner（矿工端抽水约 3%）。" = "HeroMiners: pool 0%, requires SRBMiner (miner-side fee ~3%).";
+"HeroMiners：矿池 0%，需 SRBMiner（矿工端抽水约 3%）。" = "HeroMiners: pool fee 0%, software-side fee ~3%.";
 "PearlHash 未公开按池出块数据，故出块/收益显示「—」。" = "PearlHash doesn't publish per-pool block data, so blocks/yield show \"—\".";
 "「~」= 该池未公开 24h 总数，由近几小时出块按 24h 折算。" = "\"~\" = pool doesn't publish a 24h total; extrapolated to 24h from recent hours' blocks.";
 "交易在本机签名（私钥不离开设备），合并到一笔扫回，剩余不再搁浅。" = "Signed on-device (private key never leaves), merged into one sweep so nothing stays stranded.";
@@ -568,7 +568,7 @@
 "没有发现搁浅的找零 🎉" = "No stranded change found 🎉";
 "没有可找回的找零" = "No change to recover";
 "理论 %@ · 效率 %@%%" = "Theoretical %@ · Efficiency %@%%";
-"矿池 0%，SRBMiner 抽水约 3%" = "Pool 0%, SRBMiner fee ~3%";
+"矿池 0%，SRBMiner 抽水约 3%" = "Pool 0%, software fee ~3%";
 "确认找回搁浅的找零" = "Confirm Recovering Stranded Change";
 "订单可能已提交但未能确认结果，请到下方订单列表核对，切勿重复下单。" = "The order may have been submitted but the result couldn't be confirmed; check the order list below and don't place it again.";
 "请离线手抄，切勿截图、拍照或复制——任何人拿到它都能转走你的资产。" = "Write it down offline; never screenshot, photograph, or copy it—anyone who gets it can move your assets.";
@@ -756,5 +756,6 @@
 "跌到 %@" = "Falls to %@";
 "新功能：价格提醒" = "New: Price Alerts";
 "5分" = "5m";
+"Pearl Hub 本身不挖矿，仅读取矿池公开数据。" = "Pearl Hub does not mine. It only reads public statistics from mining pools.";
 "成交时通知你？" = "Get notified when it fills?";
 "PRL 到达 %@ USDT 时给你推送通知，也就是这笔限价单大概率成交的时候。价格提醒是高级版功能。" = "Pro can push a notification when PRL reaches %@ USDT — roughly when this limit order fills. Price alerts are a Pro feature.";

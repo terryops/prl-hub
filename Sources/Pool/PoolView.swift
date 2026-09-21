@@ -28,9 +28,17 @@ struct PoolView: View {
                     }
 
                     if store.watches.isEmpty {
-                        PearlEmptyState(systemImage: "square.stack.3d.up",
-                                        title: Loc("添加挖矿监控"),
-                                        message: Loc("点「添加」，选择矿池并填入你的 Pearl 收款地址。可添加多个地址 / 多个矿池。"))
+                        VStack(spacing: Pearl.Space.sm) {
+                            PearlEmptyState(systemImage: "square.stack.3d.up",
+                                            title: Loc("添加挖矿监控"),
+                                            message: Loc("点「添加」，选择矿池并填入你的 Pearl 收款地址。可添加多个地址 / 多个矿池。"))
+                            // Says plainly what this screen is: a reader of pool APIs. The
+                            // device does no mining of any kind (App Store 3.1.5(ii)).
+                            Text(Loc("Pearl Hub 本身不挖矿，仅读取矿池公开数据。"))
+                                .font(.caption).foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity)
+                        }
                     } else {
                         // Cards: at most 2 per row, laid out by hand (an HStack per row)
                         // rather than LazyVGrid — a grid sizes each cell to its own
