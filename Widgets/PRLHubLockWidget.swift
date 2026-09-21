@@ -6,8 +6,10 @@ import SwiftUI
 //
 // Today's date (month/day + weekday) and the live PRL price on the Lock Screen.
 //   • accessoryRectangular — one line, styled like the system date: "9月19日周六 $1.11".
-//   • accessoryInline      — price only ("$1.11"): the system already prefixes that slot
-//                            with its own "19 周六", which a widget can't replace.
+//   • accessoryInline      — pearl mark + "$1.11": the system already prefixes that slot
+//                            with its own "19 周六", which a widget can't replace or hide.
+//                            The mark is a custom SF Symbol (WidgetAssets `pearl`) since that
+//                            slot renders only text and symbol images.
 // Self-fetches just the price (nothing else is shown), falling back to the app's last
 // snapshot price when the fetch fails. Read-only: never writes the shared snapshot back.
 
@@ -90,7 +92,7 @@ struct LockWidgetView: View {
     var body: some View {
         switch family {
         case .accessoryInline:
-            Text(verbatim: price)
+            (Text(Image("pearl", label: Text(verbatim: "PRL"))) + Text(verbatim: " \(price)"))
                 .widgetURL(WidgetDeepLink.trade.url)
         default:
             Text(verbatim: "\(dateLine) \(price)")
