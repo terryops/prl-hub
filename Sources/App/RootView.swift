@@ -86,10 +86,6 @@ struct RootView: View {
         }
         // Re-pull from iCloud on every foreground so keys/config saved on another
         // device (e.g. SafeTrade API keys on the Mac) land here without a relaunch.
-        // 2nd visit to 交易 → one-time Pro upsell (see UpsellPrompt).
-        .onChange(of: tab) { _, t in
-            if t == 1 { UpsellPrompt.shared.tradeOpened() }
-        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 CloudSync.refresh()

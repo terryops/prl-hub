@@ -47,6 +47,14 @@ struct TradeView: View {
         String(format: "%.4f", (x * 10000).rounded(.down) / 10000)
     }
 
+    /// A refresh the user asked for (pull-to-refresh or the toolbar button). Only these
+    /// count toward the Pro upsell — automatic loads and iCloud-sync refreshes must not
+    /// (see UpsellPrompt).
+    private func manualRefresh() async {
+        await store.refresh()
+        upsell.tradeRefreshed()
+    }
+
     private var volNum: Double { parseAmt(volume) ?? 0 }
     private var priceNum: Double { parseAmt(price) ?? 0 }
     /// Estimated USDT cost of a market buy — a market buy fills at the ASK (sell),
@@ -92,7 +100,7 @@ struct TradeView: View {
             }) { ProUpsellSheet() }
             .toolbar {
                 ToolbarItem {
-                    Button { Task { await store.refresh() } } label: { Image(systemName: "arrow.clockwise") }
+                    Button { Task { await manualRefresh() } } label: { Image(systemName: "arrow.clockwise") }
                 }
                 #if os(iOS)
                 // 数字键盘上方的「完成」按钮，点一下即可收起键盘。
@@ -102,7 +110,7 @@ struct TradeView: View {
                 }
                 #endif
             }
-            .refreshable { await store.refresh() }
+            .refreshable { await manualRefresh() }
             .onReceive(NotificationCenter.default.publisher(for: .cloudSyncDidUpdate)) { _ in
                 store.adoptSyncedPeriod()        // chart period may have synced in
                 Task { await store.refresh() }   // API keys may have synced in from another device
@@ -131,14 +139,30 @@ struct TradeView: View {
             // An alert is centered on every platform.
             .alert(Loc("确认下单"), isPresented: $confirming) {
                 Button(side == "buy" ? Loc("确认买入") : Loc("确认卖出"), role: side == "buy" ? .none : .destructive) {
+                    let limitPrice = ordType == "limit" ? price : ""   // captured: the fields are cleared on success
                     Task {
                         let ok = await store.placeOrder(side: side, ordType: ordType, volume: volume, price: ordType == "limit" ? price : nil)
-                        if ok { price = ""; volume = "" }
+                        if ok {
+                            price = ""; volume = ""
+                            // Market orders fill immediately — nothing to be notified about.
+                            upsell.limitOrderPlaced(price: limitPrice)
+                        }
                     }
                 }
                 Button(Loc("取消"), role: .cancel) {}
             } message: {
                 Text(confirmMessage)
+            }
+            // One-time, order-triggered Pro offer: a limit order fills around the moment
+            // PRL touches its price, which is exactly what a price alert reports.
+            .alert(Loc("成交时通知你？"),
+                   isPresented: Binding(get: { upsell.orderPrompt != nil },
+                                        set: { if !$0 { upsell.orderPrompt = nil } }),
+                   presenting: upsell.orderPrompt) { _ in
+                Button(Loc("解锁高级版")) { upsell.openFromOrderPrompt() }
+                Button(Loc("暂不"), role: .cancel) { upsell.orderPrompt = nil }
+            } message: { p in
+                Text(Loc("PRL 到达 %@ USDT 时给你推送通知，也就是这笔限价单大概率成交的时候。价格提醒是高级版功能。", p))
             }
             .alert(Loc("撤销订单"),
                    isPresented: Binding(get: { orderToCancel != nil },

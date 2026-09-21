@@ -755,3 +755,5 @@
 "跌到 %@" = "Turun ke %@";
 "新功能：价格提醒" = "Baru: Peringatan Harga";
 "5分" = "5m";
+"成交时通知你？" = "Beri tahu saat terisi?";
+"PRL 到达 %@ USDT 时给你推送通知，也就是这笔限价单大概率成交的时候。价格提醒是高级版功能。" = "Pro dapat mengirim notifikasi saat PRL mencapai %@ USDT — kira-kira saat order limit ini terisi. Peringatan harga adalah fitur Pro.";

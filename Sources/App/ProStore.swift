@@ -98,29 +98,67 @@ final class ProStore: ObservableObject {
     }
 }
 
-// MARK: - One-time upsell
+// MARK: - Upsell (earned by usage, not by a visit count)
 
-/// Shows the Pro upsell once, the 2nd time the user opens the 交易 tab — never to Pro
-/// users. Counted on tab switches (RootView), so pushing into 价格提醒 and back
-/// doesn't count as another visit.
+/// Shows the Pro upsell at most once, and only to someone actually using 交易 as a
+/// price ticker: `threshold` *manual* refreshes (pull-to-refresh or the toolbar
+/// button) inside a rolling `window`. Merely opening the tab no longer counts — the
+/// old "2nd visit" rule fired the paywall at people who hadn't yet seen the prices
+/// the alerts are about.
 @MainActor
 final class UpsellPrompt: ObservableObject {
     static let shared = UpsellPrompt()
     @Published var showing = false
 
-    private static let opensKey = "upsell.tradeOpens"
-    private static let shownKey = "upsell.shown"
+    /// Price of the limit order that was just accepted; non-nil drives the "notify me
+    /// when it fills" prompt in TradeView.
+    @Published var orderPrompt: String?
 
-    func tradeOpened() {
+    private static let threshold = 6
+    private static let window: TimeInterval = 24 * 3600
+    private static let stampsKey = "upsell.refreshStamps"
+    private static let shownKey = "upsell.shown"
+    private static let orderAskedKey = "upsell.orderAsked"
+
+    /// Call ONLY from a user-initiated refresh. Automatic loads (tab appear, iCloud
+    /// sync, polling) must not count, or this decays back into a timed popup.
+    func tradeRefreshed() {
         let d = UserDefaults.standard
-        let n = d.integer(forKey: Self.opensKey) + 1
-        d.set(n, forKey: Self.opensKey)
-        guard n >= 2, !d.bool(forKey: Self.shownKey), !ProStore.shared.isPro else { return }
+        guard !d.bool(forKey: Self.shownKey), !ProStore.shared.isPro else { return }
+        let now = Date().timeIntervalSince1970
+        var stamps = (d.array(forKey: Self.stampsKey) as? [Double] ?? []).filter { now - $0 < Self.window }
+        stamps.append(now)
+        // Keep the array bounded; only the most recent `threshold` stamps can matter.
+        if stamps.count > Self.threshold { stamps.removeFirst(stamps.count - Self.threshold) }
+        d.set(stamps, forKey: Self.stampsKey)
+        guard stamps.count >= Self.threshold else { return }
         d.set(true, forKey: Self.shownKey)
         Task {
-            // Let the tab settle before the sheet slides up.
+            // Let the refresh spinner finish before the sheet slides up.
             try? await Task.sleep(nanoseconds: 600_000_000)
             showing = true
         }
+    }
+
+    /// A limit order was accepted — the one moment where a price alert is obviously
+    /// useful: the order fills about when PRL touches its price. Asked at most once,
+    /// and declining ("暂不") is final, so nobody gets nagged after an order.
+    func limitOrderPlaced(price: String) {
+        let d = UserDefaults.standard
+        guard !d.bool(forKey: Self.orderAskedKey), !d.bool(forKey: Self.shownKey),
+              !ProStore.shared.isPro, !price.isEmpty else { return }
+        d.set(true, forKey: Self.orderAskedKey)
+        Task {
+            // Let the 下单成功 toast/refresh land first.
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            orderPrompt = price
+        }
+    }
+
+    /// "解锁高级版" on that prompt → the paywall (which then counts as shown).
+    func openFromOrderPrompt() {
+        UserDefaults.standard.set(true, forKey: Self.shownKey)
+        orderPrompt = nil
+        showing = true
     }
 }

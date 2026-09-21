@@ -756,3 +756,5 @@
 "跌到 %@" = "Falls to %@";
 "新功能：价格提醒" = "New: Price Alerts";
 "5分" = "5m";
+"成交时通知你？" = "Get notified when it fills?";
+"PRL 到达 %@ USDT 时给你推送通知，也就是这笔限价单大概率成交的时候。价格提醒是高级版功能。" = "Pro can push a notification when PRL reaches %@ USDT — roughly when this limit order fills. Price alerts are a Pro feature.";

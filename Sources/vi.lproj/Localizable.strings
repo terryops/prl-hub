@@ -756,3 +756,5 @@
 "跌到 %@" = "Giảm xuống %@";
 "新功能：价格提醒" = "Mới: Cảnh báo giá";
 "5分" = "5 phút";
+"成交时通知你？" = "Báo khi khớp lệnh?";
+"PRL 到达 %@ USDT 时给你推送通知，也就是这笔限价单大概率成交的时候。价格提醒是高级版功能。" = "Pro có thể gửi thông báo khi PRL đạt %@ USDT — khoảng lúc lệnh giới hạn này khớp. Cảnh báo giá là tính năng Pro.";
