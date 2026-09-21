@@ -3,9 +3,9 @@ import SwiftUI
 
 // MARK: - Pearl Hub widget bundle (iOS)
 //
-// Two independent widgets the user adds separately:
-//   • Pearl 钱包  — balance (+ fiat) and recent transfers.
-//   • Pearl 挖矿  — every pool watch's hashrate / online workers (2+).
+// Two widgets the user adds separately:
+//   • Pearl Hub  — home screen / desktop: balance + fiat, recent transfers, pool hashrate.
+//   • PRL 币价   — iOS Lock Screen: today's date, weekday and the live PRL price.
 // Both read the app's App Group snapshot for inputs and self-refresh on the system
 // timeline so they stay current while the app is closed.
 
@@ -13,6 +13,9 @@ import SwiftUI
 struct PearlWidgetBundle: WidgetBundle {
     var body: some Widget {
         PearlWidget()
+        #if os(iOS)
+        PearlLockWidget()
+        #endif
     }
 }
 
