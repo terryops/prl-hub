@@ -1,17 +1,21 @@
 import Foundation
 
-// MARK: - Kryptex (K 池) — pool.kryptex.com/prl
+// MARK: - Kryptex (K 池) — prl-api.kryptex.network
 //
 // The network's third-biggest PRL pool (~21% of hashrate, 2.7k miners). It was long treated
 // here as a pool with no public API — it has one; the site simply never documents it. These
-// paths come from the pool's own web app, and `prl-api.kryptex.network` is the same service
-// behind another host, so the documented-looking `pool.kryptex.com/prl` form is used.
+// paths come from the pool's own web app, served by `prl-api.kryptex.network`.
 //
-//   GET /prl/api/v1/pool/stats                  → miners · workers · hashrate · fee · reward
-//   GET /prl/api/v1/pool/blocks                 → the pool's last blocks (height + time)
-//   GET /prl/api/v3/miner/workers/{addr}        → per-rig status + 30m / 3h / 24h averages
-//   GET /prl/api/v1/miner/balance/{addr}        → confirmed + unconfirmed (immature) balance
-//   GET /prl/api/v1/miner/payouts/{addr}/stats  → lifetime paid + last week/month earned
+// NOT `pool.kryptex.com/prl/api/…`: since 2026-09 that host sits behind an anti-bot wall that
+// answers every non-browser request with 200 + a text/html JS cookie challenge (`__js_p_` →
+// `__jhash_`), which fails to decode and reads as "pool unreachable". The API host has no
+// such wall and takes the same paths WITHOUT the `/prl` prefix.
+//
+//   GET /api/v1/pool/stats                  → miners · workers · hashrate · fee · reward
+//   GET /api/v1/pool/blocks                 → the pool's last blocks (height + time)
+//   GET /api/v3/miner/workers/{addr}        → per-rig status + 30m / 3h / 24h averages
+//   GET /api/v1/miner/balance/{addr}        → confirmed + unconfirmed (immature) balance
+//   GET /api/v1/miner/payouts/{addr}/stats  → lifetime paid + last week/month earned
 //
 // The per-miner endpoints answer 200 with zeros / [] for an address that never mined here, so
 // "not mining on Kryptex" is a data question, not an HTTP one — nothing to special-case on 404.
@@ -114,7 +118,7 @@ struct KryptexMiner {
 }
 
 struct KryptexClient {
-    private static let base = "https://pool.kryptex.com/prl"
+    private static let base = "https://prl-api.kryptex.network"
 
     private func get<T: Decodable>(_ path: String, as: T.Type, timeout: TimeInterval = 20) async throws -> T {
         guard let url = URL(string: Self.base + path) else { throw URLError(.badURL) }

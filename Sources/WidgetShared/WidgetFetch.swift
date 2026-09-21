@@ -123,7 +123,8 @@ enum WidgetFetch {
                         online: workers.count, total: workers.count)
     }
 
-    /// Kryptex — GET /prl/api/v3/miner/workers/{addr}. Values are real H/s but arrive as
+    /// Kryptex — GET /api/v3/miner/workers/{addr} on prl-api.kryptex.network (pool.kryptex.com
+    /// now serves non-browsers a JS challenge page). Values are real H/s but arrive as
     /// STRINGS, and there is no instantaneous rate: the freshest figure the pool publishes
     /// per rig is a 30-minute average (then 3h, then 24h), so that is what the widget shows.
     /// An address that never mined here answers 200 with `results: []` — no rigs, no total,
@@ -131,7 +132,7 @@ enum WidgetFetch {
     private static func kryptexLive(_ address: String) async -> PoolLive? {
         let addr = address.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !addr.isEmpty,
-              let obj = await json("https://pool.kryptex.com/prl/api/v3/miner/workers/\(addr)", timeout: 15) as? [String: Any],
+              let obj = await json("https://prl-api.kryptex.network/api/v3/miner/workers/\(addr)", timeout: 15) as? [String: Any],
               let workers = obj["results"] as? [[String: Any]], !workers.isEmpty
         else { return nil }
         var liveRaw = 0.0
