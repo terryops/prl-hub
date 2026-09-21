@@ -4,7 +4,7 @@ import SwiftUI
 /// holds a valid mainnet address, so an unset address can never receive a send.
 enum Donation {
     static let address = "prl1p8wznc8tkhlkjaq7v8ycugz93rgs8uezq6px7873934kh35nk9q2qlz0q9m"
-    static let presets: [Decimal] = [10, 20, 50]
+    static let presets: [Decimal] = [5, 10, 20]
     /// Smallest custom amount accepted.
     static let minimum: Decimal = 1
     static var isConfigured: Bool { PRLAddress.isValid(address, network: .mainnet) }
