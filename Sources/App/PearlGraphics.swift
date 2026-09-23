@@ -162,6 +162,7 @@ struct GlowOrb: View {
             .fill(RadialGradient(colors: [color, color.opacity(0)],
                                  center: .center, startRadius: 0, endRadius: diameter / 2))
             .frame(width: diameter, height: diameter)
+            .blur(radius: diameter * 0.08)
             .allowsHitTesting(false)
     }
 }
@@ -286,21 +287,13 @@ struct PearlHero<Content: View>: View {
                         SparkleShape().fill(Pearl.gold.opacity(0.9)).frame(width: 12, height: 12).offset(x: 122, y: -40)
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                // Static decoration → flatten it into one layer.
-                .drawingGroup()
             }
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .strokeBorder(.white.opacity(0.15), lineWidth: 1)
             )
-            // Shadow cast by the banner's SHAPE (a path shadow), not by the composited
-            // banner + text, which forced an offscreen render on every scroll frame.
-            .background {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(Pearl.indigo)
-                    .shadow(color: Pearl.indigo.opacity(0.12), radius: 10, x: 0, y: 5)
-            }
+            .shadow(color: Pearl.indigo.opacity(0.12), radius: 10, x: 0, y: 5)
     }
 }
 

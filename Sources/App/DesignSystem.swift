@@ -121,17 +121,24 @@ private struct PearlCardModifier: ViewModifier {
     var padding: CGFloat
     var radius: CGFloat
     var elevated: Bool
+    var frosted: Bool
     func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         content
             .padding(padding)
             // Default cards are flat; only "elevated" gets a subtle, single soft shadow —
             // cast by the background SHAPE, not the whole card, so it's rendered from the
             // shape's path instead of an offscreen pass over every piece of content.
             .background {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(Pearl.surface)
-                    .shadow(color: .black.opacity(elevated ? 0.08 : 0),
-                            radius: elevated ? 10 : 0, x: 0, y: elevated ? 4 : 0)
+                if frosted {
+                    shape.fill(.regularMaterial)
+                        .shadow(color: .black.opacity(elevated ? 0.08 : 0),
+                                radius: elevated ? 10 : 0, x: 0, y: elevated ? 4 : 0)
+                } else {
+                    shape.fill(Pearl.surface)
+                        .shadow(color: .black.opacity(elevated ? 0.08 : 0),
+                                radius: elevated ? 10 : 0, x: 0, y: elevated ? 4 : 0)
+                }
             }
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
@@ -162,10 +169,13 @@ private struct PearlAccentCardModifier: ViewModifier {
 
 extension View {
     /// Standard card surface with a hairline rim (+ optional soft shadow).
+    /// `frosted` swaps the flat fill for a live `.regularMaterial` blur — kept for the
+    /// short wallet screen, where the look matters and there's little to scroll.
     func pearlCard(padding: CGFloat = Pearl.Space.lg,
                    radius: CGFloat = Pearl.Radius.md,
-                   elevated: Bool = false) -> some View {
-        modifier(PearlCardModifier(padding: padding, radius: radius, elevated: elevated))
+                   elevated: Bool = false,
+                   frosted: Bool = false) -> some View {
+        modifier(PearlCardModifier(padding: padding, radius: radius, elevated: elevated, frosted: frosted))
     }
 
     /// A card tinted by a brand gradient — for hero blocks and callouts.

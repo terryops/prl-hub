@@ -220,7 +220,7 @@ struct DashboardView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
+                .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md, frosted: true)
                 .animation(.snappy, value: store.backendReady)
 
                 PriceAlertInlineLink()
@@ -350,7 +350,7 @@ struct DashboardView: View {
                 Text(title).font(.callout.weight(.medium))
             }
             .frame(maxWidth: .infinity)
-            .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
+            .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md, frosted: true)
         }
         .buttonStyle(.plain)
     }
