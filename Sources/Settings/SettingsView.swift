@@ -22,6 +22,7 @@ struct SettingsView: View {
     @EnvironmentObject private var currency: CurrencyManager
     @ObservedObject private var alerts = PriceAlertStore.shared
     @ObservedObject private var pro = ProStore.shared
+    @ObservedObject private var live = PriceLiveActivity.shared
     private var marketValid: Bool { SafeTradeMarket.isValid(market) }
 
     private var appVersion: String {
@@ -125,6 +126,25 @@ struct SettingsView: View {
                             }
                         } label: {
                             Label(Loc("价格提醒"), systemImage: "bell.badge")
+                        }
+                    }
+                    if PriceLiveActivity.supported {
+                        NavigationLink {
+                            LiveActivitySettingsView()
+                        } label: {
+                            LabeledContent {
+                                if !pro.isPro {
+                                    Text(Loc("高级版"))
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(Pearl.accent)
+                                        .padding(.horizontal, 7).padding(.vertical, 2)
+                                        .background(Pearl.accent.opacity(0.12), in: Capsule())
+                                } else if live.running {
+                                    Text(Loc("盯盘中")).foregroundStyle(.green)
+                                }
+                            } label: {
+                                Label(Loc("锁屏盯盘"), systemImage: "lock.iphone")
+                            }
                         }
                     }
                 }

@@ -34,7 +34,6 @@ struct PriceAlertsView: View {
                 if pro.isPro {
                     if store.authorization == .denied { deniedCard }
                     rulesCard
-                    if PriceLiveActivity.supported { LiveActivityCard() }
                 } else {
                     ProPaywallCard(pro: pro)
                 }
@@ -255,6 +254,26 @@ struct PriceAlertsView: View {
 }
 
 // MARK: - 锁屏盯盘
+
+/// Settings → 通知 → 锁屏盯盘: the on/off + style card, or the Pro offer.
+struct LiveActivitySettingsView: View {
+    @ObservedObject private var pro = ProStore.shared
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: Pearl.Space.lg) {
+                if pro.isPro { LiveActivityCard() } else { ProPaywallCard(pro: pro) }
+            }
+            .padding(Pearl.Space.screen)
+            .frame(maxWidth: 560)
+            .frame(maxWidth: .infinity)
+        }
+        .navigationTitle(Loc("锁屏盯盘"))
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+    }
+}
 
 /// On/off for the Lock Screen / Dynamic Island live price (Pro, iPhone only).
 struct LiveActivityCard: View {
