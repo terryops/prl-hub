@@ -15,6 +15,8 @@ final class PushDelegate: NSObject, UNUserNotificationCenterDelegate {
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         completionHandler([.banner, .list, .sound])
+        // A price alert that just arrived has switched itself off server-side.
+        Task { @MainActor in await PriceAlertStore.shared.refresh() }
     }
 }
 

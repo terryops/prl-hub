@@ -69,16 +69,27 @@ struct DashboardView: View {
     /// first 2 decimals, TRUNCATED not rounded so the tail stays exact) and the
     /// remaining fraction digits (3rd–8th, trailing zeros trimmed) to render tiny.
     /// PRL has 8 decimals.
-    private func balanceParts(_ v: Decimal) -> (head: String, tail: String) {
-        let posix = Locale(identifier: "en_US_POSIX")
+    private static let sliceFormatter: NumberFormatter = {
         let slice = NumberFormatter()
-        slice.locale = posix
+        slice.locale = Locale(identifier: "en_US_POSIX")
         slice.numberStyle = .decimal
         slice.usesGroupingSeparator = false
         slice.minimumFractionDigits = 8
         slice.maximumFractionDigits = 8
         slice.roundingMode = .down                 // truncate toward zero (balances ≥ 0)
-        let full = slice.string(from: NSDecimalNumber(decimal: v)) ?? "0.00000000"
+        return slice
+    }()
+    private static let groupFormatter: NumberFormatter = {
+        let grp = NumberFormatter()
+        grp.locale = .autoupdatingCurrent
+        grp.numberStyle = .decimal
+        grp.usesGroupingSeparator = true
+        grp.maximumFractionDigits = 0
+        return grp
+    }()
+
+    private func balanceParts(_ v: Decimal) -> (head: String, tail: String) {
+        let full = Self.sliceFormatter.string(from: NSDecimalNumber(decimal: v)) ?? "0.00000000"
         let comps = full.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
         let intRaw = comps.first ?? "0"
         let frac = comps.count > 1 ? comps[1] : "00000000"
@@ -86,11 +97,7 @@ struct DashboardView: View {
         var tail = String(frac.dropFirst(2))
         while tail.hasSuffix("0") { tail.removeLast() }
         // Group the integer with the user's locale, then the locale's decimal mark.
-        let grp = NumberFormatter()
-        grp.numberStyle = .decimal
-        grp.usesGroupingSeparator = true
-        grp.maximumFractionDigits = 0
-        let intGrouped = grp.string(from: NSDecimalNumber(string: intRaw)) ?? intRaw
+        let intGrouped = Self.groupFormatter.string(from: NSDecimalNumber(string: intRaw)) ?? intRaw
         let dec = Locale.current.decimalSeparator ?? "."
         return (intGrouped + dec + head2, tail)
     }
@@ -216,6 +223,7 @@ struct DashboardView: View {
                 .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
                 .animation(.snappy, value: store.backendReady)
 
+                PriceAlertInlineLink()
             }
             .padding(Pearl.Space.screen)
             .frame(maxWidth: 560)

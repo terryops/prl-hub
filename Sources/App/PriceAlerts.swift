@@ -21,6 +21,10 @@ import AppKit
 // every change re-sends the whole set with PUT, which the worker
 // diffs so unchanged rules keep their fired/armed state. The
 // token can rotate, so each launch re-registers and re-syncs.
+// One exception: an alert that was pushed switches itself off on
+// the server (one-shot, opted into with `oneshot`); the app adopts
+// that from every reply and only re-enables it when the user
+// switches it back on.
 // ============================================================
 
 struct PriceAlertRule: Codable, Identifiable, Equatable {
@@ -36,9 +40,13 @@ struct PriceAlertRule: Codable, Identifiable, Equatable {
     /// Last time the server pushed this rule (from the worker's reply).
     var lastFired: Date?
 
-    /// Wire format the worker expects (lastFired is server-owned).
+    /// Wire format the worker expects (lastFired is server-owned). `seen_fired`
+    /// echoes the server's own last_fired: the worker only lets a fired rule be
+    /// switched back on by an app that has seen that firing (and so showed the
+    /// rule as off) — no phone-clock comparison involved.
     fileprivate var payload: [String: Any] {
-        ["id": id, "kind": kind.rawValue, "value": value, "window": window, "enabled": enabled]
+        ["id": id, "kind": kind.rawValue, "value": value, "window": window, "enabled": enabled,
+         "seen_fired": Int(lastFired?.timeIntervalSince1970 ?? 0)]
     }
 }
 
@@ -82,6 +90,10 @@ final class PriceAlertStore: ObservableObject {
     private static let rulesKey = "alerts.rules"
     private static let tokenKey = "alerts.apnsToken"
     private var syncTask: Task<Void, Never>?
+    /// Bumped on every local edit. A server reply is only adopted if no edit
+    /// happened while it was in flight — otherwise a slow reply (e.g. a GET that
+    /// raced a toggle's PUT) would put back the state from before the edit.
+    private var localVersion = 0
     private var languageSub: AnyCancellable?
     private var proSub: AnyCancellable?
 
@@ -122,6 +134,7 @@ final class PriceAlertStore: ObservableObject {
     }
 
     private func rulesChanged() {
+        localVersion += 1
         persist()
         if rules.isEmpty || !ProStore.shared.isPro { scheduleSync() } else { Task { await ensureRegistered() } }
     }
@@ -187,6 +200,7 @@ final class PriceAlertStore: ObservableObject {
             await refreshAuthorization()
             if case .failed = syncState { await ensureRegistered() }
             else if token == nil { await ensureRegistered() }
+            else { await refresh() }   // alerts that fired while away are now off
         }
     }
 
@@ -208,7 +222,9 @@ final class PriceAlertStore: ObservableObject {
     func sync() async {
         guard let token else { return }
         syncState = .syncing
+        let sent = localVersion
         let body: [String: Any] = [
+            "oneshot": true,
             "env": Self.apnsEnvironment,
             "topic": Bundle.main.bundleIdentifier ?? "com.prl.wizard",
             "lang": Self.pushLanguage,
@@ -225,7 +241,7 @@ final class PriceAlertStore: ObservableObject {
                 syncState = .failed(Loc("服务器暂时不可用，稍后自动重试"))
                 return
             }
-            adoptServerState(data)
+            if sent == localVersion { adoptServerState(data) }   // else a newer PUT is on its way
             syncState = .synced(Date())
         } catch {
             if (error as? URLError)?.code == .cancelled { return }
@@ -233,17 +249,38 @@ final class PriceAlertStore: ObservableObject {
         }
     }
 
-    /// Copy the server's last-fired times onto the local rules (display only).
+    /// Pull the server's view of this device's rules without re-sending them —
+    /// picks up alerts that fired (and so switched themselves off) meanwhile.
+    func refresh() async {
+        guard let token, ProStore.shared.isPro, !rules.isEmpty, syncState != .syncing else { return }
+        let asked = localVersion
+        var req = URLRequest(url: Self.endpoint.appendingPathComponent("devices/\(token)"))
+        req.timeoutInterval = 10
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              asked == localVersion, syncState != .syncing else { return }
+        adoptServerState(data)
+    }
+
+    /// Copy the server's last-fired times and on/off state onto the local rules.
+    /// The server's `enabled` already folds in what we last sent, plus the
+    /// one-shot switch-off of rules it pushed.
     private func adoptServerState(_ data: Data) {
         guard let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let list = o["rules"] as? [[String: Any]] else { return }
         var fired: [String: Date] = [:]
+        var enabled: [String: Bool] = [:]
         for r in list {
-            if let id = r["id"] as? String, let t = r["last_fired"] as? Double { fired[id] = Date(timeIntervalSince1970: t) }
+            guard let id = r["id"] as? String else { continue }
+            if let t = r["last_fired"] as? Double { fired[id] = Date(timeIntervalSince1970: t) }
+            if let e = r["enabled"] as? Bool { enabled[id] = e }
         }
         var changed = false
-        for i in rules.indices where rules[i].lastFired != fired[rules[i].id] {
-            rules[i].lastFired = fired[rules[i].id]; changed = true
+        for i in rules.indices {
+            let id = rules[i].id
+            if rules[i].lastFired != fired[id] { rules[i].lastFired = fired[id]; changed = true }
+            // Rules the server doesn't list (Pro lapsed, not synced yet) keep their local state.
+            if let e = enabled[id], rules[i].enabled != e { rules[i].enabled = e; changed = true }
         }
         if changed { persist() }
     }
