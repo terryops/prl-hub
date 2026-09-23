@@ -119,11 +119,24 @@ func Loc(_ key: String, _ args: CVarArg...) -> String {
 /// absolute date would wrap to a second line. Localized by the app's chosen
 /// language (matching every `Loc(...)` call site), not just the device region.
 func RelTime(_ date: Date, relativeTo now: Date = Date()) -> String {
-    let f = RelativeDateTimeFormatter()
-    f.locale = LocBundleHolder.shared.locale
-    f.unitsStyle = .full        // 完整词，CJK 仍很短（"3分钟前"）
-    f.dateTimeStyle = .named     // 优先「昨天/今天」等自然词
-    return f.localizedString(for: date, relativeTo: now)
+    RelTimeCache.formatter(for: LocBundleHolder.shared.locale).localizedString(for: date, relativeTo: now)
+}
+
+/// One formatter per language instead of a new one per call (RelTime runs per
+/// transaction row on every render).
+private enum RelTimeCache {
+    private static let lock = NSLock()
+    private static var byLocale: [String: RelativeDateTimeFormatter] = [:]
+    static func formatter(for locale: Locale) -> RelativeDateTimeFormatter {
+        lock.lock(); defer { lock.unlock() }
+        if let f = byLocale[locale.identifier] { return f }
+        let f = RelativeDateTimeFormatter()
+        f.locale = locale
+        f.unitsStyle = .full        // 完整词，CJK 仍很短（"3分钟前"）
+        f.dateTimeStyle = .named     // 优先「昨天/今天」等自然词
+        byLocale[locale.identifier] = f
+        return f
+    }
 }
 
 extension LocBundleHolder {

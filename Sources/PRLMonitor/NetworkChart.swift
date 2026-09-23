@@ -364,9 +364,11 @@ struct NetworkChartCard: View {
         .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
     }
 
+    private static let groupedFormatter: NumberFormatter = {
+        let nf = NumberFormatter(); nf.numberStyle = .decimal; return nf
+    }()
     private static func grouped(_ n: Int) -> String {
-        let nf = NumberFormatter(); nf.numberStyle = .decimal
-        return nf.string(from: NSNumber(value: n)) ?? "\(n)"
+        groupedFormatter.string(from: NSNumber(value: n)) ?? "\(n)"
     }
 
     private static func fmtDur(_ s: Double) -> String {

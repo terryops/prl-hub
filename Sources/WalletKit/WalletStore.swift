@@ -525,16 +525,20 @@ final class WalletStore: ObservableObject {
     private func publishOverlay() {
         let known = Set(serverTxs.map { $0.txid })
         let overlay = pendingSends.values.filter { !known.contains($0.txid) }
-        txs = overlay.isEmpty ? serverTxs
-                              : (overlay + serverTxs).sorted { $0.time > $1.time }
+        let nextTxs = overlay.isEmpty ? serverTxs
+                                      : (overlay + serverTxs).sorted { $0.time > $1.time }
+        // Assigning an equal value still fires objectWillChange and re-renders every
+        // wallet screen, and the chain poll republishes unchanged data every 15–60 s.
+        if nextTxs != txs { txs = nextTxs }
         // Base = external (xpub) snapshot + internal-chain change the xpub scan misses.
         let base = WalletBalance(total: serverBalance.total + changeBalance.total,
                                  available: serverBalance.available + changeBalance.available)
         let outflow = overlay.reduce(Decimal(0)) { $0 + $1.amount + $1.fee }
-        balance = outflow > 0
+        let nextBalance = outflow > 0
             ? WalletBalance(total: max(0, base.total - outflow),
                             available: max(0, base.available - outflow))
             : base
+        if nextBalance != balance { balance = nextBalance }
 
         // Mirror the published wallet state into the shared App Group so the
         // home-screen Wallet widget has fresh inputs (xpub/network) + values to

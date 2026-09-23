@@ -180,7 +180,7 @@ struct StatCard: View {
         .padding(Pearl.Space.md)
         .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
         // Clean, flat surface — the colored value carries the meaning, no shadow/dot/bar clutter.
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Pearl.Radius.sm, style: .continuous))
+        .background(Pearl.surface, in: RoundedRectangle(cornerRadius: Pearl.Radius.sm, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: Pearl.Radius.sm, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)

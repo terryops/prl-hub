@@ -161,7 +161,5 @@ enum SortKey: String, CaseIterable, Identifiable {
 
 func f(_ x: Double, _ d: Int = 2) -> String { x.isFinite ? String(format: "%.\(d)f", x) : "—" }
 func pctSigned(_ x: Double, _ d: Int = 0) -> String { x.isFinite ? ((x >= 0 ? "+" : "") + f(x, d) + "%") : "—" }
-func nowHMS() -> String {
-    let df = DateFormatter(); df.dateFormat = "HH:mm:ss"
-    return df.string(from: Date())
-}
+private let hmsFormatter: DateFormatter = { let df = DateFormatter(); df.dateFormat = "HH:mm:ss"; return df }()
+func nowHMS() -> String { hmsFormatter.string(from: Date()) }

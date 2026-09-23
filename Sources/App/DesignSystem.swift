@@ -93,6 +93,22 @@ enum Pearl {
         colors: [indigo.opacity(0.05), teal.opacity(0.04)],
         startPoint: .topLeading, endPoint: .bottomTrailing)
 
+    /// Card surface: a translucent flat fill standing in for `.regularMaterial`.
+    /// A material is a live backdrop blur — every card on screen re-samples and
+    /// blurs what's behind it on each scroll frame, which is what made long pages
+    /// stutter. Behind the cards there's only the faint `wash`, so a fixed tint
+    /// looks the same at a fraction of the GPU cost.
+    static let surface: Color = {
+        #if os(iOS)
+        return Color(uiColor: UIColor { $0.userInterfaceStyle == .dark
+            ? UIColor(white: 0.13, alpha: 0.94) : UIColor(white: 0.96, alpha: 0.94) })
+        #else
+        return Color(nsColor: NSColor(name: nil) { a in
+            a.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+                ? NSColor(white: 0.17, alpha: 0.94) : NSColor(white: 1.0, alpha: 0.82) })
+        #endif
+    }()
+
     /// Gradient for a card's hairline edge highlight (glass rim).
     static let glassEdge = LinearGradient(
         colors: [.white.opacity(0.55), .white.opacity(0.04)],
@@ -104,19 +120,23 @@ enum Pearl {
 private struct PearlCardModifier: ViewModifier {
     var padding: CGFloat
     var radius: CGFloat
-    var material: Material
     var elevated: Bool
     func body(content: Content) -> some View {
         content
             .padding(padding)
-            .background(material, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            // Default cards are flat; only "elevated" gets a subtle, single soft shadow —
+            // cast by the background SHAPE, not the whole card, so it's rendered from the
+            // shape's path instead of an offscreen pass over every piece of content.
+            .background {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(Pearl.surface)
+                    .shadow(color: .black.opacity(elevated ? 0.08 : 0),
+                            radius: elevated ? 10 : 0, x: 0, y: elevated ? 4 : 0)
+            }
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)   // clean hairline, not glossy
             )
-            // Default cards are flat; only "elevated" gets a subtle, single soft shadow.
-            .shadow(color: .black.opacity(elevated ? 0.08 : 0),
-                    radius: elevated ? 10 : 0, x: 0, y: elevated ? 4 : 0)
     }
 }
 
@@ -131,7 +151,7 @@ private struct PearlAccentCardModifier: ViewModifier {
             .padding(padding)
             // Solid, readable surface with only a hint of color + a colored hairline.
             // Keep text in normal .primary/.secondary so it stays legible.
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .background(Pearl.surface, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .background(gradient.opacity(0.10), in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
@@ -141,13 +161,11 @@ private struct PearlAccentCardModifier: ViewModifier {
 }
 
 extension View {
-    /// Standard frosted-glass surface with a glass rim + soft shadow.
+    /// Standard card surface with a hairline rim (+ optional soft shadow).
     func pearlCard(padding: CGFloat = Pearl.Space.lg,
                    radius: CGFloat = Pearl.Radius.md,
-                   material: Material = .regularMaterial,
                    elevated: Bool = false) -> some View {
-        modifier(PearlCardModifier(padding: padding, radius: radius,
-                                   material: material, elevated: elevated))
+        modifier(PearlCardModifier(padding: padding, radius: radius, elevated: elevated))
     }
 
     /// A card tinted by a brand gradient — for hero blocks and callouts.
@@ -167,6 +185,9 @@ struct PearlIconBadge: View {
     var body: some View {
         RoundedRectangle(cornerRadius: size * 0.32, style: .continuous)
             .fill(gradient)
+            // Shadow on the filled shape only (not the composited badge + glyph) — no
+            // offscreen pass per badge while scrolling.
+            .shadow(color: Pearl.indigo.opacity(0.18), radius: size * 0.14, x: 0, y: size * 0.06)
             .frame(width: size, height: size)
             .overlay(
                 Image(systemName: systemImage)
@@ -177,7 +198,6 @@ struct PearlIconBadge: View {
                 RoundedRectangle(cornerRadius: size * 0.32, style: .continuous)
                     .strokeBorder(.white.opacity(0.25), lineWidth: 0.8)
             )
-            .shadow(color: Pearl.indigo.opacity(0.18), radius: size * 0.14, x: 0, y: size * 0.06)
     }
 }
 
