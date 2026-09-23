@@ -802,7 +802,6 @@
 "先选择网络" = "Pilih jaringan dulu";
 "选择网络" = "Pilih jaringan";
 "请确认收款方支持这条链，选错网络资金可能找不回。" = "Pastikan penerima mendukung jaringan ini. Dana yang dikirim lewat jaringan yang salah bisa hilang.";
-"从 SafeTrade 提现 %@ %@（手续费 %@，到账 %@），网络 %@，到\n%@\n\n链上转账无法撤回，请核对地址和网络。" = "Tarik %@ %@ dari SafeTrade (biaya %@, diterima %@) lewat %@ ke\n%@\n\nTransfer on-chain tidak bisa dibatalkan. Periksa alamat dan jaringannya.";
 "加入通讯录" = "Tambah ke kontak";
 "保存为常用地址" = "Simpan alamat";
 "通讯录「%@」" = "Kontak “%@”";
@@ -826,3 +825,8 @@
 "日净利 · 链上实收" = "Laba bersih/hari · On-chain";
 "矿池实际到账（已排除自己地址间的互转）− 电费/租金" = "Pembayaran pool yang diterima (tanpa transfer antar alamat sendiri) − listrik/sewa";
 "7 天日均" = "Rata-rata 7 hari";
+"提现数量" = "Jumlah";
+"链上转账无法撤回，请核对地址和网络。" = "Transfer on-chain tidak bisa dibatalkan. Periksa alamat dan jaringannya.";
+"金额" = "Jumlah";
+"实际到账" = "Diterima";
+"收款信息" = "Tujuan";

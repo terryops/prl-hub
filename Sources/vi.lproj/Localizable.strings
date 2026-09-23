@@ -803,7 +803,6 @@
 "先选择网络" = "Chọn mạng trước";
 "选择网络" = "Chọn mạng";
 "请确认收款方支持这条链，选错网络资金可能找不回。" = "Hãy chắc chắn bên nhận hỗ trợ mạng này. Gửi nhầm mạng có thể mất tiền.";
-"从 SafeTrade 提现 %@ %@（手续费 %@，到账 %@），网络 %@，到\n%@\n\n链上转账无法撤回，请核对地址和网络。" = "Rút %@ %@ từ SafeTrade (phí %@, nhận %@) qua mạng %@ về\n%@\n\nGiao dịch on-chain không thể hoàn tác. Hãy kiểm tra địa chỉ và mạng.";
 "加入通讯录" = "Thêm vào danh bạ";
 "保存为常用地址" = "Lưu địa chỉ";
 "通讯录「%@」" = "Danh bạ “%@”";
@@ -827,3 +826,8 @@
 "日净利 · 链上实收" = "Lãi ròng/ngày · On-chain";
 "矿池实际到账（已排除自己地址间的互转）− 电费/租金" = "Tiền pool đã trả (không tính chuyển giữa ví của bạn) − điện/thuê";
 "7 天日均" = "TB 7 ngày";
+"提现数量" = "Số lượng";
+"链上转账无法撤回，请核对地址和网络。" = "Giao dịch on-chain không thể hoàn tác. Hãy kiểm tra địa chỉ và mạng.";
+"金额" = "Số tiền";
+"实际到账" = "Thực nhận";
+"收款信息" = "Nơi nhận";
