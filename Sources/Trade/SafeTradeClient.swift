@@ -1,7 +1,8 @@
 import Foundation
 import CryptoKit
 
-// SafeTrade (safetrade.com) — OpenDAX **Finex** API v2.
+// SafeTrade (safetrade.com) — OpenDAX **Finex** API v2. Official spec (Swagger 2.0):
+// https://safetrade.com/api/v2/trade/public/swagger.json (rendered at safetrade.com/api).
 // All verified live via URLSession 2026-06-04 (Cloudflare passes Apple's TLS
 // fingerprint; curl is blocked). Public market data is split across namespaces:
 //   auth    = X-Auth-Apikey / X-Auth-Nonce / X-Auth-Signature
@@ -20,7 +21,7 @@ struct STBalance: Decodable, Identifiable {
     var lockedValue: Double { Double(locked) ?? 0 }
 }
 
-struct STTicker: Decodable {
+struct STTicker: Decodable, Equatable {
     let last: String?
     let buy: String?
     let sell: String?
@@ -118,7 +119,122 @@ struct STOrder: Decodable {
     }
 }
 
-struct STCandle: Identifiable {
+/// One withdrawal network of a currency (`GET /trade/public/currencies/{id}`).
+/// PRL has one (`pearl-tokens`); USDT has several chains (checked live 2026-09-23:
+/// Arbitrum / BSC / Solana / Ethereum open, TRON / Base / Polygon … closed).
+struct STCurrencyNetwork: Decodable, Identifiable {
+    let blockchain_key: String
+    let `protocol`: String?          // short ticker-style code, e.g. "BSC", "ARB"
+    let protocol_name: String?
+    let withdraw_enabled: Bool?
+    let withdraw_fee: String?
+    let withdraw_fee_ratio: String?
+    let min_withdraw_amount: String?
+    let status: String?
+    let explorer_transaction: String?
+    let system_options: SystemOptions?
+    struct SystemOptions: Decodable { let address_validate_regexes: [String]? }
+
+    var id: String { blockchain_key }
+    var name: String { protocol_name ?? blockchain_key }
+    /// Compact label for tight spots: the full name unless it's long
+    /// ("Binance Smart Chain" → "BSC").
+    var shortName: String {
+        if let full = protocol_name, full.count <= 12 { return full }
+        return `protocol` ?? name
+    }
+    var canWithdraw: Bool { withdraw_enabled == true && (status ?? "active") == "active" }
+    /// Same rule as the SafeTrade web client: max(fixed fee, amount × ratio).
+    func fee(for amount: Decimal) -> Decimal {
+        let fixed = Decimal(string: withdraw_fee ?? "") ?? 0
+        let ratio = Decimal(string: withdraw_fee_ratio ?? "") ?? 0
+        return ratio > 0 ? max(fixed, amount * ratio) : fixed
+    }
+    var minAmount: Decimal { Decimal(string: min_withdraw_amount ?? "") ?? 0 }
+    func explorerURL(txid: String) -> URL? {
+        explorer_transaction.flatMap { URL(string: $0.replacingOccurrences(of: "#{txid}", with: txid)) }
+    }
+
+    /// Address check for this chain: the exchange's own regexes when it publishes
+    /// them (PRL does), else a format check by chain family. The server validates
+    /// too — this just catches pasting an address of the wrong kind.
+    func isValidAddress(_ a: String) -> Bool {
+        if let regexes = system_options?.address_validate_regexes, !regexes.isEmpty {
+            return regexes.contains { a.range(of: $0, options: .regularExpression) != nil }
+        }
+        let key = blockchain_key.lowercased()
+        if key.hasPrefix("tron") { return a.range(of: "^T[1-9A-HJ-NP-Za-km-z]{33}$", options: .regularExpression) != nil }
+        if key.hasPrefix("spl") || key.hasPrefix("sol") {
+            return a.range(of: "^[1-9A-HJ-NP-Za-km-z]{32,44}$", options: .regularExpression) != nil
+        }
+        // Ethereum and the EVM chains (BSC, Arbitrum, Base, Polygon, Avalanche, PulseChain…).
+        return a.range(of: "^0x[0-9a-fA-F]{40}$", options: .regularExpression) != nil
+    }
+}
+struct STCurrency: Decodable {
+    let precision: Int?
+    let networks: [STCurrencyNetwork]
+}
+
+/// A JSON value that may be a number or a numeric string, kept as its text.
+/// SafeTrade's swagger types withdraw amounts as numbers, while balances and
+/// orders come back as strings — accept both.
+struct STNumberText: Decodable {
+    let text: String
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if let s = try? c.decode(String.self) { text = s }
+        else { text = NSDecimalNumber(decimal: try c.decode(Decimal.self)).stringValue }
+    }
+}
+
+/// A withdrawal as listed by `GET /trade/account/withdraws` (swagger:
+/// account_entities.Withdraw). Every field optional — the list is decoded per-row
+/// so one odd row can't blank the history.
+struct STWithdraw: Decodable, Identifiable {
+    let id: Int
+    private let amount: STNumberText?
+    private let fee: STNumberText?
+    let rid: String?
+    let address: String?
+    let txid: String?
+    let blockchain_txid: String?
+    let state: String?
+    let status: String?
+    let blockchain_key: String?
+    let created_at: STTimestamp?
+
+    var amountText: String? { amount?.text }
+    var feeText: String? { fee?.text }
+    var destination: String? { rid ?? address }
+    var chainTxid: String? { [blockchain_txid, txid].compactMap { $0 }.first { !$0.isEmpty } }
+    var stateValue: String { (state ?? status ?? "").lowercased() }
+}
+
+/// An entry in the user's SafeTrade address book ("beneficiary"), managed on the
+/// SafeTrade website. Withdrawing to one skips the e-mail code — the web client
+/// sends `beneficiary_id` instead of address + chain and no email_code.
+/// Decoded leniently: the field names come from the web client, not docs.
+struct STBeneficiary: Decodable, Identifiable {
+    let id: Int
+    let label: String?
+    let name: String?
+    let currency_id: String?
+    let currency: String?
+    let blockchain_key: String?
+    let state: String?
+    private let address: String?
+    private let data: Payload?
+    private struct Payload: Decodable { let address: String? }
+
+    var title: String { [label, name].compactMap { $0 }.first { !$0.isEmpty } ?? shortAddr(destination ?? "") }
+    var currencyID: String? { (currency_id ?? currency)?.lowercased() }
+    var destination: String? { (address ?? data?.address)?.trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// Pending entries still wait for the e-mail confirmation on the website.
+    var isActive: Bool { (state ?? "active").lowercased() == "active" }
+}
+
+struct STCandle: Identifiable, Equatable {
     let time: Date
     let open, high, low, close, volume: Double
     var id: TimeInterval { time.timeIntervalSince1970 }
@@ -126,14 +242,47 @@ struct STCandle: Identifiable {
 }
 
 enum SafeTradeError: LocalizedError {
-    case noCredentials, invalidURL, http(Int, String), decode(String), placedUnverified
+    case noCredentials, invalidURL, http(Int, String), decode(String), placedUnverified, withdrawUnverified
     var errorDescription: String? {
         switch self {
+        case .withdrawUnverified: return Loc("提现请求可能已提交但未能确认结果，请先看下方提现记录，切勿重复提交。")
         case .noCredentials: return Loc("未配置 SafeTrade API 密钥")
         case .invalidURL: return Loc("SafeTrade 请求地址无效")
-        case .http(let c, let m): return "HTTP \(c): \(m.prefix(120))"
+        case .http(let c, let m):
+            if let known = Self.errorKeys(m).lazy.compactMap(Self.message(forKey:)).first { return known }
+            return "HTTP \(c): \(m.prefix(120))"
         case .decode(let m): return Loc("解析失败: %@", m)
         case .placedUnverified: return Loc("订单可能已提交但未能确认结果，请到下方订单列表核对，切勿重复下单。")
+        }
+    }
+}
+
+extension SafeTradeError {
+    /// `{"errors":["account.withdraw.invalid_otp_code"]}` → the error keys.
+    static func errorKeys(_ body: String) -> [String] {
+        guard let d = body.data(using: .utf8),
+              let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return [] }
+        return (o["errors"] as? [String]) ?? []
+    }
+
+    /// Human copy for the exchange's error keys we expect around withdrawals
+    /// (keys taken from SafeTrade's own web client); unknown keys fall through
+    /// to the raw "HTTP code: body" text.
+    static func message(forKey key: String) -> String? {
+        switch key.replacingOccurrences(of: "account.beneficiary.", with: "account.withdraw.") {
+        case "account.withdraw.missing_email_code": return Loc("请填写邮箱验证码")
+        case "account.withdraw.missing_phone_code": return Loc("请填写短信验证码")
+        case "account.withdraw.missing_otp_code": return Loc("请填写谷歌验证码（2FA）")
+        case "account.withdraw.invalid_otp_code": return Loc("谷歌验证码（2FA）错误")
+        case "account.withdraw.invalid_code": return Loc("验证码错误或已过期")
+        case "account.withdraw.insufficient_balance": return Loc("SafeTrade 可用余额不足")
+        case "account.withdraw.limit_exceeded": return Loc("超出今日提现额度")
+        case "account.withdraw.withdraw_disabled": return Loc("SafeTrade 暂停了这条链的提现")
+        case "account.withdraw.address_validation", "account.withdraw.missing_address", "account.withdraw.missing_rid":
+            return Loc("收款地址无效")
+        case "account.withdraw.blocked_address_send_back": return Loc("不能提现到 SafeTrade 自己的充值地址")
+        case "account.withdraw.non_round_amount": return Loc("数量的小数位太多")
+        default: return nil
         }
     }
 }
@@ -192,7 +341,7 @@ struct SafeTradeClient {
     /// `credentials`, when supplied, signs the request with those explicit keys
     /// instead of the stored ones (used to verify keys before they're saved).
     private func send(_ path: String, method: String = "GET",
-                      query: [URLQueryItem] = [], form: [String: String]? = nil,
+                      query: [URLQueryItem] = [], form: [String: String]? = nil, json: [String: Any]? = nil,
                       authed: Bool, credentials: (key: String, secret: String)? = nil) async throws -> Data {
         if authed && credentials == nil && !SafeTradeSecrets.hasCredentials { throw SafeTradeError.noCredentials }
         guard var comps = URLComponents(string: root + path) else { throw SafeTradeError.invalidURL }
@@ -212,6 +361,10 @@ struct SafeTradeClient {
             var body = URLComponents()
             body.queryItems = form.map { URLQueryItem(name: $0.key, value: $0.value) }
             req.httpBody = body.percentEncodedQuery?.data(using: .utf8)
+        }
+        if let json {
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = try JSONSerialization.data(withJSONObject: json)
         }
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
@@ -260,6 +413,84 @@ struct SafeTradeClient {
                                   query: [.init(name: "market", value: market), .init(name: "limit", value: String(limit))],
                                   authed: true)
         return (try? JSONDecoder().decode([STOrder].self, from: data)) ?? []
+    }
+
+    /// Public currency info — networks with fee / minimum / whether withdrawals are open.
+    func currency(_ id: String) async throws -> STCurrency {
+        let data = try await send("/api/v2/trade/public/currencies/\(id)", authed: false)
+        do { return try JSONDecoder().decode(STCurrency.self, from: data) }
+        catch { throw SafeTradeError.decode(error.localizedDescription) }
+    }
+
+    func withdraws(currency: String, limit: Int = 10) async throws -> [STWithdraw] {
+        let data = try await send("/api/v2/trade/account/withdraws",
+                                  query: [.init(name: "currency", value: currency),
+                                          .init(name: "limit", value: String(limit))],
+                                  authed: true)
+        guard let rows = try? JSONSerialization.jsonObject(with: data) as? [Any] else { return [] }
+        return rows.compactMap { row in
+            (try? JSONSerialization.data(withJSONObject: row))
+                .flatMap { try? JSONDecoder().decode(STWithdraw.self, from: $0) }
+        }
+    }
+
+    /// The user's SafeTrade address book, all currencies.
+    /// Accepts a bare array or a `{"data": [...]}` envelope; throws (with a peek at
+    /// the body) when the response has rows we can't read, so the UI can say why
+    /// the address book looks empty instead of silently showing nothing.
+    func beneficiaries() async throws -> [STBeneficiary] {
+        let data = try await send("/api/v2/trade/account/beneficiaries",
+                                  query: [.init(name: "limit", value: "100")], authed: true)
+        let json = try? JSONSerialization.jsonObject(with: data)
+        guard let rows = (json as? [Any]) ?? ((json as? [String: Any])?["data"] as? [Any]) else {
+            throw SafeTradeError.decode(String(String(data: data, encoding: .utf8)?.prefix(160) ?? ""))
+        }
+        let parsed = rows.compactMap { row in
+            (try? JSONSerialization.data(withJSONObject: row))
+                .flatMap { try? JSONDecoder().decode(STBeneficiary.self, from: $0) }
+        }
+        if parsed.isEmpty, let first = rows.first,
+           let peek = (try? JSONSerialization.data(withJSONObject: first)).flatMap({ String(data: $0, encoding: .utf8) }) {
+            throw SafeTradeError.decode(String(peek.prefix(160)))
+        }
+        return parsed
+    }
+
+    /// Ask SafeTrade to e-mail (or SMS) the one-time withdrawal code. Same body as
+    /// the web client: the code is bound to this address + amount.
+    func sendWithdrawCode(type: String, address: String, amount: Decimal,
+                          blockchainKey: String, currency: String) async throws {
+        _ = try await send("/api/v2/trade/account/withdraws/generate_code", method: "POST",
+                           json: ["type": type, "address": address, "currency": currency,
+                                  "amount": NSDecimalNumber(decimal: amount), "blockchain_key": blockchainKey],
+                           authed: true)
+    }
+
+    /// Create an on-chain withdrawal (`POST /trade/account/withdraws`, the body the
+    /// SafeTrade web client sends). Empty codes are left out: which ones the
+    /// exchange demands depends on the account (e-mail always, 2FA / SMS if enabled).
+    /// With `beneficiaryID` the destination is a SafeTrade address-book entry and
+    /// replaces address + chain; the web client then asks for no e-mail code.
+    func createWithdraw(address: String, amount: Decimal, blockchainKey: String, beneficiaryID: Int?,
+                        emailCode: String, otpCode: String, phoneCode: String,
+                        currency: String) async throws {
+        // Per SafeTrade's swagger (account.CreateWithdrawParams): blockchain_key is
+        // always required; address and email_code only without beneficiary_id.
+        var body: [String: Any] = ["currency": currency, "amount": NSDecimalNumber(decimal: amount),
+                                   "blockchain_key": blockchainKey]
+        if let beneficiaryID {
+            body["beneficiary_id"] = beneficiaryID
+        } else {
+            body["address"] = address
+        }
+        if !emailCode.isEmpty { body["email_code"] = emailCode }
+        if !otpCode.isEmpty { body["otp_code"] = otpCode }
+        if !phoneCode.isEmpty { body["phone_code"] = phoneCode }
+        do {
+            _ = try await send("/api/v2/trade/account/withdraws", method: "POST", json: body, authed: true)
+        } catch let e as URLError where Self.isAmbiguousPostFailure(e) {
+            throw SafeTradeError.withdrawUnverified   // may have gone through — never invite a blind retry
+        }
     }
 
     /// K-line OHLCV. `period` in minutes (15, 60, 240, 1440…). Rows: [ts, o, h, l, c, v].

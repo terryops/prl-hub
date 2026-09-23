@@ -8,6 +8,10 @@ final class SafeTradeStore: ObservableObject {
     @Published var ticker: STTicker?
     @Published var orders: [STOrder] = []
     @Published var candles: [STCandle] = []
+    /// 1-minute candles for the last ~4 h — only used to work out the rolling
+    /// "last 5 min / 15 min / 1 h / 4 h" change shown next to the price.
+    @Published var minuteCandles: [STCandle] = []
+    private var minutesFetchedAt: Date?
     @Published var period = 60          // minutes: 15 / 60 / 240 / 1440
     @Published var loading = false
     /// An order POST is in flight. SEPARATE from `loading` (which refresh() also
@@ -75,6 +79,7 @@ final class SafeTradeStore: ObservableObject {
         do {
             balances = try await b
             ticker = try? await t
+            share(ticker)
             orders = (try? await o) ?? []
             let nextCandles = (try? await k) ?? []
             applyCandles(nextCandles, requestID: requestID, period: candlePeriod)
@@ -108,13 +113,52 @@ final class SafeTradeStore: ObservableObject {
         let currentMarket = market
         let candlePeriod = period
         let requestID = nextCandleRequestID()
-        ticker = try? await client.ticker(market: currentMarket)
+        async let m: Void = refreshMinutes()
+        setTicker(try? await client.ticker(market: currentMarket))
         let nextCandles = (try? await client.kline(market: currentMarket, period: candlePeriod)) ?? []
         applyCandles(nextCandles, requestID: requestID, period: candlePeriod)
+        await m
     }
 
+    /// The 5-second 现价 poll. The 1-minute candles only gain a row per minute,
+    /// so they're re-fetched at most every 30 s rather than on every tick.
     func refreshTickerOnly() async {
-        ticker = try? await client.ticker(market: market)
+        let minutesDue = minutesFetchedAt.map { Date().timeIntervalSince($0) >= 30 } ?? true
+        async let m: Void = minutesDue ? refreshMinutes() : ()
+        setTicker(try? await client.ticker(market: market))
+        await m
+    }
+
+    /// Publish only a quote that actually changed: an identical tick every 5 s would
+    /// otherwise re-render the whole Trade tab (K-line included) for nothing.
+    private func setTicker(_ t: STTicker?) {
+        if t != ticker { ticker = t }
+        share(t)
+    }
+
+    /// Hand a fresh PRL/USDT quote to the app-wide price (only for the PRL market —
+    /// the market is configurable).
+    private func share(_ t: STTicker?) {
+        guard market == SafeTradeMarket.defaultValue, let last = t?.last.flatMap(Double.init) else { return }
+        PRLPriceManager.shared.adopt(last)
+    }
+
+    private func refreshMinutes() async {
+        if let m = try? await client.kline(market: market, period: 1, limit: 250), !m.isEmpty {
+            if m != minuteCandles { minuteCandles = m }
+            minutesFetchedAt = Date()
+        }
+    }
+
+    /// % change of `price` against the price `minutes` ago, from the 1-minute
+    /// candles (the close of the minute that ended at or just before then).
+    /// nil when the history doesn't reach back that far.
+    func rollingChange(minutes: Int, price: Double) -> Double? {
+        let target = Date().addingTimeInterval(-Double(minutes * 60))
+        guard let first = minuteCandles.first, first.time <= target,
+              let ref = minuteCandles.last(where: { $0.time.addingTimeInterval(60) <= target }),
+              ref.close > 0, price > 0 else { return nil }
+        return (price - ref.close) / ref.close * 100
     }
 
     /// Returns true on success so the view can clear its inputs.
@@ -213,7 +257,7 @@ final class SafeTradeStore: ObservableObject {
         // draw a synthetic series so the chart can still be checked.
         if Self.shotDemo && nextCandles.isEmpty { candles = Self.demoCandles(period: requestedPeriod); return }
         #endif
-        candles = nextCandles
+        if nextCandles != candles { candles = nextCandles }
     }
 
     #if DEBUG

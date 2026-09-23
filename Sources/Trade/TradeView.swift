@@ -5,6 +5,7 @@ import Combine
 struct TradeView: View {
     @StateObject private var store = SafeTradeStore()
     @ObservedObject private var upsell = UpsellPrompt.shared
+    @EnvironmentObject private var contacts: ContactsStore
     @State private var openAlerts = false      // after buying Pro from the upsell, land on 价格提醒
     @Environment(\.horizontalSizeClass) private var hsc
 
@@ -14,9 +15,24 @@ struct TradeView: View {
     @State private var volume = ""
     @State private var confirming = false
     @State private var orderToCancel: STOrder?
+    @State private var withdrawing: WithdrawCurrency? = TradeView.shotWithdraw
     @State private var sideColumnWidth: CGFloat = 20   // measured width of the 买/卖 column
     @FocusState private var focusedField: Field?
     private enum Field { case price, volume }
+
+    /// Which balance the withdraw sheet is for (`.sheet(item:)` needs Identifiable).
+    struct WithdrawCurrency: Identifiable { let id: String }
+
+    /// DEBUG-only: SHOT_WITHDRAW=prl|usdt opens that withdraw sheet on launch (with
+    /// SHOT_TAB=1) so a verification run can reach it without API keys.
+    private static var shotWithdraw: WithdrawCurrency? {
+        #if DEBUG
+        if let c = ProcessInfo.processInfo.environment["SHOT_WITHDRAW"], ["prl", "usdt"].contains(c) {
+            return WithdrawCurrency(id: c)
+        }
+        #endif
+        return nil
+    }
 
     private var usdt: STBalance? { store.balance("usdt") }
     private var prl: STBalance? { store.balance("prl") }
@@ -95,6 +111,7 @@ struct TradeView: View {
             #endif
             .navigationTitle(Loc("交易 · SafeTrade"))
             .navigationDestination(isPresented: $openAlerts) { PriceAlertsView() }
+            .sheet(item: $withdrawing) { WithdrawView(trade: store, currency: $0.id).environmentObject(contacts) }
             .sheet(isPresented: $upsell.showing, onDismiss: {
                 if ProStore.shared.isPro { openAlerts = true }
             }) { ProUpsellSheet() }
@@ -130,7 +147,7 @@ struct TradeView: View {
             .task {
                 await store.loadPublic(); await store.refresh()
                 while !Task.isCancelled {               // keep 现价 fresh
-                    try? await Task.sleep(for: .seconds(15))
+                    try? await Task.sleep(for: .seconds(5))
                     await store.refreshTickerOnly()
                 }
             }
@@ -227,9 +244,9 @@ struct TradeView: View {
     /// a coloured dot each read as filler; one quiet row reads as a ledger line.
     private var balancesRow: some View {
         HStack(alignment: .top, spacing: 0) {
-            balanceColumn("USDT", usdt)
+            balanceColumn("USDT", usdt, withdraw: store.hasCredentials && !SafeTradeStore.shotDemo)
             Divider().frame(height: 44).padding(.horizontal, Pearl.Space.md)
-            balanceColumn("PRL", prl)
+            balanceColumn("PRL", prl, withdraw: store.hasCredentials && !SafeTradeStore.shotDemo)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
@@ -433,9 +450,16 @@ struct TradeView: View {
         }
     }
 
-    @ViewBuilder private func balanceColumn(_ name: String, _ b: STBalance?) -> some View {
+    @ViewBuilder private func balanceColumn(_ name: String, _ b: STBalance?, withdraw: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(Loc("%@ 余额", name)).font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Text(Loc("%@ 余额", name)).font(.caption).foregroundStyle(.secondary)
+                if withdraw {
+                    Spacer()
+                    Button(Loc("提现")) { withdrawing = WithdrawCurrency(id: name.lowercased()) }
+                        .buttonStyle(.borderless).font(.caption.weight(.semibold)).tint(Pearl.accent)
+                }
+            }
             Text(b.map { String(format: "%.4f", $0.balanceValue) } ?? "—")
                 .font(.system(.title3, design: .rounded).weight(.semibold).monospacedDigit())
                 .lineLimit(1).minimumScaleFactor(0.6)
@@ -454,9 +478,21 @@ struct TradeView: View {
 
 struct MarketSection: View {
     @ObservedObject var store: SafeTradeStore
+
+    /// Change shown next to the price, following the chart's period picker: the
+    /// rolling change over the last 5 min / 15 min / 1 h / 4 h (from 1-minute
+    /// candles), and the exchange's own rolling 24h change for 1日.
+    private var periodChange: String? {
+        if store.period == 1440 { return store.ticker?.price_change_percent }
+        guard let now = store.ticker?.last.flatMap(Double.init) ?? store.minuteCandles.last?.close,
+              let pct = store.rollingChange(minutes: store.period, price: now) else { return nil }
+        return String(format: "%+.2f%%", pct)
+    }
+
     var body: some View {
         let t = store.ticker
-        let down = (t?.price_change_percent ?? "").hasPrefix("-")
+        let chg = periodChange
+        let down = (chg ?? "").hasPrefix("-")
         VStack(alignment: .leading, spacing: Pearl.Space.md) {
             HStack(alignment: .top, spacing: Pearl.Space.md) {
                 VStack(alignment: .leading, spacing: Pearl.Space.xxs) {
@@ -468,9 +504,11 @@ struct MarketSection: View {
                             .contentTransition(.numericText())
                         // 24h change in the same green/red the candles use — a third
                         // colour pair (teal/rose) next to the chart just looked wrong.
-                        if let chg = t?.price_change_percent {
+                        if let chg {
                             Text(chg).font(.subheadline.weight(.semibold).monospacedDigit())
                                 .foregroundStyle(down ? Color.red : Color.green)
+                                .contentTransition(.numericText())
+                                .animation(.snappy, value: chg)
                         }
                     }
                 }
