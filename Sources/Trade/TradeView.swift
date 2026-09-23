@@ -452,13 +452,18 @@ struct TradeView: View {
 
     @ViewBuilder private func balanceColumn(_ name: String, _ b: STBalance?, withdraw: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 2) {
+            // One line always: the label shrinks a little before it would wrap, and
+            // 提现 keeps its full width (it was being pushed onto a second line).
             HStack(spacing: 5) {
                 CoinBadge(symbol: name)
                 Text(Loc("%@ 余额", name)).font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(1).minimumScaleFactor(0.75)
                 if withdraw {
-                    Spacer()
+                    Spacer(minLength: 4)
                     Button(Loc("提现")) { withdrawing = WithdrawCurrency(id: name.lowercased()) }
                         .buttonStyle(.borderless).font(.caption.weight(.semibold)).tint(Pearl.accent)
+                        .fixedSize()
+                        .layoutPriority(1)
                 }
             }
             Text(b.map { String(format: "%.4f", $0.balanceValue) } ?? "—")
@@ -507,6 +512,8 @@ struct CoinBadge: View {
 
 struct MarketSection: View {
     @ObservedObject var store: SafeTradeStore
+    @ObservedObject private var live = PriceLiveActivity.shared
+    @ObservedObject private var pro = ProStore.shared
 
     /// Change shown next to the price, following the chart's period picker: the
     /// rolling change over the last 5 min / 15 min / 1 h / 4 h (from 1-minute
@@ -551,6 +558,7 @@ struct MarketSection: View {
             }
 
             HStack {
+                if PriceLiveActivity.supported { liveButton }
                 Spacer()
                 Picker(Loc("周期"), selection: Binding(get: { store.period }, set: { store.setPeriod($0) })) {
                     Text(Loc("5分")).tag(5); Text(Loc("15分")).tag(15); Text(Loc("1时")).tag(60); Text(Loc("4时")).tag(240); Text(Loc("1日")).tag(1440)
@@ -559,9 +567,36 @@ struct MarketSection: View {
                 .fixedSize()
             }
 
+            if let e = live.error {
+                Text(e).font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             CandleChart(candles: store.candles)
         }
         .pearlCard()
+    }
+
+    /// 锁屏盯盘 toggle (Pro). Without Pro it opens the upgrade sheet instead.
+    private var liveButton: some View {
+        Button {
+            guard pro.isPro else { UpsellPrompt.shared.showing = true; return }
+            Task { if live.running { await live.stop() } else { await live.start() } }
+        } label: {
+            HStack(spacing: 4) {
+                if live.running {
+                    Circle().fill(Color.green).frame(width: 6, height: 6)
+                    Text(Loc("盯盘中"))
+                } else {
+                    Image(systemName: "lock.iphone")
+                    Text(Loc("锁屏盯盘"))
+                }
+            }
+            .font(.caption.weight(.medium))
+        }
+        .buttonStyle(.borderless)
+        .tint(live.running ? .green : Pearl.accent)
+        .fixedSize()
     }
 
     @ViewBuilder private func tickerCell(_ label: String, _ value: String?) -> some View {

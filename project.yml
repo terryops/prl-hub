@@ -22,7 +22,7 @@ settings:
     CODE_SIGN_STYLE: Automatic
     GENERATE_INFOPLIST_FILE: YES
     MARKETING_VERSION: "1.15"
-    CURRENT_PROJECT_VERSION: "119"
+    CURRENT_PROJECT_VERSION: "120"
     ENABLE_USER_SCRIPT_SANDBOXING: NO
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 schemes:
@@ -78,6 +78,10 @@ targets:
         # Required or iOS terminates the app the first time Face ID is invoked
         # (查看助记词 / 确认转账) — without it biometric auth crashes, not prompts.
         INFOPLIST_KEY_NSFaceIDUsageDescription: "验证身份以查看助记词或确认转账"
+        # 锁屏盯盘 (Pro): the live-price Live Activity. Frequent updates lets the
+        # worker push a new price every minute without running out of budget.
+        INFOPLIST_KEY_NSSupportsLiveActivities: YES
+        INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates: YES
         # Home-screen app name. NO leading "$" — iOS/macOS treat a leading $ as a
         # build variable, drop the value, and fall back to CFBundleName.
         INFOPLIST_KEY_CFBundleDisplayName: "Pearl Hub"

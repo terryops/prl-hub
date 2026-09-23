@@ -6,6 +6,7 @@ import SwiftUI
 // Two widgets the user adds separately:
 //   • Pearl Hub  — home screen / desktop: balance + fiat, recent transfers, pool hashrate.
 //   • PRL 币价   — iOS Lock Screen: today's date, weekday and the live PRL price.
+// Plus the 锁屏盯盘 Live Activity (iOS, Pro), which the app starts on demand.
 // Both read the app's App Group snapshot for inputs and self-refresh on the system
 // timeline so they stay current while the app is closed.
 
@@ -15,6 +16,7 @@ struct PearlWidgetBundle: WidgetBundle {
         PearlWidget()
         #if os(iOS)
         PearlLockWidget()
+        PriceLiveActivity()
         #endif
     }
 }
