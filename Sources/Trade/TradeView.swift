@@ -530,9 +530,14 @@ struct MarketSection: View {
         let chg = periodChange
         let down = (chg ?? "").hasPrefix("-")
         VStack(alignment: .leading, spacing: Pearl.Space.md) {
+            HStack {
+                Text("PRL/USDT").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                if PriceLiveActivity.supported { liveButton }
+            }
+            .padding(.bottom, -Pearl.Space.sm)
             HStack(alignment: .top, spacing: Pearl.Space.md) {
                 VStack(alignment: .leading, spacing: Pearl.Space.xxs) {
-                    Text("PRL/USDT").font(.caption).foregroundStyle(.secondary)
                     HStack(alignment: .firstTextBaseline, spacing: Pearl.Space.xs) {
                         Text(t?.last ?? "—")
                             .font(.system(.title, design: .rounded).weight(.bold)).monospacedDigit()
@@ -557,15 +562,13 @@ struct MarketSection: View {
                 .fixedSize()
             }
 
-            HStack {
-                if PriceLiveActivity.supported { liveButton }
-                Spacer()
-                Picker(Loc("周期"), selection: Binding(get: { store.period }, set: { store.setPeriod($0) })) {
-                    Text(Loc("5分")).tag(5); Text(Loc("15分")).tag(15); Text(Loc("1时")).tag(60); Text(Loc("4时")).tag(240); Text(Loc("1日")).tag(1440)
-                }
-                .pickerStyle(.segmented).labelsHidden().controlSize(.small)
-                .fixedSize()
+            // Full card width on its own row: sharing the row with the 锁屏盯盘 button
+            // (both fixed-size) made it wider than a phone and pushed the whole
+            // screen past its margins.
+            Picker(Loc("周期"), selection: Binding(get: { store.period }, set: { store.setPeriod($0) })) {
+                Text(Loc("5分")).tag(5); Text(Loc("15分")).tag(15); Text(Loc("1时")).tag(60); Text(Loc("4时")).tag(240); Text(Loc("1日")).tag(1440)
             }
+            .pickerStyle(.segmented).labelsHidden().controlSize(.small)
 
             if let e = live.error {
                 Text(e).font(.caption).foregroundStyle(.orange)
