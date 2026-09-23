@@ -48,6 +48,10 @@ struct WidgetSnapshot: Codable {
 
     // Fiat
     var prlUsd: Double = 0                  // 1 PRL → USD   (0 = unknown)
+    /// When prlUsd was fetched (by the app or a widget). Optional so snapshots saved
+    /// before this field existed still decode. Lets a widget reuse the app's
+    /// just-fetched price instead of fetching its own, slightly different one.
+    var prlUsdAt: Date?
     var usdCny: Double = 0                  // 1 USD → CNY   (0 = unknown)
 
     // Mining (every watch)

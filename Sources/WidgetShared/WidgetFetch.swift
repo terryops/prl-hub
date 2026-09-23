@@ -46,6 +46,15 @@ enum WidgetFetch {
         return (confirmed + unconfirmed) / 1e8
     }
 
+    /// The price the app (or the other widget) fetched within the last 2 minutes,
+    /// else a fresh fetch — so the widgets show the same number as the app.
+    /// Returns the value and when it was fetched.
+    static func sharedPrlUsd(_ snap: WidgetSnapshot) async -> (usd: Double, at: Date)? {
+        if snap.prlUsd > 0, let at = snap.prlUsdAt, Date().timeIntervalSince(at) < 120 { return (snap.prlUsd, at) }
+        guard let v = await prlUsd() else { return nil }
+        return (v, Date())
+    }
+
     /// Spot price of 1 PRL in USD (SafeTrade public ticker).
     static func prlUsd() async -> Double? {
         guard let obj = await json("https://safetrade.com/api/v2/peatio/public/markets/prlusdt/tickers") as? [String: Any]

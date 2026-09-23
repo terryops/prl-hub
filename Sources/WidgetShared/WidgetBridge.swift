@@ -77,15 +77,22 @@ enum WidgetBridge {
     }
 
     /// Fresh fiat rates (only overwrite a good value, never with 0/unknown).
-    static func updatePrice(prlUsd: Double?, usdCny: Double?) {
+    /// `prlUsdAt` is when that PRL price was fetched; pass it only for a genuinely
+    /// fresh value — the widgets reuse a recent one instead of fetching their own.
+    static func updatePrice(prlUsd: Double?, usdCny: Double?, prlUsdAt: Date? = nil) {
         var s = WidgetStore.load()
         var changed = false
         if let v = prlUsd, v > 0, v != s.prlUsd { s.prlUsd = v; changed = true }
         if let v = usdCny, v > 0, v != s.usdCny { s.usdCny = v; changed = true }
-        guard changed else { return }            // unchanged price → no reload (60s poll)
-        s.updatedAt = Date()
+        let restamp = prlUsdAt.map { at in (prlUsd ?? 0) > 0 && at > (s.prlUsdAt ?? .distantPast) } ?? false
+        if restamp { s.prlUsdAt = prlUsdAt }
+        // A price written without its fetch time (e.g. a disk-cached one) must not
+        // inherit the previous value's fresh stamp — widgets would reuse it as new.
+        else if changed, prlUsdAt == nil, s.prlUsdAt != nil { s.prlUsdAt = nil }
+        guard changed || restamp else { return }
+        if changed { s.updatedAt = Date() }
         WidgetStore.save(s)
-        reload()
+        if changed { reload() }                  // unchanged price → no reload (15–60 s polls)
     }
 
     static func reload() {

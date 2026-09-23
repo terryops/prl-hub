@@ -1,5 +1,10 @@
 import Foundation
 import Combine
+#if os(iOS)
+import UIKit
+#else
+import AppKit
+#endif
 
 // ============================================================
 // 联网（async/await，跨平台；替换原版阻塞式 URLSession+DispatchSemaphore）
@@ -133,28 +138,22 @@ private func applyWhatToMine(_ c: inout Config, _ o: [String: Any]) -> [String] 
 func fetchLive(_ input: Config) async -> (Config, Bool, String) {
     var c = input
     var got = await applyLordOfPearls(&c)
-    // 链上源不可达 → WhatToMine。这份 JSON 也是币价的回落，所以最多只取一次。
-    var wtm: [String: Any]? = nil
-    if got.isEmpty {
-        wtm = await fetchWhatToMineCoin()
-        if let o = wtm { got = applyWhatToMine(&c, o) }
-    }
+    // 链上源不可达 → WhatToMine。
+    if got.isEmpty, let o = await fetchWhatToMineCoin() { got = applyWhatToMine(&c, o) }
     // 预估「难度月增长 %」：把"近7天难度趋势"(当前 vs 近7天均值，与设置页显示同口径)
     // 线性折算到 30 天。联网时自动锁定填入；手动模式下用户仍可拖动覆盖。0 = 难度恒定。
     if c.diffNow > 0, c.diff7 > 0 {
         let monthly = (c.diffNow / c.diff7 - 1) * (30.0 / 7.0) * 100
         c.diffGrowthMonthly = min(200, max(-20, monthly))
     }
-    // Price: prefer SafeTrade's live PRL/USDT; fall back to WhatToMine×BTC.
-    if let st = await fetchPRLUsdSafeTrade() {
-        c.price = st; got.append(Loc("币价"))
-    } else {
-        // 链上数据走了 lordofpearls 时上面没取过这份 JSON，币价回落到这里才补取。
-        if wtm == nil { wtm = await fetchWhatToMineCoin() }
-        if let xr = num(wtm?["exchange_rate"]), let btc = await fetchBTC() {
-            let pr = xr * btc
-            if pr > 0.00001 && pr < 1e5 { c.price = pr; got.append(Loc("币价")) }
-        }
+    // Price: the app-wide PRL price (SafeTrade, WhatToMine×BTC fallback), so the
+    // monitor shows the same number as the wallet, Trade tab and widgets.
+    // Count it as fetched only if it is actually fresh — offline, the manager still
+    // holds its disk-cached price, which must not read as a successful refresh.
+    await PRLPriceManager.shared.refreshIfStale()
+    if let p = await PRLPriceManager.shared.usd, let at = await PRLPriceManager.shared.lastUpdated,
+       Date().timeIntervalSince(at) < 180 {
+        c.price = p; got.append(Loc("币价"))
     }
     // 成功时不再回传啰嗦的「已更新 全网算力/出币/币价」——头部只用绿点表示联网即可。
     return got.isEmpty ? (c, false, Loc("行情数据源无响应")) : (c, true, "")
@@ -203,13 +202,32 @@ final class PRLStore: ObservableObject {
     @Published var priceHistory: [STCandle] = []
     private let stClient = SafeTradeClient()
     private var lastPriceFetch: Date?
+    private var priceSub: AnyCancellable?
 
     init() {
         devices = PRLStore.loadDevices()
         rentByGPU = PRLStore.loadRents()
         loadPrefsFromDefaults()
         initializing = false
+        // Don't lose a still-pending coalesced save if the app is backgrounded right
+        // after a slider drag.
+        #if os(iOS)
+        let resign = UIApplication.willResignActiveNotification
+        #else
+        let resign = NSApplication.willResignActiveNotification
+        #endif
+        resignSub = NotificationCenter.default.publisher(for: resign).sink { [weak self] _ in
+            guard let self, let work = self.prefsSave else { return }
+            work.cancel(); self.writePrefs()
+        }
         syncFx()   // align cfg.fx with the live secondary rate when in auto mode
+        // Live mode shows the app-wide price the moment anything refreshes it (the
+        // Trade tab every 5 s), not just on this screen's own 60 s fetch. Manual
+        // mode keeps the user's slider value.
+        priceSub = PRLPriceManager.shared.$usd.dropFirst().sink { [weak self] v in
+            guard let self, self.live, let v, v != self.cfg.price else { return }
+            self.cfg.price = v
+        }
     }
 
     /// Read all persisted prefs (cfg fields + toggles) from UserDefaults into the
@@ -291,6 +309,19 @@ final class PRLStore: ObservableObject {
         // synced config (and later pushing the stale values back to iCloud,
         // reverting the other device too).
         guard !initializing && !applyingRemote else { return }
+        // Coalesced: a slider drag changes cfg on every tick, and writing ~18 defaults
+        // plus an iCloud synchronize() per tick made the sliders lag. The write runs
+        // once the values stop moving and always stores the CURRENT state.
+        prefsSave?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.writePrefs() }
+        prefsSave = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
+    }
+    private var prefsSave: DispatchWorkItem?
+    private var resignSub: AnyCancellable?
+
+    private func writePrefs() {
+        prefsSave = nil
         let d = UserDefaults.standard
         d.set(cfg.price, forKey: "prl.price"); d.set(cfg.nethashEH, forKey: "prl.neth"); d.set(cfg.perUnit, forKey: "prl.pu")
         d.set(cfg.elec, forKey: "prl.elec"); d.set(cfg.poolFee, forKey: "prl.fee"); d.set(cfg.fx, forKey: "prl.fx")

@@ -40,9 +40,13 @@ struct LockProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<LockEntry>) -> Void) {
         Task {
-            let usd = await WidgetFetch.prlUsd()
+            let usd = await WidgetFetch.sharedPrlUsd(WidgetStore.load())
             var snap = WidgetStore.load()
-            if let usd { snap.prlUsd = usd }
+            if let usd {
+                snap.prlUsd = usd.usd
+                // Share a price it fetched itself, so the app / home widget can reuse it.
+                if usd.at > (snap.prlUsdAt ?? .distantPast) { snap.prlUsdAt = usd.at; WidgetStore.save(snap) }
+            }
 
             // One entry now, plus one at each of the next two midnights, so the date flips on
             // time even when the system defers the next reload (overnight, low budget). Price is

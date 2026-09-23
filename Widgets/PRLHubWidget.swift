@@ -75,7 +75,7 @@ struct PearlProvider: TimelineProvider {
             // WidgetKit's timeline-generation budget; in parallel the wall time is just
             // the single slowest request. (balancePRL returns nil for a nil/empty xpub.)
             async let balF: Double? = WidgetFetch.balancePRL(xpub: xpub, network: network)
-            async let usdF: Double? = WidgetFetch.prlUsd()
+            async let usdF = WidgetFetch.sharedPrlUsd(snap)
             async let cnyF: Double? = WidgetFetch.usdCny()
             async let poolsF: [(Int, WidgetFetch.PoolLive?)] = withTaskGroup(of: (Int, WidgetFetch.PoolLive?).self) { group in
                 for (i, p) in poolsIn.enumerated() {
@@ -104,7 +104,7 @@ struct PearlProvider: TimelineProvider {
             if let bal, let xpub, snap.xpub == xpub, snap.network == network {
                 snap.balancePRL = bal + snap.changePRL; didRefresh = true
             }
-            if let usd { snap.prlUsd = usd; didRefresh = true }
+            if let usd { snap.prlUsd = usd.usd; snap.prlUsdAt = usd.at; didRefresh = true }
             if let cny { snap.usdCny = cny; didRefresh = true }
 
             let sameWatches = snap.pools.map { "\($0.kind)|\($0.address)" } == poolsIn.map { "\($0.kind)|\($0.address)" }

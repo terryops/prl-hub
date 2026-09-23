@@ -12,7 +12,8 @@ final class PoolStore: ObservableObject {
     @Published var onchain7d: [UUID: Double] = [:]
     @Published var onchainTotal: [UUID: Double] = [:]
     /// Live fiat conversion for displaying PRL amounts.
-    @Published var prlUsd: Double?   // 1 PRL = ? USD (SafeTrade PRL/USDT)
+    @Published var prlUsd: Double?   // 1 PRL = ? USD — mirrors the app-wide PRLPriceManager
+    private var priceSub: AnyCancellable?
     @Published var usdCny: Double?   // 1 USD = ? CNY
     @Published var loading = false
 
@@ -20,6 +21,10 @@ final class PoolStore: ObservableObject {
 
     init() {
         loadWatches()
+        // Same number as every other screen: follow the shared price as it updates.
+        priceSub = PRLPriceManager.shared.$usd.sink { [weak self] in
+            if let v = $0, self?.prlUsd != v { self?.prlUsd = v }
+        }
         #if DEBUG
         seedScreenshotWatchIfNeeded()
         #endif
@@ -203,7 +208,7 @@ final class PoolStore: ObservableObject {
 
     func refresh() async {
         loading = true
-        async let pu = Self.fetchPrlUsd()
+        async let pu: Void = PRLPriceManager.shared.refreshIfStale()
         async let uc = Self.fetchUsdCny()
 
         let current = watches.filter(\.isEnabled)   // a paused watch costs no network
@@ -219,7 +224,7 @@ final class PoolStore: ObservableObject {
         }
         await fetchOnchainIncome(current)
 
-        if let u = await pu { prlUsd = u }
+        await pu   // prlUsd follows PRLPriceManager via priceSub
         if let c = await uc { usdCny = c }
         loading = false
 
@@ -248,18 +253,6 @@ final class PoolStore: ObservableObject {
     }
 
     // MARK: fiat prices
-
-    private static func fetchPrlUsd() async -> Double? {
-        var req = URLRequest(url: URL(string: "https://safetrade.com/api/v2/peatio/public/markets/prlusdt/tickers")!)
-        req.timeoutInterval = 15; req.setValue("application/json", forHTTPHeaderField: "Accept")
-        guard let (data, resp) = try? await URLSession.shared.data(for: req),
-              (resp as? HTTPURLResponse)?.statusCode == 200,
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        let t = (obj["ticker"] as? [String: Any]) ?? obj
-        if let s = t["last"] as? String, let v = Double(s) { return v }
-        if let n = t["last"] as? NSNumber { return n.doubleValue }
-        return nil
-    }
 
     private static func fetchUsdCny() async -> Double? {
         var req = URLRequest(url: URL(string: "https://open.er-api.com/v6/latest/USD")!)

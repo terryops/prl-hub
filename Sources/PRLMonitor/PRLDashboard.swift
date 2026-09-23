@@ -19,7 +19,7 @@ struct DashboardSection: View {
 
                 StatGrid {
                     trendCard(.price) {
-                        StatCard(title: Loc("PRL 币价"), value: ready ? "$" + f(c.price, 4) : "—",
+                        StatCard(title: Loc("PRL 币价"), value: ready ? "$" + f(c.price, 2) : "—",
                                  sub: store.live ? (ready ? Loc("SafeTrade 实时") : Loc("联网中…")) : Loc("手动"), color: .orange)
                     }
                     trendCard(.hashrate) {

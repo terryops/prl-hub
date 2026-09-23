@@ -13,6 +13,11 @@ import Combine
 // cached to disk so the wallet shows a fiat estimate instantly on
 // launch, then refreshes in the background. Pair with
 // CurrencyManager to also render the user's secondary currency.
+//
+// This is THE app-wide PRL price: the wallet, pools, mining monitor
+// and widgets all read it, and whoever sees a fresher SafeTrade
+// quote (the Trade tab polls every 5 s) hands it in via adopt(),
+// so every screen shows the same number.
 // ============================================================
 
 @MainActor
@@ -23,12 +28,15 @@ final class PRLPriceManager: ObservableObject {
 
     /// Spot price of 1 PRL in USD, or nil before the first successful fetch.
     @Published private(set) var usd: Double?
-    @Published private(set) var lastUpdated: Date?
+    /// Not @Published: no view shows it, and the Trade tab re-stamps it every 5 s —
+    /// publishing it re-rendered every screen observing the price that often.
+    private(set) var lastUpdated: Date?
+    private var lastPersisted: Date?
 
     private var inFlight = false
     private static let cacheKey = "prl.priceUSD"
     private static let atKey    = "prl.priceAt"
-    private static let maxAge: TimeInterval = 120   // hit the network at most every 2 min
+    private static let maxAge: TimeInterval = 60    // hit the network at most once a minute
 
     init() {
         let v = UserDefaults.standard.double(forKey: Self.cacheKey)
@@ -65,12 +73,23 @@ final class PRLPriceManager: ObservableObject {
                 if p > 0.00001 && p < 1e5 { price = p }
             }
         }
-        guard let p = price, p > 0, p.isFinite else { return }
+        guard let p = price else { return }
+        adopt(p)
+    }
 
-        usd = p
-        let now = Date()
+    /// Take a freshly fetched price from anywhere in the app (e.g. the Trade tab's
+    /// ticker): cache it, and hand it to the widgets (which reload only if it moved).
+    func adopt(_ p: Double, at now: Date = Date()) {
+        guard p > 0, p.isFinite else { return }
+        let moved = usd != p
+        if moved { usd = p }
         lastUpdated = now
+        // An unchanged quote only needs its freshness stamp written now and then, not on
+        // every 5 s tick (each write also round-trips the widget snapshot's JSON).
+        if !moved, let at = lastPersisted, now.timeIntervalSince(at) < 30 { return }
+        lastPersisted = now
         UserDefaults.standard.set(p, forKey: Self.cacheKey)
         UserDefaults.standard.set(now.timeIntervalSince1970, forKey: Self.atKey)
+        WidgetBridge.updatePrice(prlUsd: p, usdCny: nil, prlUsdAt: now)
     }
 }
