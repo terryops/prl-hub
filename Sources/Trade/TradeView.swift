@@ -243,10 +243,14 @@ struct TradeView: View {
     /// Both exchange balances in ONE card, side by side — two half-empty cards with
     /// a coloured dot each read as filler; one quiet row reads as a ledger line.
     private var balancesRow: some View {
-        HStack(alignment: .top, spacing: 0) {
-            balanceColumn("USDT", usdt, withdraw: store.hasCredentials && !SafeTradeStore.shotDemo)
-            Divider().frame(height: 44).padding(.horizontal, Pearl.Space.md)
-            balanceColumn("PRL", prl, withdraw: store.hasCredentials && !SafeTradeStore.shotDemo)
+        // "余额" once, as the card's title; each column is then just the coin.
+        VStack(alignment: .leading, spacing: Pearl.Space.xs) {
+            Text(Loc("余额")).font(.caption).foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 0) {
+                balanceColumn("USDT", usdt, withdraw: store.hasCredentials && !SafeTradeStore.shotDemo)
+                Divider().frame(height: 44).padding(.horizontal, Pearl.Space.md)
+                balanceColumn("PRL", prl, withdraw: store.hasCredentials && !SafeTradeStore.shotDemo)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
@@ -452,12 +456,11 @@ struct TradeView: View {
 
     @ViewBuilder private func balanceColumn(_ name: String, _ b: STBalance?, withdraw: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            // One line always: the label shrinks a little before it would wrap, and
-            // 提现 keeps its full width (it was being pushed onto a second line).
+            // One line always; 提现 keeps its full width.
             HStack(spacing: 5) {
                 CoinBadge(symbol: name)
-                Text(Loc("%@ 余额", name)).font(.caption).foregroundStyle(.secondary)
-                    .lineLimit(1).minimumScaleFactor(0.75)
+                Text(verbatim: name).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    .lineLimit(1)
                 if withdraw {
                     Spacer(minLength: 4)
                     Button(Loc("提现")) { withdrawing = WithdrawCurrency(id: name.lowercased()) }
