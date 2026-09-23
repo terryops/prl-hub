@@ -385,7 +385,10 @@ struct MarketTrendCard: View {
                     }
             }
             .chartYScale(domain: (lo - pad)...(hi + pad))
-            .chartXScale(domain: -7.4...0.4)
+            // Axis labels hang right of their tick, so the last one ("现在", up to
+            // "Sekarang") needs its own width of room past x = 0 or it gets clipped.
+            .chartXScale(domain: -7.4...0,
+                         range: .plotDimension(endPadding: captionWidth(pts.last!.label) + 2))
             .chartXAxis {
                 AxisMarks(values: pts.map(\.x)) { value in
                     if let x = value.as(Double.self), let p = pts.first(where: { $0.x == x }) {
@@ -423,5 +426,15 @@ struct MarketTrendCard: View {
     private func placeholder(_ text: String) -> some View {
         Text(text).font(.caption).foregroundColor(.secondary)
             .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 180)
+    }
+
+    /// Rendered width of `s` in the caption2 font the axis labels use.
+    private func captionWidth(_ s: String) -> CGFloat {
+        #if os(iOS)
+        let font = UIFont.preferredFont(forTextStyle: .caption2)
+        #else
+        let font = NSFont.preferredFont(forTextStyle: .caption2)
+        #endif
+        return ceil((s as NSString).size(withAttributes: [.font: font]).width)
     }
 }
