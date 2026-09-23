@@ -53,7 +53,7 @@ struct DashboardSection: View {
                                    subtitle: Loc("%@ 台设备 · 共 %@ 张卡（自有 %@ · 租用 %@）· 总算力 %@", "\(store.devices.count)", "\(fl.cards)", "\(fl.ownCards)", "\(fl.rentedCards)", formatHashrate(fl.pearl * 1e12)))
 
                 VStack(alignment: .leading, spacing: Pearl.Space.xs) {
-                    Text(Loc("日净利 · 按设备估算（已扣电费）")).font(.headline).foregroundColor(.secondary)
+                    cardTitle(Loc("日净利 · 设备估算"), Loc("按你的设备算力和电费估算"))
                     if ready {
                         Text(store.localSymbol + " " + f(fl.netDay * c.fx, 1)).font(.system(.largeTitle, design: .rounded).weight(.heavy))
                             .foregroundColor(fl.netDay > 0 ? .green : .red).monospacedDigit()
@@ -74,11 +74,13 @@ struct DashboardSection: View {
                     let inc7  = store.actualIncome.reduce(0.0) { $0 + $1.prl7d } / 7.0
                     let cost  = fl.powerDay + fl.rentDay   // 设备电费 + 租金 (USD/天)
                     VStack(alignment: .leading, spacing: Pearl.Space.sm) {
-                        Text(Loc("日净利 · 按矿池实测到账（链上）")).font(.headline).foregroundColor(.secondary)
-                        HStack(spacing: Pearl.Space.sm) {
+                        cardTitle(Loc("日净利 · 链上实收"), Loc("矿池实际到账（已排除自己地址间的互转）− 电费/租金"))
+                        // Equal-height pair: each box stretches to the taller one.
+                        HStack(alignment: .top, spacing: Pearl.Space.sm) {
                             actualBox(Loc("近 24h"), inc24, c.price, cost, c.fx)
-                            actualBox(Loc("近 7 天 · 日均"), inc7, c.price, cost, c.fx)
+                            actualBox(Loc("7 天日均"), inc7, c.price, cost, c.fx)
                         }
+                        .fixedSize(horizontal: false, vertical: true)
                         ForEach(store.actualIncome) { ai in
                             HStack(spacing: 6) {
                                 Text(ai.pool).font(.caption).foregroundColor(.secondary)
@@ -95,19 +97,23 @@ struct DashboardSection: View {
                             let dailyInc = inc7 > 0 ? inc7 : inc24
                             let perP = dailyInc / fl.pearl * 1000   // fl.pearl 为 T(=Pearl)，×1000 → 每 P
                             let theoP = c.perUnit * 1000
-                            HStack(spacing: 6) {
-                                Image(systemName: "cube.fill").font(.caption).foregroundColor(Pearl.teal)
-                                Text(Loc("实测每 P·天")).font(.caption).foregroundColor(.secondary)
-                                Text(f(perP, 2) + " PRL").font(.caption.monospacedDigit().weight(.semibold))
-                                Spacer(minLength: 4)
+                            // Two lines — label + value, then theory/efficiency — instead of three
+                            // squeezed columns that each wrapped.
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "cube.fill").font(.caption).foregroundColor(Pearl.teal)
+                                    Text(Loc("实测每 P·天")).font(.caption).foregroundColor(.secondary)
+                                    Spacer(minLength: 4)
+                                    Text(f(perP, 2) + " PRL").font(.caption.monospacedDigit().weight(.semibold))
+                                }
                                 if theoP > 0 {
                                     Text(Loc("理论 %@ · 效率 %@%%", f(theoP, 2), f(perP / theoP * 100, 0)))
                                         .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                                        .frame(maxWidth: .infinity, alignment: .trailing)
                                 }
                             }
+                            .padding(.top, 2)
                         }
-                        Text(Loc("收入=链上实际到账（已自动扣除你各地址之间的互转，避免重复计入）；净利=到账×币价 − 你设备的电费/租金。"))
-                            .font(.caption2).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .pearlCard()
@@ -170,16 +176,27 @@ struct DashboardSection: View {
         }
     }
 
+    /// Card heading: a short title on one line, with what it means as a caption
+    /// beneath — rather than one long title that wraps.
+    @ViewBuilder private func cardTitle(_ title: String, _ caption: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.headline).foregroundColor(.secondary).lineLimit(1).minimumScaleFactor(0.8)
+            Text(caption).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     @ViewBuilder private func actualBox(_ title: String, _ incPRL: Double, _ price: Double, _ costUSD: Double, _ fx: Double) -> some View {
         let rev = incPRL * price
         let net = rev - costUSD
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.caption).foregroundColor(.secondary)
+            Text(title).font(.caption).foregroundColor(.secondary).lineLimit(1).minimumScaleFactor(0.8)
             Text(store.localSymbol + f(net * fx, 1)).font(.system(.title2, design: .rounded).weight(.bold))
                 .foregroundColor(net > 0 ? .green : .red).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
-            Text(store.sym(Loc("%@ PRL · 收入 ¥%@", f(incPRL, 1), f(rev * fx, 1)))).font(.caption2).foregroundColor(.secondary)
+            // With no power cost / rent the net IS the income, so don't repeat it.
+            Text(costUSD > 0 ? store.sym(Loc("%@ PRL · 收入 ¥%@", f(incPRL, 1), f(rev * fx, 1))) : "\(f(incPRL, 1)) PRL")
+                .font(.caption2).foregroundColor(.secondary)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(12).background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
     }
 }

@@ -452,7 +452,8 @@ struct TradeView: View {
 
     @ViewBuilder private func balanceColumn(_ name: String, _ b: STBalance?, withdraw: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack {
+            HStack(spacing: 5) {
+                CoinBadge(symbol: name)
                 Text(Loc("%@ 余额", name)).font(.caption).foregroundStyle(.secondary)
                 if withdraw {
                     Spacer()
@@ -472,6 +473,34 @@ struct TradeView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+}
+
+/// Small coin mark shown before a balance label: USDT as a Tether-green disc
+/// with ₮; PRL as the widgets' pearl symbol (custom SF Symbol "pearl", shared
+/// with the lock-screen widget) in the brand gradient. Vector, so it stays crisp
+/// at caption size and follows Dynamic Type.
+struct CoinBadge: View {
+    let symbol: String
+    @ScaledMetric(relativeTo: .caption) private var size: CGFloat = 15
+
+    var body: some View {
+        Group {
+            if symbol.uppercased() == "USDT" {
+                ZStack {
+                    Circle().fill(Color(red: 0.149, green: 0.631, blue: 0.482))   // #26A17B
+                    Text(verbatim: "₮")
+                        .font(.system(size: size * 0.62, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                }
+            } else {
+                Image("pearl")
+                    .resizable().scaledToFit()
+                    .foregroundStyle(Pearl.brand)
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
 }
 
 // MARK: - Market price + candlestick K-line

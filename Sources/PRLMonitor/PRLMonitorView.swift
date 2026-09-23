@@ -178,7 +178,9 @@ struct StatCard: View {
             Text(sub).font(.caption).foregroundColor(.secondary)
         }
         .padding(Pearl.Space.md)
-        .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
+        // Fill the grid row's height so cards side by side line up even when one
+        // label wraps to a second line.
+        .frame(maxWidth: .infinity, minHeight: 76, maxHeight: .infinity, alignment: .topLeading)
         // Clean, flat surface — the colored value carries the meaning, no shadow/dot/bar clutter.
         .background(Pearl.surface, in: RoundedRectangle(cornerRadius: Pearl.Radius.sm, style: .continuous))
         .overlay(

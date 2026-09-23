@@ -228,7 +228,7 @@
 "我的设备" = "Perangkat";
 "手动" = "Manual";
 "扣抽水" = "Biaya Pool Dipotong";
-"扣抽水·未扣电费" = "Biaya Pool Dipotong · Biaya Listrik Belum Dipotong";
+"扣抽水·未扣电费" = "Setelah biaya pool, sebelum listrik";
 "把这个地址发给对方即可收到 PRL。" = "Kirim alamat ini ke orang lain untuk menerima PRL.";
 "把这个地址发给对方即可收到 PRL。点按「换一个地址」可生成新地址，更好地保护隐私。" = "Kirim alamat ini ke orang lain untuk menerima PRL. Ketuk \"Ganti Alamat\" untuk membuat alamat baru demi privasi yang lebih baik.";
 "换一个收款地址" = "Ganti ke alamat penerima lain";
@@ -247,7 +247,6 @@
 "排序" = "Urutkan";
 "提示：自动保存。每台可选『自有』(付电费+计硬件成本) 或『租用』(按 ¥/小时 付租，全包价不另计电费/功率)。『可用h』= 每天实际挖矿小时，按比例缩放出币/电费/租金。租金单价可在此逐台调，默认值在【显卡对比】选中卡后设。" = "Tips: Tersimpan otomatis. Tiap perangkat dapat diatur 'Milik sendiri' (bayar listrik + hitung biaya perangkat keras) atau 'Sewa' (bayar ¥/jam, all-in tanpa tambahan listrik/daya). 'Jam tersedia' = jam menambang aktual per hari, menyesuaikan hasil/listrik/sewa secara proporsional. Harga sewa per unit dapat diatur per perangkat di sini; setel default di Banding GPU setelah memilih kartu.";
 "收" = "Terima";
-"收入=链上实际到账（已自动扣除你各地址之间的互转，避免重复计入）；净利=到账×币价 − 你设备的电费/租金。" = "Pendapatan = penerimaan aktual di rantai (transfer antar alamat Anda sendiri otomatis dikecualikan agar tidak dihitung ganda); Laba Bersih = diterima × harga − biaya listrik/sewa perangkat Anda.";
 "收到" = "Diterima";
 "收款" = "Terima";
 "收款地址" = "Alamat Penerima";
@@ -267,8 +266,6 @@
 "日产 PRL" = "Hasil PRL Harian";
 "日净利" = "Laba Bersih Harian";
 "日净利 ¥" = "Laba Bersih Harian ¥";
-"日净利 · 按矿池实测到账（链上）" = "Laba Bersih Harian · Berdasarkan penerimaan aktual pool (di rantai)";
-"日净利 · 按设备估算（已扣电费）" = "Laba Bersih Harian · Berdasarkan estimasi perangkat (listrik dipotong)";
 "日收入" = "Pendapatan Harian";
 "日电费" = "Biaya Listrik Harian";
 "日电费(自付)" = "Biaya Listrik Harian (bayar sendiri)";
@@ -426,7 +423,6 @@
 "近 3 小时" = "3 jam terakhir";
 "近 24h" = "24j terakhir";
 "近 7 天" = "7 hari terakhir";
-"近 7 天 · 日均" = "7 hari terakhir · Rata-rata harian";
 "近7天 %@ · 24h %@" = "7h %1$@ · 24j %2$@";
 "这里会显示你的数据" = "Data Anda akan tampil di sini";
 "选择有误，请重试" = "Pilihan salah, coba lagi";
@@ -825,3 +821,8 @@
 "手续费 %@ · 最少 %@" = "Biaya %@ · min %@";
 "SafeTrade 地址簿有 %d 个地址（%@），但没有可用于 %@ 的。" = "Buku alamat SafeTrade berisi %d alamat (%@), tetapi tidak ada yang bisa dipakai untuk %@.";
 "读取 SafeTrade 地址簿失败：%@" = "Gagal membaca buku alamat SafeTrade: %@";
+"日净利 · 设备估算" = "Laba bersih/hari · Estimasi";
+"按你的设备算力和电费估算" = "Dari hashrate dan biaya listrik perangkat Anda";
+"日净利 · 链上实收" = "Laba bersih/hari · On-chain";
+"矿池实际到账（已排除自己地址间的互转）− 电费/租金" = "Pembayaran pool yang diterima (tanpa transfer antar alamat sendiri) − listrik/sewa";
+"7 天日均" = "Rata-rata 7 hari";

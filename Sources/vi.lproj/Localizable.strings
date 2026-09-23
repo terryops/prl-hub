@@ -247,7 +247,6 @@
 "排序" = "Sắp xếp";
 "提示：自动保存。每台可选『自有』(付电费+计硬件成本) 或『租用』(按 ¥/小时 付租，全包价不另计电费/功率)。『可用h』= 每天实际挖矿小时，按比例缩放出币/电费/租金。租金单价可在此逐台调，默认值在【显卡对比】选中卡后设。" = "Lưu ý: Tự động lưu. Mỗi máy có thể chọn『Sở hữu』(trả tiền điện + tính chi phí phần cứng) hoặc『Thuê』(trả thuê theo ¥/giờ, giá trọn gói không tính thêm tiền điện/công suất).『Giờ khả dụng』= số giờ đào thực tế mỗi ngày, co giãn theo tỷ lệ sản lượng/tiền điện/tiền thuê. Đơn giá thuê có thể chỉnh từng máy tại đây, giá trị mặc định đặt sau khi chọn card ở【So sánh GPU】.";
 "收" = "Nhận";
-"收入=链上实际到账（已自动扣除你各地址之间的互转，避免重复计入）；净利=到账×币价 − 你设备的电费/租金。" = "Thu nhập = số thực nhận on-chain (đã tự động trừ các khoản chuyển qua lại giữa các địa chỉ của bạn để tránh tính trùng); Lợi nhuận ròng = số nhận × giá PRL − tiền điện/tiền thuê thiết bị của bạn.";
 "收到" = "Đã nhận";
 "收款" = "Nhận";
 "收款地址" = "Địa chỉ nhận";
@@ -267,8 +266,6 @@
 "日产 PRL" = "PRL/ngày";
 "日净利" = "Lợi nhuận ròng/ngày";
 "日净利 ¥" = "Lợi nhuận ròng/ngày ¥";
-"日净利 · 按矿池实测到账（链上）" = "Lợi nhuận ròng/ngày · theo thực nhận từ pool (on-chain)";
-"日净利 · 按设备估算（已扣电费）" = "Lợi nhuận ròng/ngày · ước tính theo thiết bị (đã trừ tiền điện)";
 "日收入" = "Thu nhập/ngày";
 "日电费" = "Chi phí điện/ngày";
 "日电费(自付)" = "Chi phí điện/ngày (tự trả)";
@@ -426,7 +423,6 @@
 "近 3 小时" = "3 giờ qua";
 "近 24h" = "24h qua";
 "近 7 天" = "7 ngày qua";
-"近 7 天 · 日均" = "7 ngày qua · TB ngày";
 "近7天 %@ · 24h %@" = "7 ngày %1$@ · 24h %2$@";
 "这里会显示你的数据" = "Dữ liệu của bạn sẽ hiển thị ở đây";
 "选择有误，请重试" = "Lựa chọn sai, hãy thử lại";
@@ -826,3 +822,8 @@
 "手续费 %@ · 最少 %@" = "Phí %@ · tối thiểu %@";
 "SafeTrade 地址簿有 %d 个地址（%@），但没有可用于 %@ 的。" = "Sổ địa chỉ SafeTrade có %d địa chỉ (%@), nhưng không có địa chỉ nào dùng được cho %@.";
 "读取 SafeTrade 地址簿失败：%@" = "Không đọc được sổ địa chỉ SafeTrade: %@";
+"日净利 · 设备估算" = "Lãi ròng/ngày · Ước tính";
+"按你的设备算力和电费估算" = "Theo hashrate và tiền điện của thiết bị";
+"日净利 · 链上实收" = "Lãi ròng/ngày · On-chain";
+"矿池实际到账（已排除自己地址间的互转）− 电费/租金" = "Tiền pool đã trả (không tính chuyển giữa ví của bạn) − điện/thuê";
+"7 天日均" = "TB 7 ngày";
