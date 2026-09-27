@@ -18,6 +18,8 @@ struct BlockbookClient {
     private struct XpubResponse: Decodable {
         let balance: String?
         let unconfirmedBalance: String?
+        let txs: Int?              // tx COUNT (the list is `transactions`)
+        let unconfirmedTxs: Int?
         let page: Int?
         let totalPages: Int?
         let transactions: [Tx]?
@@ -45,6 +47,15 @@ struct BlockbookClient {
     }
 
     /// One `/xpub/` round-trip: balance, a page of history and the xpub's own addresses.
+    /// The xpub's balance and tx counts, without any transactions.
+    struct XpubSummary: Sendable, Equatable {
+        let confirmed: Decimal
+        /// Net mempool delta — NEGATIVE while an outgoing tx is unconfirmed.
+        let unconfirmed: Decimal
+        let txCount: Int
+        let unconfirmedTxs: Int
+    }
+
     struct XpubAccount: Sendable {
         let confirmed: Decimal
         /// Net mempool delta — NEGATIVE while an outgoing tx is unconfirmed.
@@ -65,8 +76,8 @@ struct BlockbookClient {
             let confirmed: Bool
         }
         let candidates: [Candidate]
-        /// Highest block among the scanned confirmed txs, ours or not (the incremental-scan
-        /// watermark: every send at or below it has been looked at).
+        /// Highest block among the scanned confirmed sends (the incremental-scan watermark:
+        /// every send at or below it has been looked at).
         let maxHeight: Int?
     }
 
@@ -106,12 +117,25 @@ struct BlockbookClient {
 
     // MARK: queries (by xpub)
 
+    /// Balance + tx counts only (`details=basic`): a few hundred bytes, back in under a
+    /// second. A history page is another matter — pool payouts carry hundreds of outputs,
+    /// so one page of 25 measured 9 MB / 3.6 s — so the wallet shows this first and only
+    /// re-reads the page when these numbers move.
+    func summary(xpub: String) async throws -> XpubSummary {
+        let r = try await get("/api/v2/xpub/\(xpub)?details=basic", as: XpubResponse.self)
+        guard let balance = r.balance else { throw URLError(.cannotParseResponse) }
+        return XpubSummary(confirmed: Self.prl(balance), unconfirmed: Self.prl(r.unconfirmedBalance),
+                           txCount: r.txs ?? 0, unconfirmedTxs: r.unconfirmedTxs ?? 0)
+    }
+
     /// Balance + one history page in a single request, so the two can never straddle an
-    /// index update (balance from before a send, history already containing it).
+    /// index update (balance from before a send, history already containing it). Pages
+    /// of 10: the dashboard shows 3, and 交易记录 pages on with 加载更多 — each page of
+    /// payouts is megabytes.
     /// `knownChange` are internal-chain change addresses the xpub token list doesn't
     /// recognise as ours (the stranded-change set). Folding them into `mine` stops the
     /// displayed "sent" amount from counting our own change as money paid to others.
-    func account(xpub: String, page: Int = 1, pageSize: Int = 25, knownChange: Set<String> = []) async throws -> XpubAccount {
+    func account(xpub: String, page: Int = 1, pageSize: Int = 10, knownChange: Set<String> = []) async throws -> XpubAccount {
         let r = try await get("/api/v2/xpub/\(xpub)?details=txs&tokens=used&page=\(page)&pageSize=\(pageSize)", as: XpubResponse.self)
         guard let balance = r.balance else { throw URLError(.cannotParseResponse) }
         let addresses = Set((r.tokens ?? []).compactMap { $0.name })
@@ -203,9 +227,15 @@ struct BlockbookClient {
     /// here so an external receive address can never be mis-offered as change.
     /// `fromHeight` limits the scan to txs mined at or after that block (the incremental
     /// scan); nil scans the whole history.
+    ///
+    /// `filter=inputs`: only txs spending from this xpub — the only ones that can hold
+    /// our change. A mining wallet's history is almost all pool payouts of ~1000 outputs
+    /// (~350 KB each): unfiltered, a 2,276-tx wallet made this a ~370 MB read that timed
+    /// out and was retried on every load; filtered it was 24 txs / 0.5 MB. The token
+    /// list (our addresses) is unaffected by the filter.
     func changeCandidates(xpub: String, fromHeight: Int?, extra: [String] = []) async throws -> ChangeCandidates {
         let from = fromHeight.map { "&from=\($0)" } ?? ""
-        let r = try await get("/api/v2/xpub/\(xpub)?details=txs&tokens=used&pageSize=1000\(from)", as: XpubResponse.self)
+        let r = try await get("/api/v2/xpub/\(xpub)?details=txs&tokens=used&filter=inputs&pageSize=1000\(from)", as: XpubResponse.self)
         let mine = Set((r.tokens ?? []).compactMap { $0.name })
         let txs = r.transactions ?? []
         // Without the xpub's own addresses every receive address would look like change and

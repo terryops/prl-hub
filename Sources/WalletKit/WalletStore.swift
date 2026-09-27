@@ -157,6 +157,9 @@ final class WalletStore: ObservableObject {
     /// from the published `balance`/`txs` so optimistic sends can be overlaid on
     /// top deterministically (re-applying the overlay never double-counts).
     private var serverBalance: WalletBalance = .zero
+    /// The xpub summary the current history page + UTXO read belongs to. While a fresh
+    /// summary still matches it, nothing on-chain moved and the heavy reads are skipped.
+    private var lastSummary: BlockbookClient.XpubSummary?
     var serverTxs: [WalletTx] = []
     /// History pages beyond the first (「加载更多」). Refreshed only when reloaded, so their
     /// confirmation counts are recomputed from the current tip on publish.
@@ -665,14 +668,12 @@ final class WalletStore: ObservableObject {
         guard isCurrentChainLoad(token, mnemonic: mnemonic, network: expectedNetwork) else { return }
         guard let xp = xpub else { return }
         let bb = BlockbookClient(network: expectedNetwork)
-        // Balance + history in ONE response (they can't disagree about a just-indexed send),
-        // alongside the confirmed UTXOs that define what is actually spendable.
-        let knownChange = change.owned
-        async let accountRequest = bb.account(xpub: xp, knownChange: knownChange)
-        async let utxoRequest = bb.utxos(xpub: xp)
-        let account: BlockbookClient.XpubAccount
+        // 1. The balance, from the tiny `details=basic` summary — on screen in well under
+        //    a second. The history page (megabytes of pool payouts) and the UTXO set are
+        //    re-read below only when the summary moved.
+        let summary: BlockbookClient.XpubSummary
         do {
-            account = try await accountRequest
+            summary = try await bb.summary(xpub: xp)
         } catch {
             guard isCurrentChainLoad(token, mnemonic: mnemonic, network: expectedNetwork) else { return }
             // Backend unreachable: keep the last good figures and say so. The change-chain
@@ -681,6 +682,45 @@ final class WalletStore: ObservableObject {
             lastChainLoadAt = Date()
             return
         }
+        guard isCurrentChainLoad(token, mnemonic: mnemonic, network: expectedNetwork) else { return }
+        let moved = summary != lastSummary || !historyReady
+        // With a send pending, a summary that already counts it would be subtracted again
+        // by the pending overlay until the history page shows the tx — so then the balance
+        // waits for the page (below), which settles both together.
+        if moved, pendingSends.isEmpty {
+            let total = summary.confirmed + summary.unconfirmed
+            // Spendable is only known from the UTXO read below: until then never more than
+            // before (or, on a first load, than the confirmed part).
+            let quick = historyReady ? serverBalance.available : summary.confirmed + min(0, summary.unconfirmed)
+            serverBalance = WalletBalance(total: total, available: max(0, min(quick, total)))
+        }
+        if !backendReady { backendReady = true }
+        lastSyncedAt = Date()
+        if syncError != nil { syncError = nil }
+        publishOverlay()
+        if moved {
+            await loadHistoryPage(bb: bb, xpub: xp, summary: summary, token: token,
+                                  mnemonic: mnemonic, network: expectedNetwork)
+        }
+        guard isCurrentChainLoad(token, mnemonic: mnemonic, network: expectedNetwork) else { return }
+        // Bring internal-chain change (which the xpub scan misses) into balance + spending.
+        await refreshChangeChain(xpub: xp, dir: dir, net: net, token: token, force: changeScanForced)
+        guard isCurrentChainLoad(token, mnemonic: mnemonic, network: expectedNetwork) else { return }
+        await resolveStalePendingSends(bb: bb, token: token)
+        lastChainLoadAt = Date()
+        publishOverlay()
+    }
+
+    /// 2. Balance + first history page in ONE response (they can't disagree about a
+    /// just-indexed send), alongside the confirmed UTXOs that define what is actually
+    /// spendable. Only a complete read is remembered as `lastSummary`, so a failed page
+    /// or UTXO set is retried on the next load.
+    private func loadHistoryPage(bb: BlockbookClient, xpub xp: String, summary: BlockbookClient.XpubSummary,
+                                 token: UUID, mnemonic: String, network expectedNetwork: WalletNetwork) async {
+        let knownChange = change.owned
+        async let accountRequest = bb.account(xpub: xp, knownChange: knownChange)
+        async let utxoRequest = bb.utxos(xpub: xp)
+        guard let account = try? await accountRequest else { return }
         let utxos = try? await utxoRequest
         guard isCurrentChainLoad(token, mnemonic: mnemonic, network: expectedNetwork) else { return }
         let total = account.confirmed + account.unconfirmed
@@ -699,17 +739,9 @@ final class WalletStore: ObservableObject {
         let carried = serverTxs.filter { mergedChangeTxids.contains($0.txid) && !pageIDs.contains($0.txid) }
         serverTxs = carried.isEmpty ? account.txs : (account.txs + carried).sorted { $0.time > $1.time }
         settleIndexed(pageIDs)
-        if !backendReady { backendReady = true }
         if !historyReady { historyReady = true }
-        lastSyncedAt = Date()
-        if syncError != nil { syncError = nil }
-        // Publish the moment the snapshot lands — the change-chain scan below is slower.
-        publishOverlay()
-        // Bring internal-chain change (which the xpub scan misses) into balance + spending.
-        await refreshChangeChain(xpub: xp, dir: dir, net: net, token: token, force: changeScanForced)
-        guard isCurrentChainLoad(token, mnemonic: mnemonic, network: expectedNetwork) else { return }
-        await resolveStalePendingSends(bb: bb, token: token)
-        lastChainLoadAt = Date()
+        lastSummary = utxos == nil ? nil : summary
+        // Publish the moment the page lands — the change-chain scan after it is slower.
         publishOverlay()
     }
 
@@ -938,7 +970,7 @@ final class WalletStore: ObservableObject {
         backendReady = false; historyReady = false
         historyHasMore = false; historyPagesLoaded = 1; olderTxs = []
         lastSyncedAt = nil; syncError = nil; lastChainLoadAt = nil
-        serverBalance = .zero; serverTxs = []; xpubAddresses = []
+        serverBalance = .zero; serverTxs = []; xpubAddresses = []; lastSummary = nil
         pendingSends.removeAll(); sendLocks.removeAll(); unverifiedSends.removeAll()
         clearChangeChainState()
     }
