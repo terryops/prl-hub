@@ -856,3 +856,16 @@
 "重新核对" = "Cek lagi";
 "验证身份以确认提现" = "Verifikasi identitas untuk mengonfirmasi penarikan";
 "链上查询失败" = "Gagal memeriksa on-chain";
+"%@，显示的是 %@ 的数据" = "%1$@ — menampilkan data pukul %2$@";
+"%@，稍后自动重试" = "%@ — akan dicoba lagi otomatis";
+"无法连接区块浏览器" = "Tidak dapat terhubung ke block explorer";
+"正在构建交易…" = "Menyusun transaksi…";
+"手续费偏高，确认转账？" = "Biaya Tinggi — Tetap Kirim?";
+"本笔手续费明显高于平常，请确认。" = "Biaya ini jauh lebih tinggi dari biasanya — periksa lagi.";
+"发送 %@ PRL 至\n%@\n网络手续费 %@ PRL，交易不可撤销。" = "Kirim %@ PRL ke\n%@\nBiaya jaringan %@ PRL. Transaksi ini tidak dapat dibatalkan.";
+"加载更多" = "Muat Lebih Banyak";
+"向开发者地址\n%@\n捐赠 %@ PRL，网络手续费 %@ PRL。交易不可撤销。" = "Donasikan %2$@ PRL ke alamat pengembang\n%1$@\nBiaya jaringan %3$@ PRL. Transaksi tidak dapat dibatalkan.";
+"上一笔转账是否发出尚未确认，请先查看交易记录，稍后再试" = "Belum dapat dipastikan apakah kiriman terakhir sudah terkirim. Periksa riwayat transaksi, lalu coba lagi nanti.";
+"确认超时，请重新发送" = "Konfirmasi kedaluwarsa. Silakan kirim ulang.";
+"网络异常，无法确认转账是否已发出（%@）。请先查看交易记录，切勿重复发送。" = "Gangguan jaringan — tidak dapat memastikan kiriman sudah terkirim (%@). Periksa riwayat transaksi dulu; jangan kirim ulang.";
+"解锁钱包" = "Buka Kunci Dompet";

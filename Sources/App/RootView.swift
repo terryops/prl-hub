@@ -20,7 +20,9 @@ struct RootView: View {
     }
     @AppStorage("ui.appearance") private var appearance = "system"   // system | light | dark
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var wallet = WalletStore.shared
+    // Not observed here: RootView only injects it. Observing would re-evaluate the whole
+    // TabView on every wallet publish; the screens that show wallet state observe it.
+    private let wallet = WalletStore.shared
     @StateObject private var contacts = ContactsStore()
     @StateObject private var loc = LocalizationManager.shared
     @StateObject private var currency = CurrencyManager.shared

@@ -191,6 +191,7 @@ private struct VerifyStep: View {
                 .disabled(picked.count < quiz.count)
         }
         .screenCaptureProtected(active: true) { withAnimation { shot = true } }
+        .coveredInAppSwitcher()
         .onAppear(perform: build)
     }
 
@@ -220,6 +221,10 @@ struct ImportWalletView: View {
     @State private var error: String?
     @State private var working = false
     @State private var shot = false
+    /// Pasteboard `changeCount` when the phrase arrived by paste — lets a successful import
+    /// clear it from the clipboard (and Universal Clipboard) without reading the pasteboard,
+    /// which would raise iOS's paste-permission prompt.
+    @State private var pastedChangeCount: Int?
     @FocusState private var focusedField: Field?
     private enum Field { case name, phrase }
 
@@ -267,10 +272,15 @@ struct ImportWalletView: View {
                             #else
                             if let s = NSPasteboard.general.string(forType: .string) { text = s }
                             #endif
+                            pastedChangeCount = Self.pasteboardChangeCount
                         }.font(.caption)
                     }
                     TextEditor(text: $text)
                         .focused($focusedField, equals: .phrase)
+                        // A whole phrase appearing at once is a system paste into the editor.
+                        .onChange(of: text) { old, new in
+                            if Self.wordCount(new) - Self.wordCount(old) >= 6 { pastedChangeCount = Self.pasteboardChangeCount }
+                        }
                         .frame(minHeight: 120)
                         .font(.body.monospaced())
                         .scrollContentBackground(.hidden)
@@ -304,6 +314,7 @@ struct ImportWalletView: View {
                         guard store.isValidMnemonic(m) else { error = Loc("助记词无效（BIP39 校验失败）"); working = false; return }
                         if store.commitWallet(name: name, mnemonic: m) {
                             working = false
+                            clearPastedPhrase()
                             // Phase flips to .unlocked, swapping the NavigationStack
                             // root to the dashboard. Pop this pushed view too, or it
                             // stays orphaned on top of the new root and the UI freezes
@@ -327,6 +338,7 @@ struct ImportWalletView: View {
             .padding(Pearl.Space.screen).frame(maxWidth: 520).frame(maxWidth: .infinity)
             .animation(.snappy, value: working)
         }
+        .coveredInAppSwitcher()
         .navigationTitle(Loc("恢复钱包"))
         #if os(iOS)
         // 助记词用 TextEditor，回车是换行而非收起键盘——给一个「完成」按钮 + 下拉收起。
@@ -337,6 +349,53 @@ struct ImportWalletView: View {
                 Button(Loc("完成")) { focusedField = nil }.fontWeight(.semibold)
             }
         }
+        #endif
+    }
+
+    private static func wordCount(_ s: String) -> Int { s.split(whereSeparator: \.isWhitespace).count }
+
+    private static var pasteboardChangeCount: Int {
+        #if os(iOS)
+        UIPasteboard.general.changeCount
+        #else
+        NSPasteboard.general.changeCount
+        #endif
+    }
+
+    /// The phrase is in the Keychain now; don't leave a copy on the clipboard. Only when the
+    /// clipboard still holds what was pasted (nothing copied since).
+    private func clearPastedPhrase() {
+        guard let c = pastedChangeCount, c == Self.pasteboardChangeCount else { return }
+        #if os(iOS)
+        UIPasteboard.general.items = []
+        #else
+        NSPasteboard.general.clearContents()
+        #endif
+        pastedChangeCount = nil
+    }
+}
+
+extension View {
+    /// Blank the screen while the app isn't active, so the app-switcher snapshot (which iOS
+    /// writes to disk) never holds a recovery phrase. macOS has no such snapshot.
+    func coveredInAppSwitcher() -> some View { modifier(AppSwitcherCover()) }
+}
+
+private struct AppSwitcherCover: ViewModifier {
+    @Environment(\.scenePhase) private var scenePhase
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content.overlay {
+            if scenePhase != .active {
+                ZStack {
+                    Rectangle().fill(.background)
+                    Image(systemName: "lock.fill").font(.largeTitle).foregroundStyle(.secondary)
+                }
+                .ignoresSafeArea()
+            }
+        }
+        #else
+        content
         #endif
     }
 }

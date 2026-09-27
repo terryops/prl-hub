@@ -10,7 +10,6 @@ enum WalletNetwork: String, CaseIterable, Identifiable, Codable {
     var addressHRP: String { self == .mainnet ? "prl" : "tprl" }
     /// oyster JSON-RPC port (matches the desktop wallet's network-config.ts).
     var rpcPort: Int { 8335 }
-    var defaultPeerPort: Int { self == .mainnet ? 44108 : 44112 }
 }
 
 // MARK: - Wallet list
@@ -24,9 +23,13 @@ struct WalletRecord: Codable, Identifiable, Equatable {
     /// cached when the wallet is loaded so the switcher can tell wallets apart
     /// without opening each one's wallet db.
     var addresses: [String: String] = [:]
+    /// Keyed hash of the seed (`WalletStore.fingerprint(of:)`), so an import can spot a
+    /// seed that's already here without reading every wallet's seed from the Keychain.
+    /// nil for records saved before it existed; filled in the next time the seed is read.
+    var fingerprint: String?
 
-    init(id: String, name: String, addresses: [String: String] = [:]) {
-        self.id = id; self.name = name; self.addresses = addresses
+    init(id: String, name: String, addresses: [String: String] = [:], fingerprint: String? = nil) {
+        self.id = id; self.name = name; self.addresses = addresses; self.fingerprint = fingerprint
     }
 
     // Synthesized Decodable ignores property defaults, so a list saved before a field
@@ -36,6 +39,7 @@ struct WalletRecord: Codable, Identifiable, Equatable {
         id = try c.decode(String.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
         addresses = try c.decodeIfPresent([String: String].self, forKey: .addresses) ?? [:]
+        fingerprint = try c.decodeIfPresent(String.self, forKey: .fingerprint)
     }
 }
 
@@ -151,6 +155,9 @@ struct WalletTx: Identifiable, Codable, Hashable {
     var confirmations: Int
     var time: Date
     var address: String
+    /// Block the tx was mined in (nil while unconfirmed). Lets a row fetched a while ago
+    /// keep a live confirmation count (see `WalletStore.withLiveConfirmations`).
+    var height: Int?
     var id: String { txid }
 }
 
@@ -161,16 +168,4 @@ struct WalletBalance: Codable, Equatable {
     var available: Decimal
     var unconfirmed: Decimal { max(0, total - available) }
     static let zero = WalletBalance(total: 0, available: 0)
-}
-
-// MARK: - Sync
-
-enum SyncPhase: String, Codable { case idle, headers, filters, blocks, synced }
-
-struct SyncProgress: Codable, Equatable {
-    var headerHeight = 0
-    var blockHeight = 0
-    var bestPeerHeight = 0
-    var synced = false
-    var phase: SyncPhase = .idle
 }

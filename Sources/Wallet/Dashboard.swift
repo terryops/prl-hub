@@ -180,6 +180,17 @@ struct DashboardView: View {
                     .animation(.snappy, value: store.backendReady)
                 }
 
+                // Backend unreachable: the figures above are the last good snapshot — say so
+                // rather than let them pass for live.
+                if let problem = store.syncError {
+                    Label(store.lastSyncedAt.map { Loc("%@，显示的是 %@ 的数据", problem, $0.formatted(date: .omitted, time: .shortened)) }
+                          ?? Loc("%@，稍后自动重试", problem),
+                          systemImage: "exclamationmark.icloud")
+                        .font(.caption).foregroundStyle(.orange)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .transition(.opacity)
+                }
+
                 // Actions
                 HStack(spacing: Pearl.Space.md) {
                     action(Loc("收款"), "qrcode") { ReceiveView(store: store) }
@@ -228,6 +239,7 @@ struct DashboardView: View {
             .padding(Pearl.Space.screen)
             .frame(maxWidth: 560)
             .frame(maxWidth: .infinity)
+            .animation(.snappy, value: store.syncError)
             // Top-aligned on iOS: keep the content its NATURAL height so the refreshable
             // ScrollView has a real scroll range and pull-to-refresh snaps back. Forcing
             // height == viewport (geo.size.height OR containerRelativeFrame) leaves no
@@ -269,7 +281,7 @@ struct DashboardView: View {
         .onAppear { dashboardVisible = true; promptDonationIfDue() }
         .onDisappear { dashboardVisible = false }
         .navigationDestination(isPresented: $managingWallets) { ManageWalletsView(store: store) }
-        .task { await store.loadChain(); await price.refreshIfStale() }
+        .task { await store.refreshIfStale(); await price.refreshIfStale() }
         .refreshable { await store.loadChain(); await price.refresh() }
         // 自适应自动轮询：App 在前台时按 store.pollInterval 周期重拉链上数据——有未确认
         // 交易时快轮询（~15s，让「待确认」尽快翻成已确认），全部确认后退回 60s keep-warm。
@@ -278,8 +290,9 @@ struct DashboardView: View {
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             // Refresh immediately on (re)activation: returning from the background should
-            // update the wallet right away, not only after the first poll interval.
-            await store.loadChain()
+            // update the wallet right away, not only after the first poll interval. (Joins
+            // the appear-load above instead of running a second one.)
+            await store.refreshIfStale()
             await price.refreshIfStale()
             while !Task.isCancelled {
                 try? await Task.sleep(for: store.pollInterval)
@@ -431,7 +444,7 @@ struct ReceiveView: View {
             .animation(.snappy, value: store.address)
         }
         .navigationTitle(Loc("收款"))
-        .task { await store.loadChain() }
+        .task { await store.refreshIfStale() }
     }
 }
 
@@ -443,9 +456,13 @@ struct SendView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var address = ""
     @State private var amount = ""
+    @State private var preparing = false
     @State private var sending = false
-    @State private var confirming = false
+    /// The signed tx awaiting the final confirmation (shows the real fee); nil = no alert.
+    @State private var prepared: PreparedSend?
     @State private var result: String?          // error banner (cleared by field onChange)
+    /// The banner reports a send of unknown outcome, not a failure.
+    @State private var resultIsWarning = false
     @State private var savingContact = false
     /// The exact string the MAX button last filled in. A send is treated as a full
     /// sweep ONLY when `amount` still equals this — i.e. the user explicitly chose MAX
@@ -465,7 +482,8 @@ struct SendView: View {
     private var amountPrecisionOK: Bool { parsedAmount != nil }
     private var overBalance: Bool { amountDec > 0 && amountDec + feeReserve > store.balance.available }
     private var addressValid: Bool { PRLAddress.isValid(addr, network: store.network) }
-    private var canSend: Bool { !sending && amountDec > 0 && amountPrecisionOK && !overBalance && addressValid }
+    private var canSend: Bool { !preparing && !sending && amountDec > 0 && amountPrecisionOK && !overBalance && addressValid }
+    private static func text(_ d: Decimal) -> String { NSDecimalNumber(decimal: d).stringValue }
 
     var body: some View {
         ScrollView {
@@ -538,10 +556,10 @@ struct SendView: View {
                 }
                 .pearlCard()
 
-                Button { confirming = true } label: {
+                Button { prepare() } label: {
                     HStack(spacing: Pearl.Space.xs) {
-                        if sending { ProgressView().controlSize(.small).tint(.white) }
-                        Text(sending ? Loc("签名并广播…") : Loc("发送"))
+                        if preparing || sending { ProgressView().controlSize(.small).tint(.white) }
+                        Text(sending ? Loc("签名并广播…") : preparing ? Loc("正在构建交易…") : Loc("发送"))
                         Image(systemName: "paperplane.fill")
                     }
                 }
@@ -549,8 +567,8 @@ struct SendView: View {
                 .disabled(!canSend)
 
                 if let result {
-                    Label(result, systemImage: "xmark.octagon")
-                        .font(.callout).foregroundStyle(.red).textSelection(.enabled)
+                    Label(result, systemImage: resultIsWarning ? "exclamationmark.triangle" : "xmark.octagon")
+                        .font(.callout).foregroundStyle(resultIsWarning ? .orange : .red).textSelection(.enabled)
                 }
                 Label(Loc("交易在本机签名（私钥不离开设备），经 Blockbook 广播。"), systemImage: "lock.shield")
                     .font(.caption).foregroundStyle(.secondary)
@@ -563,37 +581,67 @@ struct SendView: View {
         // .alert (not .confirmationDialog): a confirmationDialog renders as a popover
         // anchored to this view on regular-width iPad/Mac, floating it over the nav bar.
         // An alert is centered on every platform.
-        .alert(Loc("确认转账"), isPresented: $confirming) {
-            Button(Loc("确认发送 %@ PRL", amount), role: .destructive) { send() }
-            Button(Loc("取消"), role: .cancel) {}
-        } message: {
-            Text(Loc("发送 %@ PRL 至\n%@\n手续费将从余额扣除，交易不可撤销。", amount, addr))
+        // The tx is built and signed first, so this shows what it really costs; an unusually
+        // high fee gets its own title and warning line.
+        .alert(prepared?.feeIsHigh == true ? Loc("手续费偏高，确认转账？") : Loc("确认转账"),
+               isPresented: Binding(get: { prepared != nil }, set: { if !$0 { prepared = nil } }),
+               presenting: prepared) { p in
+            Button(Loc("确认发送 %@ PRL", Self.text(p.amount)), role: .destructive) { broadcast(p) }
+            Button(Loc("取消"), role: .cancel) { prepared = nil }
+        } message: { p in
+            if let fee = p.fee {
+                Text((p.feeIsHigh ? Loc("本笔手续费明显高于平常，请确认。") + "\n" : "")
+                     + Loc("发送 %@ PRL 至\n%@\n网络手续费 %@ PRL，交易不可撤销。", Self.text(p.amount), p.recipient, Self.text(fee)))
+            } else {
+                Text(Loc("发送 %@ PRL 至\n%@\n手续费将从余额扣除，交易不可撤销。", Self.text(p.amount), p.recipient))
+            }
         }
         .sheet(isPresented: $savingContact) { ContactEditor(draft: ContactDraft(prefillAddress: addr)) }
         // This screen can stay pushed while the wallet or network is switched from Settings:
         // an amount (and above all a MAX) computed for the old one must not carry over.
         .onChange(of: session) { _, _ in
-            amount = ""; maxString = nil; maxSession = nil; result = nil
+            amount = ""; maxString = nil; maxSession = nil; result = nil; prepared = nil
         }
     }
 
-    private func send() {
+    /// Build + sign on-device (no broadcast yet), then confirm with the real fee.
+    private func prepare() {
         guard let amt = parsedAmount else { return }
         // User tapped MAX, didn't edit it, and is still on the wallet/network it was tapped for.
         let isMax = maxString != nil && amount == maxString && maxSession == session
+        preparing = true; result = nil
+        Task {
+            do {
+                prepared = try await store.prepareSend(to: addr, amountPRL: amt, isMax: isMax)
+            } catch {
+                resultIsWarning = false
+                result = error.localizedDescription
+            }
+            preparing = false
+        }
+    }
+
+    private func broadcast(_ p: PreparedSend) {
+        prepared = nil
         sending = true; result = nil
         Task {
-            let r = await store.send(to: addr, amountPRL: amt, isMax: isMax)
+            let outcome = await store.broadcast(p)
             sending = false
-            if r.ok {
+            switch outcome {
+            case .sent:
                 // Success → toast + return to the home dashboard, then refresh the
                 // on-chain balance so the home shows the new total.
                 amount = ""; address = ""
                 store.flashToast(Loc("已发送 ✓"))
                 dismiss()
                 await store.loadChain()
-            } else {
-                result = r.message
+            case .failed(let m):
+                resultIsWarning = false
+                result = m
+            case .unverified(let m):
+                // Possibly sent: keep the form (nothing to redo yet) and say why not to resend.
+                resultIsWarning = true
+                result = m
             }
         }
     }
@@ -618,16 +666,30 @@ struct ActivityView: View {
                 // Capped-width list so it doesn't stretch across a wide Mac window.
                 // One card with hairline-separated rows, not a stack of small cards.
                 ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(store.txs) { tx in
-                            ActivityRow(tx: tx)
-                                .padding(.vertical, Pearl.Space.xs)
-                            if tx.id != store.txs.last?.id {
-                                Divider().padding(.leading, 36 + Pearl.Space.sm)
+                    VStack(spacing: Pearl.Space.md) {
+                        LazyVStack(spacing: 0) {
+                            ForEach(store.txs) { tx in
+                                ActivityRow(tx: tx)
+                                    .padding(.vertical, Pearl.Space.xs)
+                                if tx.id != store.txs.last?.id {
+                                    Divider().padding(.leading, 36 + Pearl.Space.sm)
+                                }
                             }
                         }
+                        .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
+                        // History arrives a page (25 txs) at a time; older pages on request.
+                        if store.historyHasMore {
+                            Button { Task { await store.loadMoreHistory() } } label: {
+                                HStack(spacing: Pearl.Space.xs) {
+                                    if store.loadingMoreHistory { ProgressView().controlSize(.small) }
+                                    Text(Loc("加载更多"))
+                                }
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.callout.weight(.medium))
+                            .disabled(store.loadingMoreHistory)
+                        }
                     }
-                    .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
                     .padding(Pearl.Space.screen)
                     .frame(maxWidth: 620)
                     .frame(maxWidth: .infinity)
@@ -635,7 +697,7 @@ struct ActivityView: View {
             }
         }
         .navigationTitle(Loc("交易记录"))
-        .task { await store.loadChain() }
+        .task { await store.refreshIfStale() }
         .refreshable { await store.loadChain() }
     }
 }

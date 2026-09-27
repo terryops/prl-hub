@@ -1,12 +1,12 @@
 import Foundation
 import Combine
+import CryptoKit
 import LocalAuthentication
 
-/// Drives the wallet's lifecycle and is the single source of truth for the
-/// Wallet UI. Key management (BIP39 generate/validate via the Go framework,
-/// Keychain-backed mnemonic, lock/unlock) is fully real today. On-chain data
-/// (address derivation, balance, history, send) is gated behind `backendReady`
-/// and lands with the in-process node + `.200` watch-only server in M3–M4.
+/// Drives the wallet's lifecycle and is the single source of truth for the Wallet UI:
+/// the on-device wallets (seeds in the Keychain, BIP39 via the Go framework), lock /
+/// unlock, and on-chain state from Blockbook — balance, history, sends signed on-device,
+/// plus the internal-chain change the xpub scan can't see (`refreshChangeChain`).
 @MainActor
 final class WalletStore: ObservableObject {
 
@@ -16,13 +16,13 @@ final class WalletStore: ObservableObject {
     @Published var network: WalletNetwork = .mainnet
     @Published private(set) var mnemonic: String?      // in memory only while unlocked
     @Published private(set) var balance: WalletBalance = .zero
-    @Published private(set) var sync = SyncProgress()
     @Published private(set) var txs: [WalletTx] = []
     /// Stranded-change recovery: funds on change addresses the xpub scan can't see,
-    /// rediscovered from history and confirmed ours by trial-signing.
-    @Published private(set) var recoverable: [RecoverableUTXOSet] = []
-    @Published private(set) var recoveryScanning = false
-    @Published private(set) var recoveryScanned = false
+    /// rediscovered from history and confirmed ours by trial-signing. Settable only
+    /// because WalletStore+ChangeChain (another file) maintains them — views just read.
+    @Published var recoverable: [RecoverableUTXOSet] = []
+    @Published var recoveryScanning = false
+    @Published var recoveryScanned = false
     @Published var lastError: String?
     /// Transient success/info toast shown by the wallet UI (auto-clears after a moment).
     @Published var toast: String?
@@ -37,22 +37,37 @@ final class WalletStore: ObservableObject {
     @Published private(set) var xpub: String?
     @Published private(set) var backendReady = false
     /// True only after the tx history has been fetched at least once this session.
-    /// Balance (`backendReady`) lands before history, so the tx list gates its
-    /// "暂无交易记录" empty state on THIS — otherwise it flashes "暂无" before history loads.
+    /// The tx list gates its "暂无交易记录" empty state on THIS — otherwise it flashes
+    /// "暂无" before history loads.
     @Published private(set) var historyReady = false
-    var backendStatus: String { Loc("正在从链上同步余额与记录…") }
+    /// Older history pages exist beyond what's loaded (交易记录「加载更多」).
+    @Published private(set) var historyHasMore = false
+    @Published private(set) var loadingMoreHistory = false
+    /// Why the latest chain refresh failed (nil = it didn't), and when the snapshot last
+    /// refreshed — so a dead backend shows as stale data instead of silently frozen numbers.
+    /// (`lastSyncedAt` is read alongside `syncError`, so it needn't publish every load.)
+    @Published private(set) var syncError: String?
+    private(set) var lastSyncedAt: Date?
     var frameworkOK: Bool { OysterBridge.isAvailable() }
-    static let sendFeeReserve = Decimal(string: "0.001")!
-    /// How far a MAX sweep may exceed the amount the user confirmed (0.01 PRL): the unused
+    nonisolated static let sendFeeReserve = Decimal(string: "0.001")!
+    /// A fee above this many reserves is called out in the send confirmation.
+    nonisolated static let highFeeReserveMultiple: Decimal = 5
+    /// How far a MAX sweep may differ from the amount the user confirmed (0.01 PRL): the unused
     /// fee reserve fits comfortably, newly arrived funds or a different wallet do not.
-    static let maxSweepSlackSat: Int64 = 1_000_000
+    nonisolated static let maxSweepSlackSat: Int64 = 1_000_000
     /// Fee rate (sat/kB) used for the ownership-oracle trial-sign. Deliberately the
     /// relay floor, not a realistic spend fee: the trial only needs to BUILD, so a low
     /// fee keeps small owned change from failing to cover it and being mis-tagged foreign.
-    static let oracleFeePerKB: Int64 = 1_000
-    /// Bump when the ownership-oracle logic changes so cached classifications (which may
-    /// have wrongly tagged small owned change as foreign) are dropped and re-tested once.
-    static let changeClassVersion = 2
+    nonisolated static let oracleFeePerKB: Int64 = 1_000
+    /// A signed-but-unsent tx older than this is rebuilt rather than broadcast: its inputs
+    /// may have moved since.
+    nonisolated static let preparedSendLifetime: TimeInterval = 600
+    /// Most unclassified change candidates trial-signed per load; the rest follow on the next.
+    nonisolated static let changeScanBatch = 200
+    /// Blocks re-scanned below the incremental-discovery watermark, in case of a reorg.
+    nonisolated static let changeScanReorgMargin = 6
+    /// Confirmations after which a fully spent change address stops being re-fetched.
+    nonisolated static let changeRetireDepth = 6
     /// Total PRL currently rediscovered as recoverable stranded change.
     var recoverableTotal: Decimal { recoverable.reduce(0) { $0 + $1.valuePRL } }
 
@@ -83,10 +98,32 @@ final class WalletStore: ObservableObject {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appendingPathComponent(id == Self.legacyWalletID ? "PearlWallet" : "PearlWallet-\(id)", isDirectory: true)
     }
-    private var walletDataDir: String {
+    var walletDataDir: String {
         let base = walletDataURL(for: activeWalletID ?? Self.legacyWalletID)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        Self.protectWalletDir(base)
         return base.path
+    }
+
+    /// The wallet db holds oyster's key material for a seed that is itself device-only
+    /// (ThisDeviceOnly), so a backed-up copy could never be used on a restored device —
+    /// it could only leak. Keep it out of iCloud/iTunes/Time Machine backups, and on iOS
+    /// unreadable while the device is locked unless a signing call already has it open.
+    private static func protectWalletDir(_ dir: URL) {
+        var url = dir
+        if (try? url.resourceValues(forKeys: [.isExcludedFromBackupKey]))?.isExcludedFromBackup != true {
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try? url.setResourceValues(values)
+        }
+        #if os(iOS)
+        let fm = FileManager.default
+        let protection = FileProtectionType.completeUnlessOpen
+        let paths = [dir.path] + ((try? fm.subpathsOfDirectory(atPath: dir.path)) ?? []).map { dir.appendingPathComponent($0).path }
+        for p in paths where (try? fm.attributesOfItem(atPath: p)[.protectionKey] as? FileProtectionType) != protection {
+            try? fm.setAttributes([.protectionKey: protection], ofItemAtPath: p)
+        }
+        #endif
     }
 
     private static let walletAccountPrefix = "wallet."
@@ -99,7 +136,7 @@ final class WalletStore: ObservableObject {
         guard let id, id != Self.legacyWalletID else { return "change." }
         return "change.\(id)."
     }
-    private var changeKeyPrefix: String { changeKeyPrefix(for: activeWalletID) }
+    var changeKeyPrefix: String { changeKeyPrefix(for: activeWalletID) }
 
     /// iCloud-synced name of the legacy wallet (kept for older builds / other devices).
     private let nameKey = "wallet.name"
@@ -107,29 +144,53 @@ final class WalletStore: ObservableObject {
     private let walletsKey = "wallet.list"     // local only: seeds never leave the device
     private let walletsBackupKey = "wallet.list.unreadable"   // raw copy of a list this build couldn't decode
     private let activeWalletKey = "wallet.active"
-    private var chainLoadToken = UUID()
+    /// Set by a manual lock, cleared by an authenticated unlock: a locked wallet stays
+    /// locked across relaunches instead of auto-opening on the next launch.
+    private let lockedKey = "wallet.locked"
+
+    // Chain state below without `private` is shared with the WalletStore+Send and
+    // WalletStore+ChangeChain extensions (Swift has no type-private across files).
+    // Views never touch it; they read the @Published state above.
+    var chainLoadToken = UUID()
 
     /// Last on-chain snapshot from Blockbook (the source of truth), kept separate
     /// from the published `balance`/`txs` so optimistic sends can be overlaid on
     /// top deterministically (re-applying the overlay never double-counts).
     private var serverBalance: WalletBalance = .zero
-    private var serverTxs: [WalletTx] = []
+    var serverTxs: [WalletTx] = []
+    /// History pages beyond the first (「加载更多」). Refreshed only when reloaded, so their
+    /// confirmation counts are recomputed from the current tip on publish.
+    private var olderTxs: [WalletTx] = []
+    private var historyPagesLoaded = 1
+    /// Every address Blockbook lists under the xpub (both chains) — "ours" when mapping the
+    /// per-address change-chain histories, so a sweep back to the main address isn't shown
+    /// as money sent to someone else.
+    var xpubAddresses: Set<String> = []
     /// Funds on internal-chain change addresses the xpub scan can't see. Folded into
     /// the published balance and offered to coin selection so change never strands.
-    private var changeBalance: WalletBalance = .zero
-    private var changeOwned: Set<String> = []     // change addresses confirmed ours (persisted, per network)
-    private var changeForeign: Set<String> = []   // candidates confirmed NOT ours (cached to skip re-testing)
-    private var lastChangeScanSig: String?         // signature of the latest tx set; re-discover when it changes
-    private var changeClassLoadedFor: WalletNetwork?  // which network's cached classification is in memory
+    var changeBalance: WalletBalance = .zero
+    /// Persisted stranded-change classification for the open wallet + network.
+    var change = ChangeChainCache()
+    var lastChangeScanSig: String?         // confirmed-send set at the last complete discovery
+    var changeClassLoadedFor: WalletNetwork?  // which network's cached classification is in memory
+    /// The recovery screen asked for a full re-discovery; consumed by the next load.
+    var changeScanForced = false
     /// Just-broadcast sends Blockbook hasn't indexed yet, keyed by txid. Overlaid
     /// on the snapshot so a send shows instantly, then dropped once the indexer
     /// reports the real tx. See `publishOverlay()` / `reconcileAfterSend()`.
-    private var pendingSends: [String: WalletTx] = [:]
+    var pendingSends: [String: WalletTx] = [:]
+    /// Inputs (outpoint → sat) of sends Blockbook hasn't indexed yet, keyed by txid. Kept
+    /// out of coin selection so a second send in the indexing window can't pick an
+    /// already-spent outpoint, and out of `available` so MAX matches what can be spent.
+    var sendLocks: [String: [String: Int64]] = [:]
+    /// Broadcasts whose outcome is unknown (the request failed, the network may still have
+    /// the tx). While any is open, new sends are refused rather than risk paying twice.
+    var unverifiedSends: Set<String> = []
     /// Txids merged into `serverTxs` from the internal change chain (spends the xpub
     /// history can't see — see `refreshChangeChain`). When a fresh xpub history page
     /// replaces `serverTxs`, entries with these txids are carried over so the rows
     /// don't flicker out until the change-chain merge re-adds them.
-    private var mergedChangeTxids: Set<String> = []
+    var mergedChangeTxids: Set<String> = []
     /// Outpoints (`txid:vout`) of change UTXOs already committed to an in-flight recovery
     /// sweep Blockbook hasn't indexed yet. Kept OUT of `recoverable` (and coin selection)
     /// so a refresh/re-scan that races the indexer can't re-offer already-swept change as
@@ -137,13 +198,16 @@ final class WalletStore: ObservableObject {
     /// on refresh but showed recovered on relaunch. They stay counted in `changeBalance`
     /// (the funds are still ours, just moving) so the total doesn't dip meanwhile. Cleared
     /// once the sweep's txid lands in history.
-    private var recoveringOutpoints: Set<String> = []
-    private var recoveringTxid: String?
-    /// Single-flight guards for `loadChain`: prevent two loads from interleaving their
-    /// writes to serverBalance/serverTxs/changeBalance (a slow stale load could otherwise
-    /// clobber a fresh one). A call arriving mid-load schedules one trailing reload.
-    private var loadInFlight = false
+    var recoveringOutpoints: Set<String> = []
+    var recoveringTxid: String?
+    /// Single-flight chain load: every caller awaits the same task, and a call arriving
+    /// mid-load schedules one trailing pass, so no caller returns with data older than its
+    /// call and two loads never interleave their state writes. `loadGeneration` changes
+    /// with the wallet/network, retiring (and cancelling) the old wallet's task.
+    private var loadTask: Task<Void, Never>?
     private var loadAgain = false
+    private var loadGeneration = 0
+    private var lastChainLoadAt: Date?
 
     /// One store per process: every window (macOS ⌘N, iPad scenes) must share the wallet
     /// list, or each window's `saveWallets()` overwrites the others' changes.
@@ -154,19 +218,10 @@ final class WalletStore: ObservableObject {
     // MARK: lifecycle
 
     func bootstrap() {
+        Keychain.migrateLegacyItemsIfNeeded()
         loadMeta()
         loadWallets()
-        // Personal-use: auto-unlock on launch (no biometric). Only sending asks for auth.
-        if let id = activeWalletID, let m = Keychain.get(account: mnemonicAccount(for: id)) {
-            mnemonic = m
-            phase = .unlocked
-            Task { await loadChain() }
-        } else if activeWalletID != nil {
-            // The seed is listed in the Keychain but couldn't be read (macOS access prompt
-            // denied, keychain locked). Don't fall through to onboarding — let them retry.
-            lastError = Loc("无法读取钥匙串中的助记词，请重试解锁")
-            phase = .locked
-        } else {
+        guard let id = activeWalletID else {
             #if DEBUG
             // Screenshot-only: SHOT_MNEMONIC imports a throwaway test wallet on launch, so a
             // Mac capture run (no XCUITest to drive the import sheet) lands on a real 钱包 tab.
@@ -174,6 +229,32 @@ final class WalletStore: ObservableObject {
                commitWallet(name: "Pearl Wallet", mnemonic: m) { return }
             #endif
             phase = .noWallet
+            return
+        }
+        // Locked by hand last session: stay locked until the owner authenticates.
+        if manuallyLocked { phase = .locked; return }
+        if let m = Keychain.get(account: mnemonicAccount(for: id)) {
+            open(mnemonic: m)
+        } else {
+            // The seed is listed in the Keychain but couldn't be read (macOS access prompt
+            // denied, keychain locked). Don't fall through to onboarding — let them retry.
+            lastError = Loc("无法读取钥匙串中的助记词，请重试解锁")
+            phase = .locked
+        }
+    }
+
+    private var manuallyLocked: Bool {
+        get {
+            #if DEBUG
+            if Keychain.isMemoryOnly { return false }   // screenshot runs share the real defaults
+            #endif
+            return UserDefaults.standard.bool(forKey: lockedKey)
+        }
+        set {
+            #if DEBUG
+            if Keychain.isMemoryOnly { return }
+            #endif
+            UserDefaults.standard.set(newValue, forKey: lockedKey)
         }
     }
 
@@ -285,26 +366,47 @@ final class WalletStore: ObservableObject {
 
     /// Open another wallet on this device: set the current wallet's chain state aside,
     /// then load the chosen seed and re-sync. Returns false (nothing changes) if the seed
-    /// can't be read.
+    /// can't be read. While locked it only changes which wallet the unlock screen opens —
+    /// switching must not be a way around the lock.
     @discardableResult
     func switchWallet(to id: String) -> Bool {
         guard id != activeWalletID, wallets.contains(where: { $0.id == id }) else { return id == activeWalletID }
+        guard phase != .locked else {
+            activeWalletID = id
+            saveWallets()
+            lastError = nil
+            return true
+        }
         guard let m = Keychain.get(account: mnemonicAccount(for: id)) else {
             lastError = Loc("无法读取该钱包的助记词（钥匙串拒绝了访问），请重试")
             return false
         }
+        select(walletID: id)
+        open(mnemonic: m)
+        return true
+    }
+
+    /// Make `id` the active wallet with a clean chain state (the old one's optimistic state
+    /// is parked). The caller opens it with `open(mnemonic:)`.
+    private func select(walletID id: String) {
         invalidateChainLoads()
         parkOverlay()
         clearChainState()
         activeWalletID = id
         saveWallets()
-        restoreOverlay()
         WidgetBridge.clearWallet()   // don't keep showing the previous wallet until the new one publishes
+    }
+
+    /// Unlock the active wallet with its (already read or just typed) seed and start syncing.
+    private func open(mnemonic m: String) {
+        invalidateChainLoads()
+        restoreOverlay()
         mnemonic = m
         phase = .unlocked
+        manuallyLocked = false
         lastError = nil
+        if let id = activeWalletID { noteFingerprint(of: m, for: id) }
         Task { await loadChain() }
-        return true
     }
 
     // MARK: per-wallet optimistic state
@@ -312,31 +414,35 @@ final class WalletStore: ObservableObject {
     /// Optimistic sends and in-flight recovery guards of a wallet/network the user moved
     /// away from before Blockbook indexed them. Restored on the way back so a quick A→B→A
     /// can't re-show pre-send balances or re-offer already-swept change.
-    private struct ParkedOverlay {
-        var pendingSends: [String: WalletTx]
-        var recoveringOutpoints: Set<String>
+    struct ParkedOverlay {
+        var pendingSends: [String: WalletTx] = [:]
+        var sendLocks: [String: [String: Int64]] = [:]
+        var unverifiedSends: Set<String> = []
+        var recoveringOutpoints: Set<String> = []
         var recoveringTxid: String?
+        var isEmpty: Bool {
+            pendingSends.isEmpty && sendLocks.isEmpty && unverifiedSends.isEmpty
+                && recoveringOutpoints.isEmpty && recoveringTxid == nil
+        }
     }
-    private var parkedOverlays: [String: ParkedOverlay] = [:]
-    private func overlayKey(_ id: String?, _ net: WalletNetwork) -> String { "\(id ?? "")|\(net.rawValue)" }
+    var parkedOverlays: [String: ParkedOverlay] = [:]
+    func overlayKey(_ id: String?, _ net: WalletNetwork) -> String { "\(id ?? "")|\(net.rawValue)" }
 
     private func parkOverlay() {
         // Locked: lock() already parked this wallet's state and cleared it, so the empty
         // state seen now must not overwrite (erase) that parked copy.
         guard mnemonic != nil else { return }
-        let key = overlayKey(activeWalletID, network)
-        if pendingSends.isEmpty && recoveringOutpoints.isEmpty && recoveringTxid == nil {
-            parkedOverlays[key] = nil
-        } else {
-            parkedOverlays[key] = ParkedOverlay(pendingSends: pendingSends,
-                                                recoveringOutpoints: recoveringOutpoints,
-                                                recoveringTxid: recoveringTxid)
-        }
+        let parked = ParkedOverlay(pendingSends: pendingSends, sendLocks: sendLocks,
+                                   unverifiedSends: unverifiedSends,
+                                   recoveringOutpoints: recoveringOutpoints, recoveringTxid: recoveringTxid)
+        parkedOverlays[overlayKey(activeWalletID, network)] = parked.isEmpty ? nil : parked
     }
 
     private func restoreOverlay() {
         guard let p = parkedOverlays.removeValue(forKey: overlayKey(activeWalletID, network)) else { return }
         pendingSends = p.pendingSends
+        sendLocks = p.sendLocks
+        unverifiedSends = p.unverifiedSends
         recoveringOutpoints = p.recoveringOutpoints
         recoveringTxid = p.recoveringTxid
     }
@@ -347,29 +453,73 @@ final class WalletStore: ObservableObject {
     /// Validate a user-entered recovery phrase.
     func isValidMnemonic(_ m: String) -> Bool { OysterBridge.validate(m) }
 
+    /// The one spelling of a recovery phrase: lower-case words joined by single spaces.
+    /// BIP39 derives from the exact string, so stray tabs/newlines/double spaces must never
+    /// reach the Keychain.
+    nonisolated static func normalizedPhrase(_ raw: String) -> String {
+        raw.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
+    }
+
+    /// Keyed SHA-256 of a seed, stored in the (non-secret) wallet list so an import can
+    /// recognise a seed that's already here without reading every seed from the Keychain.
+    /// The key is a random per-device salt, so the list alone can't be tested against
+    /// guessed phrases elsewhere.
+    static func fingerprint(of phrase: String) -> String {
+        let mac = HMAC<SHA256>.authenticationCode(for: Data(normalizedPhrase(phrase).utf8),
+                                                  using: SymmetricKey(data: fingerprintSalt))
+        return mac.map { String(format: "%02x", $0) }.joined()
+    }
+    private static var fingerprintSalt: Data {
+        let d = UserDefaults.standard
+        if let s = d.data(forKey: "wallet.fingerprintSalt"), s.count == 32 { return s }
+        var bytes = [UInt8](repeating: 0, count: 32)
+        if SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) != errSecSuccess {
+            bytes = (0..<32).map { _ in UInt8.random(in: .min ... .max) }
+        }
+        d.set(Data(bytes), forKey: "wallet.fingerprintSalt")
+        return Data(bytes)
+    }
+
+    /// Record the seed fingerprint for a wallet whose seed was just read legitimately
+    /// (records from before fingerprints existed get one lazily).
+    private func noteFingerprint(of phrase: String, for id: String) {
+        guard let i = wallets.firstIndex(where: { $0.id == id }) else { return }
+        let fp = Self.fingerprint(of: phrase)
+        guard wallets[i].fingerprint != fp else { return }
+        wallets[i].fingerprint = fp
+        saveWallets()
+    }
+
+    /// The wallet already holding `phrase`, if any. Matches fingerprints; only records that
+    /// predate them fall back to reading their seed (once — the fingerprint is kept after).
+    private func existingWallet(for phrase: String) -> WalletRecord? {
+        let fp = Self.fingerprint(of: phrase)
+        if let hit = wallets.first(where: { $0.fingerprint == fp }) { return hit }
+        for w in wallets where w.fingerprint == nil {
+            guard let m = Keychain.get(account: mnemonicAccount(for: w.id)) else { continue }
+            noteFingerprint(of: m, for: w.id)
+            if Self.normalizedPhrase(m) == phrase { return w }
+        }
+        return nil
+    }
+
     /// Add a freshly created or imported wallet to this device and open it. Importing
     /// a seed that is already here just switches to that wallet instead of duplicating it.
     func commitWallet(name: String, mnemonic: String) -> Bool {
-        let phrase = mnemonic.trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: "  ", with: " ")
-            .lowercased()
+        let phrase = Self.normalizedPhrase(mnemonic)
         guard OysterBridge.validate(phrase) else {
             lastError = Loc("助记词无效（BIP39 校验失败）")
             return false
         }
-        if let existing = wallets.first(where: { Keychain.get(account: mnemonicAccount(for: $0.id)) == phrase }) {
-            // The phrase just matched this wallet's stored seed, so opening it can't hit a
-            // read failure — but only report success once it is actually open.
-            if existing.id == activeWalletID {
-                if self.mnemonic == nil {
-                    invalidateChainLoads()
-                    self.mnemonic = phrase
-                    Task { await loadChain() }
-                }
-                phase = .unlocked
-            } else if !switchWallet(to: existing.id) {
-                return false
+        if let existing = existingWallet(for: phrase) {
+            // Typing the seed proves ownership, so this also opens a locked wallet. Open it
+            // with the STORED seed when readable: that's the exact string its keys came from.
+            let seed = Keychain.get(account: mnemonicAccount(for: existing.id)) ?? phrase
+            if existing.id != activeWalletID {
+                select(walletID: existing.id)
+                open(mnemonic: seed)
+            } else if self.mnemonic == nil {
+                open(mnemonic: seed)
             }
             lastError = nil
             flashToast(Loc("该钱包已在本机，已切换到「%@」", existing.name))
@@ -383,33 +533,28 @@ final class WalletStore: ObservableObject {
             return false
         }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        invalidateChainLoads()
-        parkOverlay()
-        clearChainState()
-        wallets.append(WalletRecord(id: id, name: trimmed.isEmpty ? suggestedWalletName() : trimmed))
-        activeWalletID = id
-        saveWallets()
-        WidgetBridge.clearWallet()
-        self.mnemonic = phrase
-        phase = .unlocked
-        lastError = nil
-        Task { await loadChain() }
+        wallets.append(WalletRecord(id: id, name: trimmed.isEmpty ? suggestedWalletName() : trimmed,
+                                    fingerprint: Self.fingerprint(of: phrase)))
+        select(walletID: id)
+        open(mnemonic: phrase)
         return true
     }
 
-    /// Re-open the wallet after a manual lock (no biometric — personal use).
+    /// Re-open the wallet after a lock. Requires device auth — the lock would otherwise
+    /// be decorative.
     func unlock() async {
         guard let id = activeWalletID else { phase = .noWallet; return }
+        lastError = nil
+        guard await authenticate(reason: Loc("解锁钱包")) else {
+            if lastError == nil { lastError = Loc("认证未通过") }
+            return
+        }
+        guard phase == .locked, id == activeWalletID else { return }
         guard let m = Keychain.get(account: mnemonicAccount(for: id)) else {
             lastError = Loc("无法读取钥匙串中的助记词，请重试解锁")
             return
         }
-        invalidateChainLoads()
-        mnemonic = m
-        restoreOverlay()
-        phase = .unlocked
-        lastError = nil
-        await loadChain()
+        open(mnemonic: m)
     }
 
     /// Switch network live: persist, reset chain state, re-derive + re-sync.
@@ -427,7 +572,7 @@ final class WalletStore: ObservableObject {
     }
 
     /// Device auth (Face ID / Touch ID / passcode / login password). Gates the
-    /// two sensitive actions: revealing the seed and authorising a send.
+    /// sensitive actions: unlocking, revealing the seed and authorising a send.
     /// Fails CLOSED — if the device has no lock configured at all (so no auth can
     /// be evaluated), the action is denied rather than silently allowed.
     func authenticate(reason: String) async -> Bool {
@@ -440,17 +585,40 @@ final class WalletStore: ObservableObject {
         return (try? await ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason)) ?? false
     }
 
+    // MARK: chain loading
+
     /// Derive the real receive address (on-device) and pull balance + history
-    /// from Blockbook. Safe to call repeatedly (idempotent). Single-flighted so
-    /// concurrent/re-entrant callers can't interleave two loads' state writes.
-    func loadChain() async {
-        if loadInFlight { loadAgain = true; return }
-        loadInFlight = true
-        defer { loadInFlight = false }
-        repeat {
-            loadAgain = false
-            await loadChainOnce()
-        } while loadAgain
+    /// from Blockbook. Safe to call repeatedly (idempotent). Single-flighted: returns once
+    /// a load that started after this call has finished. `forceChangeScan` re-runs the
+    /// full stranded-change discovery (the recovery screen).
+    func loadChain(forceChangeScan: Bool = false) async {
+        if forceChangeScan { changeScanForced = true }
+        if let running = loadTask {
+            loadAgain = true
+            await running.value
+            return
+        }
+        let generation = loadGeneration
+        let task = Task { [weak self] in
+            guard let self else { return }
+            repeat {
+                self.loadAgain = false
+                await self.loadChainOnce()
+            } while self.loadAgain && generation == self.loadGeneration && !Task.isCancelled
+            // Same main-actor turn as the loop's exit check, so a caller can't slip in
+            // between and wait on a task that will never loop again.
+            if generation == self.loadGeneration { self.loadTask = nil }
+        }
+        loadTask = task
+        await task.value
+    }
+
+    /// Screen-appearance refresh: joins a load already in flight, and skips one that
+    /// finished moments ago (the dashboard, 收款 and 记录 each ask on appear).
+    func refreshIfStale(maxAge: TimeInterval = 5) async {
+        if let running = loadTask { await running.value; return }
+        if let t = lastChainLoadAt, Date().timeIntervalSince(t) < maxAge { return }
+        await loadChain()
     }
 
     private func loadChainOnce() async {
@@ -484,49 +652,114 @@ final class WalletStore: ObservableObject {
         guard isCurrentChainLoad(token, mnemonic: mnemonic, network: expectedNetwork) else { return }
         guard let xp = xpub else { return }
         let bb = BlockbookClient(network: expectedNetwork)
-        if let b = try? await bb.balance(xpub: xp) {
+        // Balance + history in ONE response (they can't disagree about a just-indexed send),
+        // alongside the confirmed UTXOs that define what is actually spendable.
+        let knownChange = change.owned
+        async let accountRequest = bb.account(xpub: xp, knownChange: knownChange)
+        async let utxoRequest = bb.utxos(xpub: xp)
+        let account: BlockbookClient.XpubAccount
+        do {
+            account = try await accountRequest
+        } catch {
             guard isCurrentChainLoad(token, mnemonic: mnemonic, network: expectedNetwork) else { return }
-            serverBalance = b; backendReady = true
-            // Publish the real balance the INSTANT backendReady flips — otherwise the
-            // hero shows "0 PRL" for the seconds the slow history + change-chain scan
-            // below take before the next publishOverlay() runs.
-            publishOverlay()
+            // Backend unreachable: keep the last good figures and say so. The change-chain
+            // refresh would only stall behind the same dead backend, so skip it too.
+            syncError = Loc("无法连接区块浏览器")
+            lastChainLoadAt = Date()
+            return
         }
-        if let h = try? await bb.history(xpub: xp, knownChange: changeOwned) {
-            guard isCurrentChainLoad(token, mnemonic: mnemonic, network: expectedNetwork) else { return }
-            // Carry over internal-chain spends merged by refreshChangeChain — the xpub
-            // page can't contain them, and dropping them here would flicker the rows
-            // out until the (slow) change-chain merge below re-adds them.
-            let carried = serverTxs.filter { tx in
-                mergedChangeTxids.contains(tx.txid) && !h.contains(where: { $0.txid == tx.txid })
-            }
-            serverTxs = carried.isEmpty ? h : (h + carried).sorted { $0.time > $1.time }
-            // The indexer now reports these txids → stop overlaying our optimistic copies.
-            for tx in h where pendingSends[tx.txid] != nil { pendingSends.removeValue(forKey: tx.txid) }
-            // The recovery sweep is indexed too → stop guarding its swept change outpoints.
-            if let tid = recoveringTxid, h.contains(where: { $0.txid == tid }) {
-                recoveringOutpoints = []; recoveringTxid = nil
-            }
-            historyReady = true
-            // Publish the txs the INSTANT history lands — otherwise the list shows
-            // "暂无交易记录" until the slow change-chain scan below republishes.
-            publishOverlay()
-        }
-        // Bring internal-chain change (which the xpub scan misses) into balance + spending.
-        await refreshChangeChain(xpub: xp, dir: dir, net: net, token: token, force: false)
+        let utxos = try? await utxoRequest
         guard isCurrentChainLoad(token, mnemonic: mnemonic, network: expectedNetwork) else { return }
+        let total = account.confirmed + account.unconfirmed
+        // Available = what coin selection can actually spend: the confirmed UTXOs. The old
+        // `confirmed + min(0, unconfirmed)` overstated it whenever an unconfirmed receipt
+        // offset an unconfirmed spend (whose inputs then counted as spendable again).
+        let spendable = utxos.map { list in RawTx.prl(fromSat: list.reduce(Int64(0)) { $0 + (Int64($1.value) ?? 0) }) }
+            ?? max(0, account.confirmed + min(0, account.unconfirmed))
+        serverBalance = WalletBalance(total: total, available: max(0, min(spendable, total)))
+        xpubAddresses = account.addresses
+        if historyPagesLoaded <= 1, historyHasMore != account.hasMorePages { historyHasMore = account.hasMorePages }
+        // Carry over internal-chain spends merged by refreshChangeChain — the xpub
+        // page can't contain them, and dropping them here would flicker the rows
+        // out until the (slow) change-chain merge below re-adds them.
+        let pageIDs = Set(account.txs.map(\.txid))
+        let carried = serverTxs.filter { mergedChangeTxids.contains($0.txid) && !pageIDs.contains($0.txid) }
+        serverTxs = carried.isEmpty ? account.txs : (account.txs + carried).sorted { $0.time > $1.time }
+        settleIndexed(pageIDs)
+        if !backendReady { backendReady = true }
+        if !historyReady { historyReady = true }
+        lastSyncedAt = Date()
+        if syncError != nil { syncError = nil }
+        // Publish the moment the snapshot lands — the change-chain scan below is slower.
         publishOverlay()
+        // Bring internal-chain change (which the xpub scan misses) into balance + spending.
+        await refreshChangeChain(xpub: xp, dir: dir, net: net, token: token, force: changeScanForced)
+        guard isCurrentChainLoad(token, mnemonic: mnemonic, network: expectedNetwork) else { return }
+        await resolveStalePendingSends(bb: bb, token: token)
+        lastChainLoadAt = Date()
+        publishOverlay()
+    }
+
+    /// Append the next history page (交易记录「加载更多」).
+    func loadMoreHistory() async {
+        guard historyHasMore, !loadingMoreHistory, mnemonic != nil, let xp = xpub else { return }
+        let token = chainLoadToken
+        let net = network
+        let page = historyPagesLoaded + 1
+        loadingMoreHistory = true
+        defer { loadingMoreHistory = false }
+        guard let more = try? await BlockbookClient(network: net)
+                .account(xpub: xp, page: page, knownChange: change.owned.union(xpubAddresses)),
+              chainLoadToken == token, network == net else { return }
+        let known = Set(serverTxs.map(\.txid)).union(olderTxs.map(\.txid))
+        olderTxs += more.txs.filter { !known.contains($0.txid) }
+        historyPagesLoaded = page
+        historyHasMore = more.hasMorePages
+        publishOverlay()
+    }
+
+    /// The indexer now reports these txids → stop overlaying our optimistic copies and
+    /// release the outpoints they spend (Blockbook's own UTXO set has caught up).
+    func settleIndexed(_ txids: Set<String>) {
+        for id in txids where pendingSends[id] != nil || sendLocks[id] != nil || unverifiedSends.contains(id) {
+            pendingSends[id] = nil
+            sendLocks[id] = nil
+            unverifiedSends.remove(id)
+        }
+        // The recovery sweep is indexed too → stop guarding its swept change outpoints.
+        if let tid = recoveringTxid, txids.contains(tid) {
+            recoveringOutpoints = []; recoveringTxid = nil
+        }
+    }
+
+    /// Highest block implied by the fresh first page (a tx's height + its confirmations).
+    private var tipHeight: Int? {
+        serverTxs.compactMap { tx in tx.height.map { $0 + tx.confirmations - 1 } }.max()
+    }
+
+    /// Rows fetched a while ago (older pages, archived change-chain spends) with their
+    /// confirmation counts brought up to the current tip.
+    private func withLiveConfirmations(_ rows: [WalletTx]) -> [WalletTx] {
+        guard let tip = tipHeight else { return rows }
+        return rows.map { tx in
+            guard let h = tx.height else { return tx }
+            var t = tx
+            t.confirmations = max(tx.confirmations, tip - h + 1)
+            return t
+        }
     }
 
     /// Recompute the published `balance` / `txs` from the on-chain snapshot plus any
     /// still-unindexed optimistic sends. Idempotent: an overlay is only applied for
     /// a pending tx the snapshot doesn't yet contain, so re-publishing (or a second
     /// send) never double-counts a spend.
-    private func publishOverlay() {
-        let known = Set(serverTxs.map { $0.txid })
+    func publishOverlay() {
+        var known = Set(serverTxs.map { $0.txid })
+        var extras: [WalletTx] = []
+        for tx in olderTxs + change.archive where known.insert(tx.txid).inserted { extras.append(tx) }
         let overlay = pendingSends.values.filter { !known.contains($0.txid) }
-        let nextTxs = overlay.isEmpty ? serverTxs
-                                      : (overlay + serverTxs).sorted { $0.time > $1.time }
+        let nextTxs = (extras.isEmpty && overlay.isEmpty) ? serverTxs
+            : (serverTxs + withLiveConfirmations(extras) + overlay).sorted { $0.time > $1.time }
         // Assigning an equal value still fires objectWillChange and re-renders every
         // wallet screen, and the chain poll republishes unchanged data every 15–60 s.
         if nextTxs != txs { txs = nextTxs }
@@ -534,10 +767,14 @@ final class WalletStore: ObservableObject {
         let base = WalletBalance(total: serverBalance.total + changeBalance.total,
                                  available: serverBalance.available + changeBalance.available)
         let outflow = overlay.reduce(Decimal(0)) { $0 + $1.amount + $1.fee }
-        let nextBalance = outflow > 0
-            ? WalletBalance(total: max(0, base.total - outflow),
-                            available: max(0, base.available - outflow))
-            : base
+        // Until the indexer catches up, the inputs of a pending send still look spendable;
+        // what isn't spendable is exactly those inputs (the change only returns once mined).
+        let lockedInputs = overlay.reduce(Decimal(0)) { sum, tx in
+            sum + (sendLocks[tx.txid].map { RawTx.prl(fromSat: $0.values.reduce(0, +)) } ?? tx.amount + tx.fee)
+        }
+        let nextBalance = overlay.isEmpty ? base
+            : WalletBalance(total: max(0, base.total - outflow),
+                            available: max(0, base.available - lockedInputs))
         if nextBalance != balance { balance = nextBalance }
 
         // Mirror the published wallet state into the shared App Group so the
@@ -561,16 +798,6 @@ final class WalletStore: ObservableObject {
                                       labelNoTx: Loc("暂无交易记录"),
                                       languageCode: LocBundleHolder.shared.languageCode)
             WidgetBridge.updatePrice(prlUsd: PRLPriceManager.shared.usd, usdCny: nil)
-        }
-    }
-
-    /// After a broadcast, pull fresh chain data a few times until Blockbook reports
-    /// the new tx (which drops the optimistic overlay and makes the balance exact).
-    private func reconcileAfterSend(txid: String) async {
-        for _ in 0..<12 {
-            try? await Task.sleep(for: .seconds(3))
-            await loadChain()
-            if pendingSends[txid] == nil { break }
         }
     }
 
@@ -620,331 +847,6 @@ final class WalletStore: ObservableObject {
         }
     }
 
-    /// Build + sign (on-device) + broadcast a payment. Returns (success, txid-or-error).
-    /// `isMax` carries the caller's EXPLICIT "send everything" intent (the MAX button);
-    /// only then do we sweep to a single output. It is never inferred from the live
-    /// balance — see the isSweep note below.
-    func send(to recipient: String, amountPRL: Decimal, isMax: Bool = false) async -> (ok: Bool, message: String) {
-        // Spending requires device auth (Touch ID / password).
-        guard await authenticate(reason: Loc("确认转账")) else { return (false, Loc("认证未通过")) }
-        let recipient = recipient.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard PRLAddress.isValid(recipient, network: network) else { return (false, Loc("收款地址格式不正确")) }
-        guard let mnemonic, let xp = xpub else { return (false, Loc("钱包未就绪")) }
-        // Everything this send uses is captured now; if the wallet, network or lock state
-        // changes during the network round-trips below, the send is abandoned.
-        let session = chainLoadToken
-        let changeSets = recoverable
-        guard amountPRL + Self.sendFeeReserve <= balance.available else {
-            return (false, Loc("余额不足：请预留至少 %@ PRL 作为手续费", "\(Self.sendFeeReserve)"))
-        }
-        let dir = walletDataDir
-        let net = network.rawValue
-        let bb = BlockbookClient(network: network)
-        guard let amountSat = Self.satoshis(from: amountPRL) else {
-            return (false, Loc("金额无效：最多支持 %@ 位小数", "\(BlockbookClient.decimals)"))
-        }
-        do {
-            let utxos = try await bb.utxos(xpub: xp)
-            var utxoObjs: [[String: Any]] = []
-            for u in utxos {
-                guard let value = Int64(u.value) else {
-                    // A malformed UTXO value must NOT be silently zeroed — that would
-                    // under-fund the tx and could sweep real value into the miner fee.
-                    return (false, Loc("链上数据异常（UTXO 金额无法解析），已取消转账以保护资金"))
-                }
-                utxoObjs.append(["txid": u.txid, "vout": u.vout, "value": value, "address": u.address ?? ""])
-            }
-            // Also offer internal-chain change UTXOs (invisible to the xpub scan) to coin
-            // selection, with their address injected — oyster signs them like any other.
-            for s in changeSets {
-                for u in s.utxos {
-                    guard let value = Int64(u.value) else { continue }
-                    utxoObjs.append(["txid": u.txid, "vout": u.vout, "value": value, "address": s.address])
-                }
-            }
-            guard !utxoObjs.isEmpty else { return (false, Loc("没有可用的 UTXO（余额不足或未确认）")) }
-            let fee = (try? await bb.estimateFeePerKB()) ?? 50_000
-            guard chainLoadToken == session else { return (false, Loc("钱包或网络已切换，已取消本次转账")) }
-            let utxosJSON = String(data: try JSONSerialization.data(withJSONObject: utxoObjs), encoding: .utf8) ?? "[]"
-            // Full-balance ("MAX") send → true single-output sweep. Otherwise the fixed
-            // `sendFeeReserve` (which far exceeds the real fee) would come back as a change
-            // output on the internal change chain and re-strand. Same converging fold as
-            // recoverChange. Partial sends keep the plain build — their change is expected,
-            // and now visible + spendable via refreshChangeChain.
-            //
-            // CRITICAL: the sweep decision is the caller's EXPLICIT intent, never a re-read
-            // of `balance.available`. That @Published value can be lowered by a concurrent
-            // loadChain()/publishOverlay() during the awaits above (the xpub scan briefly
-            // drops the prior tx's stranded change before refreshChangeChain restores it),
-            // which would silently promote a partial send into a sweep that pays the WHOLE
-            // balance to the recipient. amountSat (the user's typed amount) is what a
-            // non-sweep send pays; a sweep ignores it and sends the full input set.
-            let isSweep = isMax
-            let hex: String
-            if isSweep {
-                let totalInputSat = utxoObjs.reduce(Int64(0)) { $0 + (($1["value"] as? Int64) ?? 0) }
-                let startSat = totalInputSat - Self.estimateFeeSat(inputs: utxoObjs.count, outputs: 2, feePerKB: fee)
-                guard startSat > 0 else { return (false, Loc("余额不足：请预留至少 %@ PRL 作为手续费", "\(Self.sendFeeReserve)")) }
-                // The user confirmed `amountPRL`. The sweep pays out everything the inputs
-                // hold, which is only ever the fee reserve more than that — unless funds
-                // arrived (or the wallet changed) since MAX was tapped. Refuse rather than
-                // send a larger amount than the confirmation showed.
-                guard startSat <= amountSat + Self.maxSweepSlackSat else {
-                    return (false, Loc("余额已变化，请重新点 MAX 后再发送"))
-                }
-                hex = try await sweepConverge(mnemonic: mnemonic, dir: dir, net: net, to: recipient,
-                                              amountSat: startSat, totalSat: totalInputSat,
-                                              feePerKB: fee, utxosJSON: utxosJSON)
-            } else {
-                hex = try await WalletDBQueue.shared.run {
-                    try OysterBridge.buildSignedTx(mnemonic: mnemonic, dataDir: dir, network: net,
-                                                   to: recipient, amountSat: amountSat, feeSatPerKB: fee, utxosJSON: utxosJSON)
-                }
-            }
-            let txid = try await bb.broadcast(hex)
-            // Switched wallets while this one was signing/broadcasting: the send still went
-            // out from the original wallet, so don't overlay it onto the one now open.
-            guard chainLoadToken == session else { return (true, txid) }
-            // Reflect the send IMMEDIATELY. Blockbook can take several refreshes to
-            // index the mempool tx, so instead of blocking on a poll we overlay an
-            // optimistic 待确认 row and drop the spent amount from the balance now.
-            // `reconcileAfterSend` then swaps in the real indexed tx + exact balance.
-            let pending = WalletTx(txid: txid, direction: .sent, amount: amountPRL,
-                                   fee: Self.sendFeeReserve, confirmations: 0,
-                                   time: Date(), address: recipient)
-            pendingSends[txid] = pending
-            publishOverlay()
-            Task { await reconcileAfterSend(txid: txid) }
-            return (true, txid)
-        } catch {
-            return (false, error.localizedDescription)
-        }
-    }
-
-    // MARK: stranded-change recovery
-
-    /// Force a fresh internal-chain discovery (the explicit recovery screen). `loadChain`
-    /// already keeps `recoverable`/`changeBalance` current; this just re-runs it on demand.
-    func scanRecoverableChange() async {
-        guard let xp = xpub else { return }
-        if changeClassLoadedFor != network { loadChangeClassification(for: network); changeClassLoadedFor = network }
-        recoveryScanning = true
-        defer { recoveryScanning = false }
-        await refreshChangeChain(xpub: xp, dir: walletDataDir, net: network.rawValue, token: chainLoadToken, force: true)
-    }
-
-    /// Track the wallet's internal-chain change addresses (which the xpub scan can't
-    /// see), fold their balance into `changeBalance` and their UTXOs into `recoverable`
-    /// for both display and coin selection — so change stops stranding. The expensive
-    /// discovery (history + trial-signing to confirm ownership) only runs when the tx
-    /// set changed or `force`; the cheap per-address UTXO refresh runs every time.
-    private func refreshChangeChain(xpub xp: String, dir: String, net: String, token: UUID, force: Bool) async {
-        guard let mnemonic else { return }
-        let bb = BlockbookClient(network: network)
-        // A send funded ENTIRELY by internal-chain change touches no xpub-derived
-        // address, so the xpub history can never report it: its optimistic 待确认
-        // row never reconciled (stuck "Unconfirmed" forever, even once mined) and
-        // its outflow stayed deducted on top of the already-shrunk changeBalance.
-        // Each owned change address's OWN history is the only place those spends
-        // exist — fold the txs the xpub scan missed into the snapshot (so they
-        // reconcile, show live confirmations, and survive relaunch), and surface
-        // their outputs as change candidates (their change is invisible to
-        // changeCandidates' xpub scan for the same reason).
-        var changeChainOuts = Set<String>()
-        for addr in changeOwned {
-            guard let r = try? await bb.history(address: addr, mine: changeOwned) else { continue }
-            guard isCurrentChainLoad(token, mnemonic: mnemonic, network: network) else { return }
-            changeChainOuts.formUnion(r.outAddrs)
-            // Xpub-history copies stay authoritative (token-aware classification);
-            // previously-merged copies are REPLACED so confirmations stay live.
-            // NOTE: a merged tx's "sent" amount counts its own not-yet-classified
-            // change as paid out; once the oracle below tags that change ours, the
-            // next load remaps with the bigger `mine` set and the amount corrects.
-            let xpubTxids = Set(serverTxs.map { $0.txid }).subtracting(mergedChangeTxids)
-            let fresh = r.txs.filter { !xpubTxids.contains($0.txid) }
-            guard !fresh.isEmpty else { continue }
-            mergedChangeTxids.formUnion(fresh.map { $0.txid })
-            let freshIds = Set(fresh.map { $0.txid })
-            serverTxs = (serverTxs.filter { !freshIds.contains($0.txid) } + fresh)
-                .sorted { $0.time > $1.time }
-            // The indexer reports these txids → same reconciliation as the xpub history.
-            for tx in fresh where pendingSends[tx.txid] != nil { pendingSends.removeValue(forKey: tx.txid) }
-            if let tid = recoveringTxid, fresh.contains(where: { $0.txid == tid }) {
-                recoveringOutpoints = []; recoveringTxid = nil
-            }
-        }
-        // NOTE: do NOT publishOverlay() here. Dropping the optimistic pending row above
-        // while `changeBalance` still holds its stale pre-send value would briefly
-        // republish the balance at the FULL pre-send amount (base = serverBalance +
-        // stale change, with the overlay now gone) — a visible spike back to "as if the
-        // send never happened", and an overstated `available` the send guard could act
-        // on. changeBalance is recomputed from live UTXOs below, and the publishOverlay()
-        // at the end of this function publishes the correct, deducted figure.
-        let scanSig = Self.changeScanSignature(serverTxs)
-        if force || scanSig != lastChangeScanSig,
-           let candidates = try? await bb.changeCandidates(xpub: xp, extra: changeChainOuts) {
-            lastChangeScanSig = scanSig
-            for addr in candidates.prefix(200) where !changeOwned.contains(addr) && !changeForeign.contains(addr) {
-                guard let utxos = try? await bb.utxos(address: addr), !utxos.isEmpty else { continue }
-                let valueSat = utxos.compactMap { Int64($0.value) }.reduce(0, +)
-                guard valueSat > 0 else { continue }
-                let json = Self.encodeUTXOs(utxos, address: addr)
-                // Ownership oracle: oyster signs only its own keys, so a successful build
-                // proves the address is ours (a foreign recipient throws). Never broadcast.
-                //
-                // Trial-sign as a single-output sweep at the relay-floor fee, reserving a
-                // 2-output fee so the build always has headroom. The old test (½-value
-                // output at 50k sat/kB) FAILED for small owned change — the fee exceeded
-                // the value — and mis-cached it as foreign, hiding those funds permanently.
-                let trialFee = Self.estimateFeeSat(inputs: utxos.count, outputs: 2, feePerKB: Self.oracleFeePerKB)
-                let trialAmount = max(Int64(1), valueSat - trialFee)
-                let owned = await WalletDBQueue.shared.run { () -> Bool in
-                    (try? OysterBridge.buildSignedTx(mnemonic: mnemonic, dataDir: dir, network: net,
-                        to: addr, amountSat: trialAmount, feeSatPerKB: Self.oracleFeePerKB, utxosJSON: json)) != nil
-                }
-                guard isCurrentChainLoad(token, mnemonic: mnemonic, network: network) else { return }
-                if owned { changeOwned.insert(addr) } else { changeForeign.insert(addr) }
-            }
-            // A wallet/network switch mid-scan cleared these sets; don't write them under the new wallet's keys.
-            guard isCurrentChainLoad(token, mnemonic: mnemonic, network: network) else { return }
-            persistChangeClassification()
-        }
-        var sets: [RecoverableUTXOSet] = []   // offered to recover + coin selection (excludes in-flight-swept)
-        var allChangeSat: Int64 = 0           // EVERY owned change UTXO → the balance TOTAL (stable mid-sweep)
-        var spendableChangeSat: Int64 = 0     // excludes in-flight-swept → the balance AVAILABLE (matches selection)
-        for addr in changeOwned {
-            guard let utxos = try? await bb.utxos(address: addr), !utxos.isEmpty else { continue }
-            allChangeSat += utxos.compactMap { Int64($0.value) }.reduce(0, +)
-            // Hide outpoints already committed to an in-flight recovery so a refresh can't re-offer them.
-            let spendable = recoveringOutpoints.isEmpty ? utxos
-                : utxos.filter { !recoveringOutpoints.contains(Self.outpoint($0.txid, $0.vout)) }
-            let valueSat = spendable.compactMap { Int64($0.value) }.reduce(0, +)
-            guard !spendable.isEmpty, valueSat > 0 else { continue }
-            spendableChangeSat += valueSat
-            sets.append(RecoverableUTXOSet(address: addr, utxos: spendable, valueSat: valueSat))
-        }
-        guard isCurrentChainLoad(token, mnemonic: mnemonic, network: network) else { return }
-        // total counts in-flight-swept change so the displayed total holds steady mid-sweep;
-        // available excludes it, because coin selection can't spend an outpoint already
-        // committed to a recovery sweep — otherwise a send could be offered phantom funds.
-        changeBalance = WalletBalance(total: Decimal(allChangeSat) / pow(Decimal(10), BlockbookClient.decimals),
-                                      available: Decimal(spendableChangeSat) / pow(Decimal(10), BlockbookClient.decimals))
-        // Cache the scanned change balance so the next launch can fold it into the very
-        // first publish — without this the hero briefly shows only the xpub (external)
-        // balance, then "jumps up" seconds later when this slow scan completes.
-        UserDefaults.standard.set(["\(changeBalance.total)", "\(changeBalance.available)"],
-                                  forKey: "\(changeKeyPrefix)\(net).balance")
-        recoverable = sets.sorted { $0.valueSat > $1.valueSat }
-        recoveryScanned = true
-        publishOverlay()
-    }
-
-    private func persistChangeClassification() {
-        let d = UserDefaults.standard
-        d.set(Array(changeOwned), forKey: "\(changeKeyPrefix)\(network.rawValue).owned")
-        d.set(Array(changeForeign), forKey: "\(changeKeyPrefix)\(network.rawValue).foreign")
-    }
-    private func loadChangeClassification(for net: WalletNetwork) {
-        let d = UserDefaults.standard
-        // Drop a stale-versioned cache (the prior oracle could mis-tag small owned change
-        // as foreign): start empty so every candidate is re-tested once with the new oracle.
-        if d.integer(forKey: "\(changeKeyPrefix)\(net.rawValue).ver") != Self.changeClassVersion {
-            changeOwned = []; changeForeign = []
-            d.removeObject(forKey: "\(changeKeyPrefix)\(net.rawValue).balance")
-            d.set(Self.changeClassVersion, forKey: "\(changeKeyPrefix)\(net.rawValue).ver")
-        } else {
-            changeOwned = Set((d.array(forKey: "\(changeKeyPrefix)\(net.rawValue).owned") as? [String]) ?? [])
-            changeForeign = Set((d.array(forKey: "\(changeKeyPrefix)\(net.rawValue).foreign") as? [String]) ?? [])
-            // Seed the change balance from the last scan so the first publish already
-            // includes it (no 48→52 jump at launch); refreshChangeChain re-verifies and
-            // overwrites it with live data shortly after.
-            if let cached = d.array(forKey: "\(changeKeyPrefix)\(net.rawValue).balance") as? [String], cached.count == 2,
-               let total = Decimal(string: cached[0]), let available = Decimal(string: cached[1]) {
-                changeBalance = WalletBalance(total: total, available: available)
-            }
-        }
-        lastChangeScanSig = nil
-    }
-
-    /// Signature of the latest tx set, used to decide when to re-run change discovery.
-    /// Count + newest txid, so a NEW tx (which can create fresh stranded change) is
-    /// detected even when the history page is capped (count alone pins at pageSize).
-    private static func changeScanSignature(_ txs: [WalletTx]) -> String {
-        "\(txs.count):\(txs.first?.txid ?? "")"
-    }
-
-    /// Sweep every rediscovered stranded-change UTXO to `destination` in one tx,
-    /// folding any residual change back in so nothing re-strands. Requires device auth.
-    func recoverChange(to destination: String) async -> (ok: Bool, message: String) {
-        guard await authenticate(reason: Loc("确认找回搁浅的找零")) else { return (false, Loc("认证未通过")) }
-        let destination = destination.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard PRLAddress.isValid(destination, network: network) else { return (false, Loc("收款地址格式不正确")) }
-        guard let mnemonic else { return (false, Loc("钱包未就绪")) }
-        let session = chainLoadToken
-        let sets = recoverable
-        let total = sets.reduce(Int64(0)) { $0 + $1.valueSat }
-        guard !sets.isEmpty, total > 0 else { return (false, Loc("没有可找回的找零")) }
-        let dir = walletDataDir
-        let net = network.rawValue
-        let bb = BlockbookClient(network: network)
-        let feePerKB = (try? await bb.estimateFeePerKB()) ?? 50_000
-        guard chainLoadToken == session else { return (false, Loc("钱包或网络已切换，已取消本次找回")) }
-        let utxosJSON = Self.encodeUTXOs(sets)
-        let inputCount = sets.reduce(0) { $0 + $1.utxos.count }
-        do {
-            // Over-reserve (2 outputs' worth of fee) so the first build succeeds with a
-            // change output, then fold that change back in until the sweep collapses to a
-            // single output — no residual re-stranding.
-            let startSat = total - Self.estimateFeeSat(inputs: inputCount, outputs: 2, feePerKB: feePerKB)
-            guard startSat > 0 else { return (false, Loc("找零金额过小，不足以支付手续费")) }
-            let hex = try await sweepConverge(mnemonic: mnemonic, dir: dir, net: net, to: destination,
-                                              amountSat: startSat, totalSat: total,
-                                              feePerKB: feePerKB, utxosJSON: utxosJSON)
-            let txid = try await bb.broadcast(hex)
-            guard chainLoadToken == session else { return (true, txid) }
-            // Guard the just-swept outpoints so a refresh/re-scan before Blockbook indexes the
-            // spend can't re-discover them and flip the screen back to "un-recovered". They stay
-            // in `changeBalance`, so the total holds steady until the funds land on the destination.
-            recoveringOutpoints = Set(sets.flatMap { s in s.utxos.map { Self.outpoint($0.txid, $0.vout) } })
-            recoveringTxid = txid
-            recoverable = []
-            recoveryScanned = false
-            // Refresh a few times so the recovered funds show up once Blockbook indexes them.
-            Task { [weak self] in
-                for _ in 0..<8 {
-                    try? await Task.sleep(for: .seconds(3))
-                    await self?.loadChain()
-                }
-            }
-            return (true, txid)
-        } catch {
-            return (false, error.localizedDescription)
-        }
-    }
-
-    /// Converging single-output sweep: starting from `amountSat`, rebuild the tx while
-    /// folding any residual change back into the payment until it collapses to one
-    /// output — so a full-balance send/recovery leaves nothing on the internal change
-    /// chain. Shared by `send()` (MAX) and `recoverChange()`.
-    private func sweepConverge(mnemonic: String, dir: String, net: String, to destination: String,
-                               amountSat: Int64, totalSat: Int64, feePerKB: Int64,
-                               utxosJSON: String) async throws -> String {
-        var amountSat = amountSat
-        var hex = ""
-        for _ in 0..<5 {
-            hex = try await WalletDBQueue.shared.run {
-                try OysterBridge.buildSignedTx(mnemonic: mnemonic, dataDir: dir, network: net,
-                                               to: destination, amountSat: amountSat, feeSatPerKB: feePerKB, utxosJSON: utxosJSON)
-            }
-            let outs = Self.txOutputValues(hex)
-            guard outs.count > 1 else { break }                  // single output → clean sweep
-            let change = outs.reduce(Int64(0), +) - amountSat     // payment is exactly amountSat
-            guard change > 0, amountSat + change < totalSat else { break }
-            amountSat += change
-        }
-        return hex
-    }
-
     func lock() {
         invalidateChainLoads()
         parkOverlay()
@@ -952,6 +854,7 @@ final class WalletStore: ObservableObject {
         lastError = nil   // a stale send/switch error must not show up on the unlock screen
         clearChainState()
         phase = .locked
+        manuallyLocked = true
     }
 
     /// Remove the open wallet from this device (the seed is unrecoverable without backup).
@@ -979,15 +882,13 @@ final class WalletStore: ObservableObject {
             mnemonic = nil
             WidgetBridge.clearWallet()
         }
-        try? FileManager.default.removeItem(at: walletDataURL(for: id))
-        let d = UserDefaults.standard
-        for n in WalletNetwork.allCases {
-            for field in ["owned", "foreign", "balance", "ver"] {
-                d.removeObject(forKey: "\(changeKeyPrefix(for: id))\(n.rawValue).\(field)")
-            }
-            parkedOverlays[overlayKey(id, n)] = nil
-        }
-        if id == Self.legacyWalletID { d.removeObject(forKey: nameKey) }
+        // Behind any FFI call already queued for this wallet's db, so none of them can
+        // re-create it after the delete.
+        let dbDir = walletDataURL(for: id)
+        Task { await WalletDBQueue.shared.run { try? FileManager.default.removeItem(at: dbDir) } }
+        ChangeChainCache.remove(prefix: changeKeyPrefix(for: id))
+        for n in WalletNetwork.allCases { parkedOverlays[overlayKey(id, n)] = nil }
+        if id == Self.legacyWalletID { UserDefaults.standard.removeObject(forKey: nameKey) }
         wallets.removeAll { $0.id == id }
         lastError = nil
         guard wasActive else { saveWallets(); return true }
@@ -995,8 +896,8 @@ final class WalletStore: ObservableObject {
         guard !wallets.isEmpty else {
             activeWalletID = nil
             saveWallets()
+            manuallyLocked = false
             SafeTradeSecrets.clear()   // last wallet gone → also de-provision the exchange API keys
-            sync = SyncProgress()
             phase = .noWallet
             return true
         }
@@ -1006,10 +907,7 @@ final class WalletStore: ObservableObject {
             if let m = Keychain.get(account: mnemonicAccount(for: w.id)) {
                 activeWalletID = w.id
                 saveWallets()
-                restoreOverlay()
-                mnemonic = m
-                phase = .unlocked
-                Task { await loadChain() }
+                open(mnemonic: m)
                 return true
             }
         }
@@ -1020,92 +918,6 @@ final class WalletStore: ObservableObject {
         return true
     }
 
-    private static func satoshis(from amountPRL: Decimal) -> Int64? {
-        guard amountPRL > 0 else { return nil }
-        let sat = pow(Decimal(10), BlockbookClient.decimals)
-        let scaled = amountPRL * sat
-        var input = scaled
-        var rounded = Decimal()
-        NSDecimalRound(&rounded, &input, 0, .plain)
-        guard rounded == scaled else { return nil }
-        let number = NSDecimalNumber(decimal: scaled)
-        guard number.compare(NSDecimalNumber(value: Int64.max)) != .orderedDescending else { return nil }
-        return number.int64Value
-    }
-
-    // MARK: recovery helpers
-
-    /// Stable key for a UTXO outpoint (`txid:vout`).
-    private static func outpoint(_ txid: String, _ vout: Int) -> String { "\(txid):\(vout)" }
-
-    private static func encodeUTXOs(_ utxos: [BlockbookClient.UTXO], address: String) -> String {
-        encodeUTXOs(utxos.map { (txid: $0.txid, vout: $0.vout, value: $0.value, address: address) })
-    }
-    private static func encodeUTXOs(_ sets: [RecoverableUTXOSet]) -> String {
-        encodeUTXOs(sets.flatMap { s in s.utxos.map { (txid: $0.txid, vout: $0.vout, value: $0.value, address: s.address) } })
-    }
-    private static func encodeUTXOs(_ items: [(txid: String, vout: Int, value: String, address: String)]) -> String {
-        var objs: [[String: Any]] = []
-        for it in items {
-            guard let v = Int64(it.value) else { continue }
-            objs.append(["txid": it.txid, "vout": it.vout, "value": v, "address": it.address])
-        }
-        guard let data = try? JSONSerialization.data(withJSONObject: objs),
-              let s = String(data: data, encoding: .utf8) else { return "[]" }
-        return s
-    }
-
-    /// Rough taproot key-spend vsize → fee (sat); slightly over-estimates so any
-    /// leftover stays sub-dust and is absorbed into the fee rather than re-stranded.
-    private static func estimateFeeSat(inputs: Int, outputs: Int, feePerKB: Int64) -> Int64 {
-        let vbytes = 11 + inputs * 58 + outputs * 43
-        let fee = Double(vbytes) * Double(feePerKB) / 1000.0
-        // Clamp before the Int64 conversion: a garbage feePerKB from the backend would
-        // otherwise trap on overflow. Callers reserve this against the inputs, so an
-        // absurd value just yields a large (finite) reservation that fails safely upstream.
-        guard fee.isFinite, fee < Double(Int64.max - 1) else { return Int64.max - 1 }
-        return Int64(fee) + 1
-    }
-
-    /// Output values (sat) of a raw signed tx — just enough parsing to detect and
-    /// measure a change output while converging the sweep.
-    static func txOutputValues(_ hex: String) -> [Int64] {
-        let b = hexBytes(hex)
-        guard b.count > 6 else { return [] }
-        var i = 4
-        if i + 1 < b.count, b[i] == 0, b[i + 1] == 1 { i += 2 }   // segwit marker + flag
-        func varint() -> Int {
-            guard i < b.count else { return 0 }
-            let n = b[i]; i += 1
-            if n < 0xfd { return Int(n) }
-            if n == 0xfd { let v = Int(b[i]) | Int(b[i + 1]) << 8; i += 2; return v }
-            if n == 0xfe { var v = 0; for k in 0..<4 { v |= Int(b[i + k]) << (8 * k) }; i += 4; return v }
-            var v = 0; for k in 0..<8 { v |= Int(b[i + k]) << (8 * k) }; i += 8; return v
-        }
-        let nin = varint()
-        for _ in 0..<nin { i += 36; let sl = varint(); i += sl + 4 }
-        let nout = varint()
-        var vals: [Int64] = []
-        for _ in 0..<nout {
-            guard i + 8 <= b.count else { break }
-            var v: Int64 = 0; for k in 0..<8 { v |= Int64(b[i + k]) << (8 * k) }; i += 8
-            let sl = varint(); i += sl
-            vals.append(v)
-        }
-        return vals
-    }
-    private static func hexBytes(_ hex: String) -> [UInt8] {
-        let chars = Array(hex)
-        guard chars.count % 2 == 0 else { return [] }
-        var out = [UInt8](); out.reserveCapacity(chars.count / 2)
-        var k = 0
-        while k < chars.count {
-            guard let hi = chars[k].hexDigitValue, let lo = chars[k + 1].hexDigitValue else { return [] }
-            out.append(UInt8(hi << 4 | lo)); k += 2
-        }
-        return out
-    }
-
     /// Forget the open wallet's derived keys and chain data (lock, wallet/network switch, removal).
     private func clearChainState() {
         address = nil
@@ -1114,38 +926,38 @@ final class WalletStore: ObservableObject {
         balance = .zero
         txs = []
         backendReady = false; historyReady = false
-        serverBalance = .zero; serverTxs = []; pendingSends.removeAll()
+        historyHasMore = false; historyPagesLoaded = 1; olderTxs = []
+        lastSyncedAt = nil; syncError = nil; lastChainLoadAt = nil
+        serverBalance = .zero; serverTxs = []; xpubAddresses = []
+        pendingSends.removeAll(); sendLocks.removeAll(); unverifiedSends.removeAll()
         clearChangeChainState()
     }
 
     private func clearChangeChainState() {
         changeBalance = .zero
         recoverable = []
-        changeOwned = []
-        changeForeign = []
+        change = ChangeChainCache()
         mergedChangeTxids = []
         changeClassLoadedFor = nil
         lastChangeScanSig = nil
+        changeScanForced = false
         recoveryScanned = false
         recoveringOutpoints = []
         recoveringTxid = nil
     }
 
+    /// Retire every in-flight load of the wallet/network being left: its token no longer
+    /// matches (no stale writes), its task is cancelled (its requests stop), and the next
+    /// `loadChain()` starts fresh instead of queueing behind it.
     private func invalidateChainLoads() {
         chainLoadToken = UUID()
+        loadGeneration += 1
+        loadTask?.cancel()
+        loadTask = nil
+        loadAgain = false
     }
 
-    private func isCurrentChainLoad(_ token: UUID, mnemonic: String, network: WalletNetwork) -> Bool {
+    func isCurrentChainLoad(_ token: UUID, mnemonic: String, network: WalletNetwork) -> Bool {
         chainLoadToken == token && self.mnemonic == mnemonic && self.network == network && phase == .unlocked
     }
-}
-
-/// A set of stranded-change UTXOs sitting on one address the xpub scan can't see,
-/// confirmed spendable by us (oyster could sign a trial tx for it).
-struct RecoverableUTXOSet: Identifiable {
-    let address: String
-    let utxos: [BlockbookClient.UTXO]
-    let valueSat: Int64
-    var id: String { address }
-    var valuePRL: Decimal { Decimal(valueSat) / pow(Decimal(10), BlockbookClient.decimals) }
 }

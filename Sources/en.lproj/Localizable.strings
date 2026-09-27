@@ -856,3 +856,16 @@
 "重新核对" = "Check again";
 "验证身份以确认提现" = "Verify it's you to confirm the withdrawal";
 "链上查询失败" = "On-chain lookup failed";
+"%@，显示的是 %@ 的数据" = "%1$@ — showing data from %2$@";
+"%@，稍后自动重试" = "%@ — retrying shortly";
+"无法连接区块浏览器" = "Can't reach the block explorer";
+"正在构建交易…" = "Building transaction…";
+"手续费偏高，确认转账？" = "High Fee — Send Anyway?";
+"本笔手续费明显高于平常，请确认。" = "This fee is much higher than usual — please double-check.";
+"发送 %@ PRL 至\n%@\n网络手续费 %@ PRL，交易不可撤销。" = "Send %@ PRL to\n%@\nNetwork fee %@ PRL. This transaction cannot be reversed.";
+"加载更多" = "Load More";
+"向开发者地址\n%@\n捐赠 %@ PRL，网络手续费 %@ PRL。交易不可撤销。" = "Donate %2$@ PRL to the developer's address\n%1$@\nNetwork fee %3$@ PRL. This can't be undone.";
+"上一笔转账是否发出尚未确认，请先查看交易记录，稍后再试" = "It isn't confirmed yet whether your last send went out. Check your transaction history and try again shortly.";
+"确认超时，请重新发送" = "The confirmation timed out. Please send again.";
+"网络异常，无法确认转账是否已发出（%@）。请先查看交易记录，切勿重复发送。" = "Network error — can't tell whether the send went out (%@). Check your transaction history first; don't send it again.";
+"解锁钱包" = "Unlock Wallet";

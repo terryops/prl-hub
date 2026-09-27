@@ -856,3 +856,16 @@
 "重新核对" = "Kiểm tra lại";
 "验证身份以确认提现" = "Xác minh danh tính để xác nhận rút";
 "链上查询失败" = "Không tra cứu được on-chain";
+"%@，显示的是 %@ 的数据" = "%1$@ — đang hiển thị dữ liệu lúc %2$@";
+"%@，稍后自动重试" = "%@ — sẽ tự thử lại sau";
+"无法连接区块浏览器" = "Không kết nối được trình khám phá khối";
+"正在构建交易…" = "Đang tạo giao dịch…";
+"手续费偏高，确认转账？" = "Phí cao — vẫn gửi?";
+"本笔手续费明显高于平常，请确认。" = "Phí lần này cao hơn nhiều so với bình thường — hãy kiểm tra lại.";
+"发送 %@ PRL 至\n%@\n网络手续费 %@ PRL，交易不可撤销。" = "Gửi %@ PRL đến\n%@\nPhí mạng %@ PRL, giao dịch không thể hoàn tác.";
+"加载更多" = "Tải thêm";
+"向开发者地址\n%@\n捐赠 %@ PRL，网络手续费 %@ PRL。交易不可撤销。" = "Ủng hộ %2$@ PRL đến địa chỉ nhà phát triển\n%1$@\nPhí mạng %3$@ PRL. Giao dịch không thể hoàn tác.";
+"上一笔转账是否发出尚未确认，请先查看交易记录，稍后再试" = "Chưa xác nhận được giao dịch trước đã được gửi hay chưa. Hãy xem lịch sử giao dịch và thử lại sau.";
+"确认超时，请重新发送" = "Hết thời gian xác nhận, vui lòng gửi lại.";
+"网络异常，无法确认转账是否已发出（%@）。请先查看交易记录，切勿重复发送。" = "Lỗi mạng — không xác định được giao dịch đã gửi đi chưa (%@). Hãy xem lịch sử giao dịch trước, đừng gửi lại.";
+"解锁钱包" = "Mở khóa ví";

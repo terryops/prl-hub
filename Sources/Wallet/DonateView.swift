@@ -33,7 +33,9 @@ struct DonateView: View {
     @ObservedObject var store: WalletStore
     @Environment(\.dismiss) private var dismiss
     @State private var custom = ""
-    @State private var confirming: Decimal?
+    /// The signed donation awaiting confirmation (shows the real fee); nil = no alert.
+    @State private var prepared: PreparedSend?
+    @State private var preparing = false
     @State private var sending = false
     @State private var error: String?
     /// The custom-amount field stays tucked away until asked for — presets are the default.
@@ -64,7 +66,7 @@ struct DonateView: View {
 
                     HStack(spacing: Pearl.Space.sm) {
                         ForEach(Donation.presets, id: \.self) { amount in
-                            Button { confirming = amount } label: {
+                            Button { prepare(amount) } label: {
                                 Text(verbatim: "\(Self.text(amount)) PRL")
                                     .font(.headline.monospacedDigit())
                                     .frame(maxWidth: .infinity)
@@ -72,7 +74,7 @@ struct DonateView: View {
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.large)
-                            .disabled(sending || !canAfford(amount))
+                            .disabled(busy || !canAfford(amount))
                         }
                     }
 
@@ -88,10 +90,10 @@ struct DonateView: View {
                                 .onAppear { customFocused = true }
                                 .onChange(of: custom) { _, _ in error = nil }
                             Button(Loc("捐赠")) {
-                                if let a = customAmount { confirming = a }
+                                if let a = customAmount { prepare(a) }
                             }
                             .buttonStyle(.borderedProminent)
-                            .disabled(sending || !(customAmount.map(canAfford) ?? false))
+                            .disabled(busy || !(customAmount.map(canAfford) ?? false))
                         }
                         .transition(.opacity.combined(with: .move(edge: .top)))
                         if let a = customAmount, a < Donation.minimum {
@@ -106,7 +108,7 @@ struct DonateView: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
-                        .disabled(sending)
+                        .disabled(busy)
                     }
 
                     VStack(spacing: Pearl.Space.xxs) {
@@ -121,8 +123,8 @@ struct DonateView: View {
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    if sending {
-                        ProgressView(Loc("签名并广播…"))
+                    if busy {
+                        ProgressView(sending ? Loc("签名并广播…") : Loc("正在构建交易…"))
                     }
                     if let error {
                         Label(error, systemImage: "xmark.octagon")
@@ -132,7 +134,7 @@ struct DonateView: View {
                 .padding(Pearl.Space.screen)
                 .frame(maxWidth: 460)
                 .frame(maxWidth: .infinity)
-                .animation(.snappy, value: sending)
+                .animation(.snappy, value: busy)
                 .animation(.snappy, value: error)
             }
             .navigationTitle(Loc("支持开发者"))
@@ -146,14 +148,17 @@ struct DonateView: View {
             }
             // .alert (not .confirmationDialog): centered on every platform — see SendView.
             .alert(Loc("确认捐赠"), isPresented: Binding(
-                get: { confirming != nil }, set: { if !$0 { confirming = nil } })) {
-                if let amount = confirming {
-                    Button(Loc("确认捐赠 %@ PRL", Self.text(amount))) { donate(amount) }
+                get: { prepared != nil }, set: { if !$0 { prepared = nil } }), presenting: prepared) { p in
+                Button(Loc("确认捐赠 %@ PRL", Self.text(p.amount))) { donate(p) }
+                Button(Loc("取消"), role: .cancel) { prepared = nil }
+            } message: { p in
+                if let fee = p.fee {
+                    Text(Loc("向开发者地址\n%@\n捐赠 %@ PRL，网络手续费 %@ PRL。交易不可撤销。",
+                             Donation.address, Self.text(p.amount), Self.text(fee)))
+                } else {
+                    Text(Loc("向开发者地址\n%@\n捐赠 %@ PRL。手续费从余额扣除，交易不可撤销。",
+                             Donation.address, Self.text(p.amount)))
                 }
-                Button(Loc("取消"), role: .cancel) { confirming = nil }
-            } message: {
-                Text(Loc("向开发者地址\n%@\n捐赠 %@ PRL。手续费从余额扣除，交易不可撤销。",
-                         Donation.address, Self.text(confirming ?? 0)))
             }
         }
         #if os(iOS)
@@ -161,23 +166,37 @@ struct DonateView: View {
         #endif
     }
 
+    private var busy: Bool { preparing || sending }
+
     private func canAfford(_ amount: Decimal) -> Bool {
         amount >= Donation.minimum && amount + WalletStore.sendFeeReserve <= store.balance.available
     }
 
-    private func donate(_ amount: Decimal) {
-        confirming = nil
+    /// Build + sign first, so the confirmation can show the real network fee.
+    private func prepare(_ amount: Decimal) {
+        preparing = true
+        error = nil
+        Task {
+            do { prepared = try await store.prepareSend(to: Donation.address, amountPRL: amount) }
+            catch { self.error = error.localizedDescription }
+            preparing = false
+        }
+    }
+
+    private func donate(_ p: PreparedSend) {
+        prepared = nil
         sending = true
         error = nil
         Task {
-            let r = await store.send(to: Donation.address, amountPRL: amount)
+            let outcome = await store.broadcast(p)
             sending = false
-            if r.ok {
+            switch outcome {
+            case .sent:
                 store.flashToast(Loc("感谢支持 ❤️"))
                 dismiss()
                 await store.loadChain()
-            } else {
-                error = r.message
+            case .failed(let m), .unverified(let m):
+                error = m
             }
         }
     }

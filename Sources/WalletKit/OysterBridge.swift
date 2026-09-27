@@ -5,10 +5,10 @@ import OysterMobile
 /// (`OysterMobile.xcframework`). Keeps the FFI surface in one place so the rest
 /// of the app never touches the `Mobile*` C symbols directly.
 ///
-/// Today this exposes the canonical BIP39 primitives (generate/validate) so
-/// onboarding uses the *same* library the Go wallet uses. Address derivation,
-/// balance and signing arrive with the in-process node (Start/OfflineSign) in
-/// M3/M4 — see apps/pearl-native/PLAN.md §4.
+/// Exposes the canonical BIP39 primitives (generate/validate), so onboarding uses the
+/// *same* library the Go wallet uses, plus on-device key work against the per-wallet db:
+/// fixed-index address derivation, the account xpub, and offline tx signing. Chain data
+/// comes from Blockbook (`BlockbookClient`); nothing here talks to the network.
 enum OysterBridge {
     /// `true` if the embedded Go framework is reachable across the FFI.
     static func isAvailable() -> Bool { MobilePing() == "pearl-mobile ok" }
@@ -17,13 +17,6 @@ enum OysterBridge {
     static func generateMnemonic() -> String? {
         var error: NSError?
         let m = MobileGenerateMnemonic(&error)
-        return error == nil && !m.isEmpty ? m : nil
-    }
-
-    /// A fresh 24-word BIP39 mnemonic (256-bit entropy).
-    static func generateMnemonic24() -> String? {
-        var error: NSError?
-        let m = MobileGenerateMnemonic24(&error)
         return error == nil && !m.isEmpty ? m : nil
     }
 

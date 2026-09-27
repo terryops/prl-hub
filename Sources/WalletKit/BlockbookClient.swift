@@ -16,9 +16,10 @@ struct BlockbookClient {
 
     // MARK: wire types
     private struct XpubResponse: Decodable {
-        let balance: String
+        let balance: String?
         let unconfirmedBalance: String?
-        let txs: Int?
+        let page: Int?
+        let totalPages: Int?
         let transactions: [Tx]?
         let tokens: [Token]?
     }
@@ -26,6 +27,7 @@ struct BlockbookClient {
     private struct Tx: Decodable {
         let txid: String
         let blockTime: Int?
+        let blockHeight: Int?
         let confirmations: Int?
         let fees: String?
         let vin: [IO]?
@@ -33,12 +35,54 @@ struct BlockbookClient {
     }
     private struct IO: Decodable { let addresses: [String]?; let value: String? }
 
-    struct UTXO: Decodable {
+    struct UTXO: Decodable, Equatable, Sendable {
         let txid: String
         let vout: Int
         let value: String
         let address: String?
         let confirmations: Int?
+        var outpoint: String { "\(txid):\(vout)" }
+    }
+
+    /// One `/xpub/` round-trip: balance, a page of history and the xpub's own addresses.
+    struct XpubAccount: Sendable {
+        let confirmed: Decimal
+        /// Net mempool delta — NEGATIVE while an outgoing tx is unconfirmed.
+        let unconfirmed: Decimal
+        let txs: [WalletTx]
+        /// Every address Blockbook derived and saw used under this xpub (both chains).
+        let addresses: Set<String>
+        let hasMorePages: Bool
+    }
+
+    /// Output addresses of txs we spent from that the xpub doesn't list as its own,
+    /// newest first — candidate stranded change (see `changeCandidates`).
+    struct ChangeCandidates: Sendable {
+        struct Candidate: Sendable, Equatable {
+            let address: String
+            /// The creating tx has ≥1 confirmation, so an EMPTY utxo set on this address
+            /// is final (spent), not merely "change still unconfirmed".
+            let confirmed: Bool
+        }
+        let candidates: [Candidate]
+        /// Highest block among the scanned confirmed txs, ours or not (the incremental-scan
+        /// watermark: every send at or below it has been looked at).
+        let maxHeight: Int?
+    }
+
+    enum TxLookup: Sendable { case found, notFound, unknown }
+
+    enum BroadcastError: LocalizedError {
+        /// The node answered and refused the tx — nothing was relayed.
+        case rejected(String)
+        /// No usable answer (timeout, dropped connection, proxy error page…). The tx may
+        /// or may not have reached the node.
+        case transport(String)
+        var errorDescription: String? {
+            switch self {
+            case .rejected(let m), .transport(let m): return m
+            }
+        }
     }
 
     // MARK: helpers
@@ -61,35 +105,30 @@ struct BlockbookClient {
     }
 
     // MARK: queries (by xpub)
-    func balance(xpub: String) async throws -> WalletBalance {
-        let r = try await get("/api/v2/xpub/\(xpub)?details=basic", as: XpubResponse.self)
-        let confirmed = BlockbookClient.prl(r.balance)
-        // Blockbook's unconfirmedBalance is NEGATIVE while an outgoing tx sits in
-        // the mempool. Fold the full delta into `total`, but subtract any pending
-        // OUTFLOW from `available` so the send guard / MAX can't offer coins that
-        // are already committed to an unconfirmed spend.
-        let unconfirmed = BlockbookClient.prl(r.unconfirmedBalance)
-        let available = max(0, confirmed + min(0, unconfirmed))
-        return WalletBalance(total: confirmed + unconfirmed, available: available)
-    }
 
+    /// Balance + one history page in a single request, so the two can never straddle an
+    /// index update (balance from before a send, history already containing it).
     /// `knownChange` are internal-chain change addresses the xpub token list doesn't
     /// recognise as ours (the stranded-change set). Folding them into `mine` stops the
     /// displayed "sent" amount from counting our own change as money paid to others.
-    func history(xpub: String, page: Int = 1, pageSize: Int = 25, knownChange: Set<String> = []) async throws -> [WalletTx] {
+    func account(xpub: String, page: Int = 1, pageSize: Int = 25, knownChange: Set<String> = []) async throws -> XpubAccount {
         let r = try await get("/api/v2/xpub/\(xpub)?details=txs&tokens=used&page=\(page)&pageSize=\(pageSize)", as: XpubResponse.self)
-        var mine = Set((r.tokens ?? []).compactMap { $0.name })
-        mine.formUnion(knownChange)
-        return Self.mapTxs(r.transactions ?? [], mine: mine)
+        guard let balance = r.balance else { throw URLError(.cannotParseResponse) }
+        let addresses = Set((r.tokens ?? []).compactMap { $0.name })
+        return XpubAccount(confirmed: Self.prl(balance),
+                           unconfirmed: Self.prl(r.unconfirmedBalance),
+                           txs: Self.mapTxs(r.transactions ?? [], mine: addresses.union(knownChange)),
+                           addresses: addresses,
+                           hasMorePages: (r.page ?? 1) < (r.totalPages ?? 1))
     }
 
     /// History of a SINGLE internal-chain change address. A send funded entirely by
     /// such change touches no xpub-derived address, so the `/xpub/` history above can
     /// NEVER report it — this per-address form is the only way to see those spends.
-    /// `mine` is the owned-change set (for direction/amounts). Also returns every
+    /// `mine` is every address known to be ours (for direction/amounts). Also returns every
     /// output address in these txs that isn't in `mine`: candidate change of an
     /// internal-chain spend, equally invisible to `changeCandidates`' xpub scan.
-    func history(address: String, mine: Set<String>) async throws -> (txs: [WalletTx], outAddrs: Set<String>) {
+    func history(address: String, mine: Set<String>) async throws -> (txs: [WalletTx], outAddrs: [String]) {
         let r = try await get("/api/v2/address/\(address)?details=txs&pageSize=50", as: XpubResponse.self)
         // Keep ONLY txs that SPENT from this change address (it appears in a vin). The
         // tx that CREATED the change address (this address is only an OUTPUT) is a past
@@ -100,10 +139,10 @@ struct BlockbookClient {
         let raw = (r.transactions ?? []).filter { tx in
             (tx.vin ?? []).contains { ($0.addresses ?? []).contains(address) }
         }
-        var outs = Set<String>()
+        var outs: [String] = []
         for tx in raw {
             for o in tx.vout ?? [] {
-                for a in (o.addresses ?? []) where !mine.contains(a) { outs.insert(a) }
+                for a in (o.addresses ?? []) where !mine.contains(a) && !outs.contains(a) { outs.append(a) }
             }
         }
         return (Self.mapTxs(raw, mine: mine), outs)
@@ -130,16 +169,19 @@ struct BlockbookClient {
             // showing one of our own addresses. received → the address of ours that got it.
             let addr = sent ? largestAddr(otherOuts) : largestAddr(mineOuts)
             let time = tx.blockTime.flatMap { $0 > 0 ? Date(timeIntervalSince1970: TimeInterval($0)) : nil } ?? Date()
+            let confirmations = tx.confirmations ?? 0
             return WalletTx(txid: tx.txid, direction: sent ? .sent : .received, amount: amount,
-                            fee: BlockbookClient.prl(tx.fees), confirmations: tx.confirmations ?? 0,
-                            time: time, address: addr)
+                            fee: BlockbookClient.prl(tx.fees), confirmations: confirmations,
+                            time: time, address: addr,
+                            height: confirmations > 0 ? tx.blockHeight.flatMap { $0 > 0 ? $0 : nil } : nil)
         }
     }
 
     func utxos(xpub: String) async throws -> [UTXO] {
         // Spend only CONFIRMED UTXOs (≥1 conf): never chain a send off an unconfirmed
         // parent (which RBF/eviction could invalidate), and keep the spendable set
-        // consistent with the confirmed `available` balance.
+        // consistent with the confirmed `available` balance. Blockbook already drops
+        // outputs spent by a mempool tx.
         let all = try await get("/api/v2/utxo/\(xpub)", as: [UTXO].self)
         return all.filter { ($0.confirmations ?? 0) >= 1 }
     }
@@ -159,19 +201,35 @@ struct BlockbookClient {
     /// `extra` are caller-supplied candidates (outputs of internal-chain spends the
     /// xpub history can't show); they're filtered against the xpub's own token set
     /// here so an external receive address can never be mis-offered as change.
-    func changeCandidates(xpub: String, extra: Set<String> = []) async throws -> [String] {
-        let r = try await get("/api/v2/xpub/\(xpub)?details=txs&tokens=used&pageSize=1000", as: XpubResponse.self)
+    /// `fromHeight` limits the scan to txs mined at or after that block (the incremental
+    /// scan); nil scans the whole history.
+    func changeCandidates(xpub: String, fromHeight: Int?, extra: [String] = []) async throws -> ChangeCandidates {
+        let from = fromHeight.map { "&from=\($0)" } ?? ""
+        let r = try await get("/api/v2/xpub/\(xpub)?details=txs&tokens=used&pageSize=1000\(from)", as: XpubResponse.self)
         let mine = Set((r.tokens ?? []).compactMap { $0.name })
-        var candidates = Set<String>()
-        for tx in r.transactions ?? [] {
+        let txs = r.transactions ?? []
+        // Without the xpub's own addresses every receive address would look like change and
+        // get trial-signed as "ours" — double counting it. Refuse rather than guess (a
+        // brand-new wallet has neither, and nothing to scan).
+        guard !mine.isEmpty || (txs.isEmpty && extra.isEmpty) else { throw URLError(.cannotParseResponse) }
+        var seen = Set<String>()
+        var candidates: [ChangeCandidates.Candidate] = []
+        for a in extra where !mine.contains(a) && seen.insert(a).inserted {
+            candidates.append(.init(address: a, confirmed: false))
+        }
+        var maxHeight: Int?
+        for tx in txs {     // newest first
+            let confirmed = (tx.confirmations ?? 0) >= 1
+            if confirmed, let h = tx.blockHeight, h > 0 { maxHeight = max(maxHeight ?? h, h) }
             let weSpent = (tx.vin ?? []).contains { io in (io.addresses ?? []).contains { mine.contains($0) } }
             guard weSpent else { continue }
             for o in tx.vout ?? [] {
-                for a in (o.addresses ?? []) where !mine.contains(a) { candidates.insert(a) }
+                for a in (o.addresses ?? []) where !mine.contains(a) && seen.insert(a).inserted {
+                    candidates.append(.init(address: a, confirmed: confirmed))
+                }
             }
         }
-        for a in extra where !mine.contains(a) { candidates.insert(a) }
-        return Array(candidates)
+        return ChangeCandidates(candidates: candidates, maxHeight: maxHeight)
     }
 
     /// Recommended fee in sat per 1000 vbytes (Blockbook returns PRL/kB).
@@ -187,20 +245,50 @@ struct BlockbookClient {
         return min(10_000_000, max(1000, satPerKB.int64Value))
     }
 
-    /// Broadcast a raw signed tx; returns the txid.
+    /// Whether the indexer / node knows this tx (mempool or chain). `.unknown` when the
+    /// question itself couldn't be answered.
+    func lookup(txid: String) async -> TxLookup {
+        guard let url = URL(string: base + "/api/v2/tx/\(txid)") else { return .unknown }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 20
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              let code = (resp as? HTTPURLResponse)?.statusCode else { return .unknown }
+        if code == 200 { return .found }
+        // Blockbook: 400 {"error":"Transaction '…' not found"}
+        let body = String(data: data, encoding: .utf8) ?? ""
+        return body.localizedCaseInsensitiveContains("not found") ? .notFound : .unknown
+    }
+
+    /// Broadcast a raw signed tx; returns the txid. Throws `BroadcastError`.
     func broadcast(_ hex: String) async throws -> String {
         struct R: Decodable { let result: String? }
         struct E: Decodable { let error: String? }
         var req = URLRequest(url: URL(string: base + "/api/v2/sendtx/")!)
         req.httpMethod = "POST"
         req.httpBody = Data(hex.utf8)
+        req.timeoutInterval = 30
         req.setValue("text/plain", forHTTPHeaderField: "Content-Type")
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        guard (resp as? HTTPURLResponse)?.statusCode == 200,
-              let r = try? JSONDecoder().decode(R.self, from: data), let txid = r.result else {
-            let msg = (try? JSONDecoder().decode(E.self, from: data))?.error ?? (String(data: data, encoding: .utf8) ?? "broadcast failed")
-            throw NSError(domain: "Blockbook", code: 1, userInfo: [NSLocalizedDescriptionKey: msg])
+        let data: Data, resp: URLResponse
+        do { (data, resp) = try await URLSession.shared.data(for: req) }
+        catch { throw BroadcastError.transport(error.localizedDescription) }
+        if (resp as? HTTPURLResponse)?.statusCode == 200,
+           let r = try? JSONDecoder().decode(R.self, from: data), let txid = r.result {
+            return txid
         }
-        return txid
+        // Only a JSON error from Blockbook is the node's verdict; anything else (a proxy's
+        // HTML page, an empty 502) says nothing about whether the tx got through.
+        if let msg = (try? JSONDecoder().decode(E.self, from: data))?.error, !msg.isEmpty {
+            throw BroadcastError.rejected(msg)
+        }
+        throw BroadcastError.transport(String(data: data, encoding: .utf8).map { String($0.prefix(160)) } ?? "broadcast failed")
+    }
+
+    /// A rejection that only says the node already has this tx (a retry of a broadcast
+    /// whose first response was lost) — i.e. the send DID go out.
+    static func isAlreadyKnown(_ message: String) -> Bool {
+        let m = message.lowercased()
+        return m.contains("already have") || m.contains("already exists")
+            || m.contains("already in block chain") || m.contains("txn-already")
     }
 }
