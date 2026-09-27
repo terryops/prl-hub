@@ -909,7 +909,6 @@
 "建议只开需要的权限，并绑定 IP。不要把 API Key 或 Secret 告诉任何人，包括自称客服的人。" = "Only turn on the permissions you need, and bind IPs. Never share your API Key or Secret with anyone — including people claiming to be support.";
 "如何获取 API 密钥" = "How to get an API key";
 "在哪里设置 Trusted IPs" = "Where to set Trusted IPs";
-"钱包余额与挖矿监控 · 高级版" = "Wallet balance and pool monitor · Pro";
 "高级版功能" = "Pro feature";
 "在桌面随时查看余额、币价和矿池算力" = "Balance, price and pool hashrate at a glance";
 "点按解锁" = "Tap to unlock";
@@ -919,9 +918,6 @@
 "在主屏幕看余额和币价" = "balance and price on your Home Screen";
 "小组件会定时自动刷新；打开 App 时会立即更新。" = "The widget refreshes on its own every so often, and right away when you open the app.";
 "添加桌面小组件" = "Add the widget";
-"高级版已解锁，添加后即可使用。" = "Pro is unlocked — the widget works as soon as you add it.";
-"桌面小组件是高级版功能" = "The widget is a Pro feature";
-"没有高级版时，小组件会显示锁定画面，点它即可解锁。" = "Without Pro the widget shows a locked card; tap it to unlock.";
 "把 Pearl Hub 放到桌面，不用打开 App 也能看余额、币价和矿池算力。" = "Put Pearl Hub on your desktop to see your balance, the price and pool hashrate without opening the app.";
 "把 Pearl Hub 放到主屏幕，不用打开 App 也能看余额、币价和矿池算力。" = "Put Pearl Hub on your Home Screen to see your balance, the price and pool hashrate without opening the app.";
 "在桌面空白处点右键，选「编辑小组件」。" = "Right-click an empty spot on the desktop and choose “Edit Widgets”.";
@@ -931,4 +927,9 @@
 "点左上角的「编辑」（或「+」），再点「添加小组件」。" = "Tap “Edit” (or “+”) in the top-left corner, then “Add Widget”.";
 "搜索「Pearl Hub」，选择小、中或大尺寸。" = "Search for “Pearl Hub” and choose the small, medium or large size.";
 "点「添加小组件」，再把它拖到想放的位置。" = "Tap “Add Widget”, then drag it where you want it.";
-"桌面小组件：在主屏幕或桌面随时看余额、币价和算力" = "Widget: balance, price and hashrate on your Home Screen or desktop";
+"钱包余额与挖矿监控（中、大尺寸需高级版）" = "Wallet balance and pool monitor (medium & large need Pro)";
+"小尺寸可免费使用" = "The small size is free";
+"高级版已解锁，所有尺寸都能用。" = "Pro is unlocked — every size works.";
+"中、大尺寸是高级版功能" = "Medium and large sizes are Pro";
+"小尺寸（币价和余额）免费使用。中、大尺寸还能看矿池算力和最近交易，没有高级版时会显示锁定画面，点它即可解锁。" = "The small size (price and balance) is free. Medium and large also show pool hashrate and recent transfers; without Pro they show a locked card — tap it to unlock.";
+"中、大尺寸桌面小组件：矿池算力和最近交易一目了然" = "Medium & large widgets: pool hashrate and recent transfers at a glance";

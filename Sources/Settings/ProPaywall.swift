@@ -29,7 +29,7 @@ struct ProPaywallCard: View {
                 if AppFeatures.tradeEnabled {
                     feature("chart.bar.xaxis", Loc("买卖深度图：看清各价位的挂单和买卖力量"))
                 }
-                feature("square.grid.2x2", Loc("桌面小组件：在主屏幕或桌面随时看余额、币价和算力"))
+                feature("square.grid.2x2", Loc("中、大尺寸桌面小组件：矿池算力和最近交易一目了然"))
                 feature("laptopcomputer.and.iphone", Loc("一次购买，iPhone、iPad 和 Mac 通用"))
             }
             .frame(maxWidth: .infinity, alignment: .leading)

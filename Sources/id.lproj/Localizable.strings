@@ -909,7 +909,6 @@
 "建议只开需要的权限，并绑定 IP。不要把 API Key 或 Secret 告诉任何人，包括自称客服的人。" = "Aktifkan hanya izin yang perlu, dan ikat IP. Jangan pernah membagikan API Key atau Secret kepada siapa pun — termasuk yang mengaku sebagai layanan pelanggan.";
 "如何获取 API 密钥" = "Cara mendapatkan kunci API";
 "在哪里设置 Trusted IPs" = "Tempat mengatur Trusted IPs";
-"钱包余额与挖矿监控 · 高级版" = "Saldo dompet dan pemantauan pool · Pro";
 "高级版功能" = "Fitur Pro";
 "在桌面随时查看余额、币价和矿池算力" = "Saldo, harga, dan hashrate pool sekilas pandang";
 "点按解锁" = "Ketuk untuk membuka";
@@ -919,9 +918,6 @@
 "在主屏幕看余额和币价" = "saldo dan harga di Layar Utama";
 "小组件会定时自动刷新；打开 App 时会立即更新。" = "Widget menyegarkan diri secara berkala, dan langsung saat aplikasi dibuka.";
 "添加桌面小组件" = "Tambahkan widget";
-"高级版已解锁，添加后即可使用。" = "Pro sudah terbuka — widget langsung berfungsi setelah ditambahkan.";
-"桌面小组件是高级版功能" = "Widget adalah fitur Pro";
-"没有高级版时，小组件会显示锁定画面，点它即可解锁。" = "Tanpa Pro, widget menampilkan kartu terkunci; ketuk untuk membukanya.";
 "把 Pearl Hub 放到桌面，不用打开 App 也能看余额、币价和矿池算力。" = "Taruh Pearl Hub di desktop untuk melihat saldo, harga, dan hashrate pool tanpa membuka aplikasi.";
 "把 Pearl Hub 放到主屏幕，不用打开 App 也能看余额、币价和矿池算力。" = "Taruh Pearl Hub di Layar Utama untuk melihat saldo, harga, dan hashrate pool tanpa membuka aplikasi.";
 "在桌面空白处点右键，选「编辑小组件」。" = "Klik kanan area kosong di desktop, lalu pilih “Edit Widget”.";
@@ -931,4 +927,9 @@
 "点左上角的「编辑」（或「+」），再点「添加小组件」。" = "Ketuk “Edit” (atau “+”) di pojok kiri atas, lalu “Tambah Widget”.";
 "搜索「Pearl Hub」，选择小、中或大尺寸。" = "Cari “Pearl Hub”, lalu pilih ukuran kecil, sedang, atau besar.";
 "点「添加小组件」，再把它拖到想放的位置。" = "Ketuk “Tambah Widget”, lalu seret ke tempat yang diinginkan.";
-"桌面小组件：在主屏幕或桌面随时看余额、币价和算力" = "Widget: saldo, harga, dan hashrate di Layar Utama atau desktop";
+"钱包余额与挖矿监控（中、大尺寸需高级版）" = "Saldo dompet dan pemantauan pool (sedang & besar perlu Pro)";
+"小尺寸可免费使用" = "Ukuran kecil gratis";
+"高级版已解锁，所有尺寸都能用。" = "Pro sudah terbuka — semua ukuran bisa dipakai.";
+"中、大尺寸是高级版功能" = "Ukuran sedang dan besar adalah fitur Pro";
+"小尺寸（币价和余额）免费使用。中、大尺寸还能看矿池算力和最近交易，没有高级版时会显示锁定画面，点它即可解锁。" = "Ukuran kecil (harga dan saldo) gratis. Ukuran sedang dan besar juga menampilkan hashrate pool dan transfer terbaru; tanpa Pro akan tampil kartu terkunci — ketuk untuk membukanya.";
+"中、大尺寸桌面小组件：矿池算力和最近交易一目了然" = "Widget sedang & besar: hashrate pool dan transfer terbaru sekilas pandang";

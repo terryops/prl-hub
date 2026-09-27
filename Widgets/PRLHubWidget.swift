@@ -9,8 +9,8 @@ import StoreKit
 // app's App Group snapshot and self-refreshes balance + price + AlphaPool hashrate
 // on the system timeline so it stays current while the app is closed.
 //
-// A Pro feature: without Pearl Hub Pro it shows a locked card whose tap opens the
-// app's paywall (the widget gallery still previews the real thing).
+// The small size is free; medium and large are Pro — without Pearl Hub Pro they show
+// a locked card whose tap opens the app's paywall (the gallery still previews them).
 
 struct PearlWidget: Widget {
     let kind = "PRLHubWidget"
@@ -28,7 +28,7 @@ struct PearlWidget: Widget {
         }
         .configurationDisplayName("Pearl Hub")
         // Resolved against the extension's own copy of the app's string tables.
-        .description("钱包余额与挖矿监控 · 高级版")
+        .description("钱包余额与挖矿监控（中、大尺寸需高级版）")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
@@ -38,12 +38,17 @@ struct PearlEntry: TimelineEntry {
     let snap: WidgetSnapshot
     var age: String = ""        // precomputed minute-granularity freshness, e.g. "5 分钟前"
     var fresh: Bool = false     // refreshed within the last 5 minutes → stamp shows the fresh badge
-    var locked: Bool = false    // no Pro — the locked card instead of the figures
+    var locked: Bool = false    // medium / large without Pro — the locked card instead of the figures
 }
 
-/// Pro unlocks this widget. The app publishes its verified status into the snapshot;
-/// failing that (not published yet — e.g. right after an update, before the app has
-/// run), the widget asks StoreKit itself, which answers for the containing app.
+/// Medium and large need Pro; the small size is free.
+func widgetUnlocked(_ family: WidgetFamily, _ snap: WidgetSnapshot) async -> Bool {
+    family == .systemSmall ? true : await widgetHasPro(snap)
+}
+
+/// The app publishes its verified Pro status into the snapshot; failing that (not
+/// published yet — e.g. right after an update, before the app has run), the widget
+/// asks StoreKit itself, which answers for the containing app.
 func widgetHasPro(_ snap: WidgetSnapshot) async -> Bool {
     if let published = snap.isPro { return published }
     for await result in Transaction.currentEntitlements {
@@ -103,9 +108,10 @@ struct PearlProvider: TimelineProvider {
             return
         }
         nonisolated(unsafe) let completion = completion
+        let family = context.family
         Task {
             let snap = WidgetStore.load()
-            let locked = !(await widgetHasPro(snap))
+            let locked = !(await widgetUnlocked(family, snap))
             completion(PearlEntry(date: now, snap: snap,
                                   age: freshnessAge(stamp: snap.updatedAt, asOf: now, languageCode: snap.languageCode),
                                   fresh: freshnessIsRecent(stamp: snap.updatedAt, asOf: now),
@@ -117,11 +123,13 @@ struct PearlProvider: TimelineProvider {
         // WidgetKit calls this completion once, from whatever thread; it isn't marked
         // Sendable, so hand it to the task explicitly.
         nonisolated(unsafe) let completion = completion
+        let family = context.family
         Task {
             let initial = WidgetStore.load()
-            // Locked: no fetching at all. Buying Pro in the app reloads this at once;
-            // the 6-hour recheck catches a purchase made on another device.
-            guard await widgetHasPro(initial) else {
+            // Locked (medium / large without Pro): no fetching at all. Buying Pro in the
+            // app reloads this at once; the 6-hour recheck catches a purchase made on
+            // another device.
+            guard await widgetUnlocked(family, initial) else {
                 let now = Date()
                 completion(Timeline(entries: [PearlEntry(date: now, snap: initial, locked: true)],
                                     policy: .after(now.addingTimeInterval(6 * 3600))))
@@ -239,9 +247,10 @@ struct PearlWidgetView: View {
 
 // MARK: locked (no Pro)
 
-/// What a non-Pro user's widget shows: a faint skeleton of the layout behind a lock,
-/// and one tap target — the app's paywall. (Not the real view blurred: its balance /
-/// price / pool regions carry their own links, which would still take the tap.)
+/// What a medium / large widget shows without Pro: a faint skeleton of the layout
+/// behind a lock, and one tap target — the app's paywall. (Not the real view blurred:
+/// its balance / price / pool regions carry their own links, which would still take
+/// the tap.) The small size never gets here — it's free.
 struct PearlWidgetLocked: View {
     @Environment(\.widgetFamily) private var family
     let languageCode: String?
@@ -250,20 +259,19 @@ struct PearlWidgetLocked: View {
         ZStack {
             skeleton
                 .accessibilityHidden(true)
-            VStack(spacing: family == .systemSmall ? 5 : 7) {
-                Image(systemName: "lock.fill")
-                    .font(family == .systemSmall ? .title3 : .title2)
+            VStack(spacing: 7) {
+                Image(systemName: "lock.fill").font(.title2)
                 Text(WLoc("高级版功能", languageCode))
                     .font(.headline.weight(.bold))
-                if family != .systemSmall {
-                    Text(WLoc("在桌面随时查看余额、币价和矿池算力", languageCode))
-                        .font(.caption).multilineTextAlignment(.center)
-                        .foregroundStyle(.white.opacity(0.8))
-                }
+                Text(WLoc("在桌面随时查看余额、币价和矿池算力", languageCode))
+                    .font(.caption).multilineTextAlignment(.center)
+                    .foregroundStyle(.white.opacity(0.8))
                 Text(WLoc("点按解锁", languageCode))
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(.white.opacity(0.18), in: Capsule())
+                Text(WLoc("小尺寸可免费使用", languageCode))
+                    .font(.caption2).foregroundStyle(.white.opacity(0.6))
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 8)
@@ -277,10 +285,8 @@ struct PearlWidgetLocked: View {
             bar(width: 0.45, height: 8)
             bar(width: 0.7, height: 18)
             bar(width: 0.5, height: 8)
-            if family != .systemSmall {
-                Spacer(minLength: 0)
-                ForEach(0..<(family == .systemLarge ? 4 : 2), id: \.self) { _ in bar(width: 1, height: 10) }
-            }
+            Spacer(minLength: 0)
+            ForEach(0..<(family == .systemLarge ? 4 : 2), id: \.self) { _ in bar(width: 1, height: 10) }
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

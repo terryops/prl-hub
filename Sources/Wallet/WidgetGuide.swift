@@ -4,8 +4,9 @@ import WidgetKit
 // MARK: - 桌面小组件 hint (钱包 tab)
 
 /// A one-line hint under 价格提醒 on the 钱包 tab: how to put Pearl Hub on the Home
-/// Screen / desktop. Hidden once a Pearl Hub home widget is already placed. The widget
-/// is a Pro feature; the paywall only opens from the guide's explicit unlock button.
+/// Screen / desktop. Hidden once a Pearl Hub home widget is already placed. The small
+/// size is free, medium and large are Pro; the paywall only opens from the guide's
+/// explicit unlock button.
 struct WidgetInlineLink: View {
     @ObservedObject private var pro = ProStore.shared
     @Environment(\.scenePhase) private var scenePhase
@@ -26,10 +27,6 @@ struct WidgetInlineLink: View {
                         Text(Loc("桌面小组件")).foregroundStyle(Pearl.accent)
                         Text(verbatim: "·").foregroundStyle(.tertiary)
                         Text(Self.subtitle).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
-                        if !pro.isPro {
-                            Image(systemName: "sparkles").font(.caption2).foregroundStyle(Pearl.accent)
-                                .accessibilityLabel(Loc("高级版"))
-                        }
                         Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
                     }
                     .font(.caption)
@@ -77,7 +74,7 @@ struct WidgetInlineLink: View {
     }
 }
 
-/// How to add the widget, per platform, and — without Pro — that it needs Pro.
+/// How to add the widget, per platform, and — without Pro — that medium / large need it.
 struct WidgetGuideSheet: View {
     @ObservedObject private var pro = ProStore.shared
     @Environment(\.dismiss) private var dismiss
@@ -124,16 +121,16 @@ struct WidgetGuideSheet: View {
 
     @ViewBuilder private var proStatus: some View {
         if pro.isPro {
-            Label(Loc("高级版已解锁，添加后即可使用。"), systemImage: "checkmark.seal.fill")
+            Label(Loc("高级版已解锁，所有尺寸都能用。"), systemImage: "checkmark.seal.fill")
                 .font(.callout).foregroundStyle(.green)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
             VStack(alignment: .leading, spacing: Pearl.Space.sm) {
                 HStack(spacing: 6) {
-                    Text(Loc("桌面小组件是高级版功能")).font(.subheadline.weight(.semibold))
+                    Text(Loc("中、大尺寸是高级版功能")).font(.subheadline.weight(.semibold))
                     PearlBadge(text: Loc("高级版"), systemImage: "sparkles")
                 }
-                Text(Loc("没有高级版时，小组件会显示锁定画面，点它即可解锁。"))
+                Text(Loc("小尺寸（币价和余额）免费使用。中、大尺寸还能看矿池算力和最近交易，没有高级版时会显示锁定画面，点它即可解锁。"))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Button { showingPaywall = true } label: { Text(Loc("解锁高级版")) }
