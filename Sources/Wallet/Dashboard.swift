@@ -235,6 +235,7 @@ struct DashboardView: View {
                 .animation(.snappy, value: store.backendReady)
 
                 PriceAlertInlineLink()
+                WidgetInlineLink()
             }
             .padding(Pearl.Space.screen)
             .frame(maxWidth: 560)

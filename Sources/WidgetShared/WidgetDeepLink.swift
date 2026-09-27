@@ -11,6 +11,7 @@ enum WidgetDeepLink: String {
     case wallet   // 钱包    — balance / recent transfers
     case trade    // 交易    — the PRL/USD price drives this; SafeTrade surface
     case pools    // 我的监控 — pool watches / hashrate
+    case pro      // the locked (not-Pro) widget — opens 钱包 with the Pro paywall
 
     static let scheme = "pearlhub"
 
@@ -26,6 +27,7 @@ enum WidgetDeepLink: String {
         case .wallet: return 0
         case .trade:  return 1
         case .pools:  return 3
+        case .pro:    return 0
         }
     }
 

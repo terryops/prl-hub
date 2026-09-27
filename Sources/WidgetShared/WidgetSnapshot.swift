@@ -71,7 +71,16 @@ struct WidgetSnapshot: Codable {
     // Optional so a snapshot written before this field existed still decodes.
     var languageCode: String? = nil
 
+    // Pro unlocks the home-screen / desktop widget. The app publishes its StoreKit-
+    // verified status here; nil = not published yet (the widget then asks StoreKit).
+    var isPro: Bool? = nil
+
     var updatedAt: Date = .distantPast
+}
+
+/// The one in-app purchase (Pearl Hub Pro) — checked by the app and the widget alike.
+enum ProProduct {
+    static let id = "com.prl.wizard.pro"
 }
 
 /// Secondary fiat for the widget's "≈ $33.08 · ¥224.53" line.

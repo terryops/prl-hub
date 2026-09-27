@@ -1,5 +1,6 @@
 import WidgetKit
 import SwiftUI
+import StoreKit
 
 // MARK: - Pearl Hub combined widget
 //
@@ -7,18 +8,27 @@ import SwiftUI
 // large size), then every pool watch's hashrate / online workers below. Reads the
 // app's App Group snapshot and self-refreshes balance + price + AlphaPool hashrate
 // on the system timeline so it stays current while the app is closed.
+//
+// A Pro feature: without Pearl Hub Pro it shows a locked card whose tap opens the
+// app's paywall (the widget gallery still previews the real thing).
 
 struct PearlWidget: Widget {
     let kind = "PRLHubWidget"
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: PearlProvider()) { entry in
-            PearlWidgetView(snap: entry.snap, age: entry.age, fresh: entry.fresh)
-                .containerBackground(pearlGradient, for: .widget)
-                .environment(\.locale, widgetLocale(entry.snap.languageCode))
+            Group {
+                if entry.locked {
+                    PearlWidgetLocked(languageCode: entry.snap.languageCode)
+                } else {
+                    PearlWidgetView(snap: entry.snap, age: entry.age, fresh: entry.fresh)
+                }
+            }
+            .containerBackground(pearlGradient, for: .widget)
+            .environment(\.locale, widgetLocale(entry.snap.languageCode))
         }
         .configurationDisplayName("Pearl Hub")
         // Resolved against the extension's own copy of the app's string tables.
-        .description("钱包余额与挖矿监控")
+        .description("钱包余额与挖矿监控 · 高级版")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
@@ -28,6 +38,18 @@ struct PearlEntry: TimelineEntry {
     let snap: WidgetSnapshot
     var age: String = ""        // precomputed minute-granularity freshness, e.g. "5 分钟前"
     var fresh: Bool = false     // refreshed within the last 5 minutes → stamp shows the fresh badge
+    var locked: Bool = false    // no Pro — the locked card instead of the figures
+}
+
+/// Pro unlocks this widget. The app publishes its verified status into the snapshot;
+/// failing that (not published yet — e.g. right after an update, before the app has
+/// run), the widget asks StoreKit itself, which answers for the containing app.
+func widgetHasPro(_ snap: WidgetSnapshot) async -> Bool {
+    if let published = snap.isPro { return published }
+    for await result in Transaction.currentEntitlements {
+        if case .verified(let t) = result, t.productID == ProProduct.id, t.revocationDate == nil { return true }
+    }
+    return false
 }
 
 /// Fresh-badge threshold: the shown minute count (same rounding as `freshnessAge`) is ≤ 5,
@@ -74,11 +96,21 @@ struct PearlProvider: TimelineProvider {
     func placeholder(in context: Context) -> PearlEntry { PearlEntry(date: Date(), snap: .demo) }
 
     func getSnapshot(in context: Context, completion: @escaping (PearlEntry) -> Void) {
-        let snap = context.isPreview ? .demo : WidgetStore.load()
         let now = Date()
-        completion(PearlEntry(date: now, snap: snap,
-                              age: freshnessAge(stamp: snap.updatedAt, asOf: now, languageCode: snap.languageCode),
-                              fresh: freshnessIsRecent(stamp: snap.updatedAt, asOf: now)))
+        // The gallery previews what Pro gets; a placed widget shows what this user gets.
+        if context.isPreview {
+            completion(PearlEntry(date: now, snap: .demo))
+            return
+        }
+        nonisolated(unsafe) let completion = completion
+        Task {
+            let snap = WidgetStore.load()
+            let locked = !(await widgetHasPro(snap))
+            completion(PearlEntry(date: now, snap: snap,
+                                  age: freshnessAge(stamp: snap.updatedAt, asOf: now, languageCode: snap.languageCode),
+                                  fresh: freshnessIsRecent(stamp: snap.updatedAt, asOf: now),
+                                  locked: locked))
+        }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<PearlEntry>) -> Void) {
@@ -87,6 +119,14 @@ struct PearlProvider: TimelineProvider {
         nonisolated(unsafe) let completion = completion
         Task {
             let initial = WidgetStore.load()
+            // Locked: no fetching at all. Buying Pro in the app reloads this at once;
+            // the 6-hour recheck catches a purchase made on another device.
+            guard await widgetHasPro(initial) else {
+                let now = Date()
+                completion(Timeline(entries: [PearlEntry(date: now, snap: initial, locked: true)],
+                                    policy: .after(now.addingTimeInterval(6 * 3600))))
+                return
+            }
             let network = initial.network
             let xpub = initial.xpub
             let poolsIn = initial.pools
@@ -194,6 +234,64 @@ struct PearlWidgetView: View {
         case .systemLarge: LargeCombined(snap: snap, age: age, fresh: fresh)
         default:           MediumCombined(snap: snap, age: age, fresh: fresh)
         }
+    }
+}
+
+// MARK: locked (no Pro)
+
+/// What a non-Pro user's widget shows: a faint skeleton of the layout behind a lock,
+/// and one tap target — the app's paywall. (Not the real view blurred: its balance /
+/// price / pool regions carry their own links, which would still take the tap.)
+struct PearlWidgetLocked: View {
+    @Environment(\.widgetFamily) private var family
+    let languageCode: String?
+
+    var body: some View {
+        ZStack {
+            skeleton
+                .accessibilityHidden(true)
+            VStack(spacing: family == .systemSmall ? 5 : 7) {
+                Image(systemName: "lock.fill")
+                    .font(family == .systemSmall ? .title3 : .title2)
+                Text(WLoc("高级版功能", languageCode))
+                    .font(.headline.weight(.bold))
+                if family != .systemSmall {
+                    Text(WLoc("在桌面随时查看余额、币价和矿池算力", languageCode))
+                        .font(.caption).multilineTextAlignment(.center)
+                        .foregroundStyle(.white.opacity(0.8))
+                }
+                Text(WLoc("点按解锁", languageCode))
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(.white.opacity(0.18), in: Capsule())
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+        }
+        .widgetURL(WidgetDeepLink.pro.url)
+    }
+
+    /// Placeholder bars where the balance, fiat line and pool rows would be.
+    private var skeleton: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            bar(width: 0.45, height: 8)
+            bar(width: 0.7, height: 18)
+            bar(width: 0.5, height: 8)
+            if family != .systemSmall {
+                Spacer(minLength: 0)
+                ForEach(0..<(family == .systemLarge ? 4 : 2), id: \.self) { _ in bar(width: 1, height: 10) }
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .opacity(0.5)
+    }
+
+    private func bar(width: CGFloat, height: CGFloat) -> some View {
+        GeometryReader { g in
+            Capsule().fill(.white.opacity(0.14)).frame(width: g.size.width * width)
+        }
+        .frame(height: height)
     }
 }
 

@@ -6,7 +6,8 @@ import StoreKit
 // Pearl Hub Pro — one-time in-app purchase (StoreKit 2)
 // ------------------------------------------------------------
 // A single non-consumable (`com.prl.wizard.pro`, US$2.99) unlocks
-// the premium features — today: server-monitored price alerts.
+// the premium features: server-monitored price alerts, 锁屏盯盘, the
+// order-book depth chart and the home-screen / desktop widget.
 // App Store rules (3.1.1) require IAP for unlocking functionality;
 // crypto donations can't gate anything.
 //
@@ -19,7 +20,7 @@ import StoreKit
 @MainActor
 final class ProStore: ObservableObject {
     static let shared = ProStore()
-    static let productID = "com.prl.wizard.pro"
+    static let productID = ProProduct.id
 
     @Published private(set) var isPro: Bool
     /// The Pro transaction's signed JWS (StoreKit's `jwsRepresentation`), sent with
@@ -40,7 +41,7 @@ final class ProStore: ObservableObject {
         jws = isPro ? UserDefaults.standard.string(forKey: Self.jwsKey) : nil
         #if DEBUG
         // Screenshot / UI-test seam, compiled out of release.
-        if ProcessInfo.processInfo.environment["SHOT_PRO"] == "1" { isPro = true; return }
+        if ProcessInfo.processInfo.environment["SHOT_PRO"] == "1" { isPro = true; WidgetBridge.updatePro(true); return }
         #endif
         // Purchases made elsewhere (other device, Ask to Buy approval, refund).
         updates = Task { [weak self] in
@@ -105,6 +106,9 @@ final class ProStore: ObservableObject {
     }
 
     private func set(_ owned: Bool, jws signed: String?) {
+        // Every verdict goes to the widget (a no-op when unchanged), including the first
+        // one after an update, before which its snapshot has no Pro status at all.
+        WidgetBridge.updatePro(owned)
         let newJWS = owned ? signed ?? jws : nil
         if newJWS != jws {
             jws = newJWS

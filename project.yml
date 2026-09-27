@@ -22,7 +22,7 @@ settings:
     CODE_SIGN_STYLE: Automatic
     GENERATE_INFOPLIST_FILE: YES
     MARKETING_VERSION: "1.17"
-    CURRENT_PROJECT_VERSION: "128"
+    CURRENT_PROJECT_VERSION: "129"
     # Full data-race checking (still the Swift 5 language mode): every concurrency
     # diagnostic surfaces as a warning now, so the move to Swift 6 is a flag flip.
     SWIFT_STRICT_CONCURRENCY: complete

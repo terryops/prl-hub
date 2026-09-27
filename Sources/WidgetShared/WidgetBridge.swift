@@ -139,6 +139,16 @@ enum WidgetBridge {
         reloadHome()
     }
 
+    /// Pro status changed (or is published for the first time). The home widget is a
+    /// Pro feature, so it reloads at once — past the throttle — to lock or unlock.
+    static func updatePro(_ isPro: Bool) {
+        var s = WidgetStore.load()
+        guard s.isPro != isPro else { return }
+        s.isPro = isPro
+        WidgetStore.save(s)
+        reload(kind: homeKind)
+    }
+
     /// No stamp, or one at least `maxAge` old.
     nonisolated static func isStale(_ at: Date?, now: Date, maxAge: TimeInterval = restampAfter) -> Bool {
         at.map { now.timeIntervalSince($0) >= maxAge } ?? true

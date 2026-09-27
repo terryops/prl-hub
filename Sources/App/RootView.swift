@@ -11,6 +11,7 @@ struct RootView: View {
     // verification run can land on a tab without driving the tab bar. Same shape as
     // PoolStore's SHOT_WATCH_ADDR seeding, and compiled out of release entirely.
     @State private var tab = RootView.initialTab
+    @State private var widgetPaywall = false   // the locked widget was tapped
 
     private static var initialTab: Int {
         #if DEBUG
@@ -60,6 +61,11 @@ struct RootView: View {
         .onOpenURL { url in
             guard let route = WidgetDeepLink(url: url) else { return }
             tab = (route == .trade && !AppFeatures.tradeEnabled) ? WidgetDeepLink.wallet.tab : route.tab
+            // A tap on the locked widget is explicit interest: offer Pro right away.
+            if route == .pro, !ProStore.shared.isPro { widgetPaywall = true }
+        }
+        .sheet(isPresented: $widgetPaywall) {
+            ProUpsellSheet(headline: Loc("高级版功能：桌面小组件"), headlineIcon: "square.grid.2x2")
         }
         .background {                             // ambient pearl wash behind transparent scroll content
             PearlBackground()
