@@ -769,7 +769,6 @@
 "SafeTrade 地址簿「%@」· 免邮箱验证码" = "Buku alamat SafeTrade “%@” · tanpa kode email";
 "SafeTrade 地址簿（免邮箱验证码）" = "Buku alamat SafeTrade (tanpa kode email)";
 "SafeTrade 拒绝了这个 API 密钥的提现请求（%@）。到 SafeTrade「API 管理」编辑这个密钥：勾选 Enable Withdraw，并把当前网络的公网 IP 加入 Trusted IPs。" = "SafeTrade menolak penarikan dengan kunci API ini (%@). Di pengaturan API SafeTrade, edit kunci: centang Enable Withdraw dan tambahkan IP publik jaringan ini ke Trusted IPs.";
-"API 密钥需在 SafeTrade 开启 Enable Withdraw，且只能从它的 Trusted IPs 里的网络提现。" = "Kunci API harus mengaktifkan Enable Withdraw di SafeTrade, dan penarikan hanya bisa dari jaringan yang ada di Trusted IPs.";
 "手续费 %@ · 最少 %@" = "Biaya %@ · min %@";
 "SafeTrade 地址簿有 %d 个地址（%@），但没有可用于 %@ 的。" = "Buku alamat SafeTrade berisi %d alamat (%@), tetapi tidak ada yang bisa dipakai untuk %@.";
 "读取 SafeTrade 地址簿失败：%@" = "Gagal membaca buku alamat SafeTrade: %@";
@@ -820,21 +819,12 @@
 "价格的小数位太多" = "Harga memiliki terlalu banyak desimal";
 "价格超出交易所允许的范围" = "Harga di luar rentang yang diizinkan bursa";
 "价格需在 %@ – %@ USDT 之间" = "Harga harus antara %1$@ dan %2$@ USDT";
-"使用提现专用密钥（%@）。它只能从 Trusted IPs 里的网络提现。" = "Memakai kunci khusus penarikan (%@). Penarikan hanya bisa dari jaringan di Trusted IPs-nya.";
-"保存提现密钥" = "Simpan kunci penarikan";
-"切换 Wi-Fi 和蜂窝网络、开关代理或 VPN 都会改变这个 IP。" = "IP ini berubah saat berganti Wi-Fi dan data seluler, atau saat proxy/VPN dinyalakan atau dimatikan.";
 "刷新失败，显示的是上次的数据" = "Gagal memuat ulang — menampilkan data terakhir";
-"已保存。当前网络的 IP 不在这把密钥的 Trusted IPs 里，只有在名单里的网络才能提现。" = "Tersimpan. IP jaringan ini tidak ada di Trusted IPs kunci — penarikan hanya bisa dari jaringan di daftar.";
-"已保存，但当前网络的 IP 不在这把密钥的 Trusted IPs 里。交易密钥建议不绑 IP，否则换网络就会被拒。" = "Tersimpan, tetapi IP jaringan ini tidak ada di Trusted IPs kunci. Sebaiknya kunci trading tanpa daftar IP, kalau tidak akan ditolak setiap ganti jaringan.";
 "已保存，但请求被 SafeTrade 的防火墙拦截（网络或代理），换个网络后在交易页确认。" = "Tersimpan, tetapi firewall SafeTrade memblokir permintaan (jaringan atau proxy). Cek lagi di tab Trading dari jaringan lain.";
 "已保存，但验证未通过：本机时间和 SafeTrade 相差太多，请打开「自动设置时间」。" = "Tersimpan, tetapi pengecekan gagal: jam perangkat terlalu jauh dari SafeTrade. Aktifkan pengaturan waktu otomatis.";
 "已在订单列表找到这笔订单 #%@" = "Order ditemukan di daftar: #%@";
-"建议在 SafeTrade 另建一把只开交易、不绑 IP 的密钥，填到「设置 → 交易」；开了提现、绑了 IP 的那把填到「提现专用密钥」，只在提现时使用。" = "Buat kunci terpisah di SafeTrade khusus trading tanpa daftar IP, masukkan di Pengaturan → Trading. Kunci yang bisa menarik dan terikat IP masukkan ke Kunci khusus penarikan — hanya dipakai saat menarik.";
-"开了 Enable Withdraw 的密钥必须绑定 Trusted IPs，之后它的所有请求都只认名单里的 IP，手机一换网络交易页就会报错。把这把密钥单独填在这里：交易只用上面那把（不开提现、不绑 IP），这把只在提现时使用。" = "Kunci dengan Enable Withdraw wajib memakai Trusted IPs, lalu semua permintaannya hanya diterima dari IP di daftar — tab Trading error setiap ponsel ganti jaringan. Masukkan kunci itu di sini: trading hanya memakai kunci di atas (tanpa penarikan, tanpa daftar IP), dan kunci ini hanya untuk penarikan.";
 "当前网络的 IP 不在密钥的白名单里" = "IP jaringan ini tidak ada di daftar izin kunci";
 "我已在网站核对，解除锁定" = "Sudah saya cek di situs — buka kunci";
-"提现专用密钥（可选）" = "Kunci khusus penarikan (opsional)";
-"提现用的密钥绑定了 Trusted IPs：把上面的 IP 加进这把密钥的白名单，或换到名单里的网络再提现。" = "Kunci penarikan memakai Trusted IPs: tambahkan IP di atas ke daftar kunci itu, atau tarik dari jaringan yang ada di daftar.";
 "提现记录里出现了这笔提现（%@ %@），已提交成功。" = "Penarikan (%1$@ %2$@) sudah muncul di riwayat — berhasil dikirim.";
 "提现记录里没有新的提现，这次没有提交成功，可以重新提交。" = "Tidak ada penarikan baru di riwayat — yang ini tidak terkirim. Anda bisa mengirim lagi.";
 "数量低于交易所的最小下单量" = "Jumlah di bawah ukuran order minimum bursa";
@@ -844,7 +834,6 @@
 "最少下单 %@ PRL" = "Order minimum %@ PRL";
 "正在查询…" = "Mencari…";
 "正在核对…" = "Mengecek…";
-"清除提现密钥" = "Hapus kunci penarikan";
 "盘口深度不够，市价单成交不了这么多，请减少数量或改用限价单" = "Buku order terlalu tipis untuk mengisi sebanyak ini secara market — kurangi jumlah atau pakai order limit";
 "等待盘口数据后才能下市价单" = "Menunggu data buku order sebelum order market";
 "签名已过期：本机时间和 SafeTrade 相差太多，请打开「自动设置时间」后重试。" = "Tanda tangan kedaluwarsa: jam perangkat terlalu jauh dari SafeTrade. Aktifkan pengaturan waktu otomatis, lalu coba lagi.";
@@ -852,7 +841,6 @@
 "请求被 SafeTrade 的防火墙（Cloudflare）拦截，通常是当前网络或代理的出口被拦，换个网络再试。" = "Firewall SafeTrade (Cloudflare) memblokir permintaan — biasanya jalur keluar jaringan atau proxy ini diblokir. Coba jaringan lain.";
 "身份验证未通过，已取消提现" = "Autentikasi gagal — penarikan dibatalkan";
 "这把 API 密钥设置了 Trusted IPs，SafeTrade 只接受名单里的 IP。SafeTrade 看到你现在的 IP 是：" = "Kunci API ini memakai Trusted IPs, jadi SafeTrade hanya menerima IP di daftar itu. IP Anda yang terlihat oleh SafeTrade saat ini:";
-"这是 IPv6 地址：手机的 IPv6 地址会定期更换，同一个 Wi-Fi 下也会在 IPv4 和 IPv6 之间切换，所以白名单很难一直有效。" = "Ini alamat IPv6: alamat IPv6 ponsel berganti secara berkala, dan di Wi-Fi yang sama pun koneksi berpindah antara IPv4 dan IPv6 — jadi daftar izin jarang tetap berlaku.";
 "重新核对" = "Cek lagi";
 "验证身份以确认提现" = "Verifikasi identitas untuk mengonfirmasi penarikan";
 "链上查询失败" = "Gagal memeriksa on-chain";
@@ -869,3 +857,8 @@
 "确认超时，请重新发送" = "Konfirmasi kedaluwarsa. Silakan kirim ulang.";
 "网络异常，无法确认转账是否已发出（%@）。请先查看交易记录，切勿重复发送。" = "Gangguan jaringan — tidak dapat memastikan kiriman sudah terkirim (%@). Periksa riwayat transaksi dulu; jangan kirim ulang.";
 "解锁钱包" = "Buka Kunci Dompet";
+"App 固定用 IPv4 连接 SafeTrade：把上面这个 IP 加进这把密钥的 Trusted IPs 即可。" = "Aplikasi selalu terhubung ke SafeTrade lewat IPv4: tambahkan IP di atas ke Trusted IPs kunci ini.";
+"换网络（Wi-Fi 和蜂窝互切、换一个 Wi-Fi）后 IP 会变，需要再加一次；蜂窝网络的 IP 经常变。开着代理或 VPN 时，这里显示的是代理的出口 IP。" = "IP berubah saat Anda berganti jaringan (Wi-Fi ↔ seluler, atau Wi-Fi lain) dan perlu ditambahkan lagi; IP seluler sering berubah. Jika proxy atau VPN aktif, yang tampil di sini adalah IP keluar proxy.";
+"这是 IPv6 地址：当前网络没有 IPv4，或者代理 / VPN 用 IPv6 连接了 SafeTrade。白名单只认 IPv4，所以匹配不上——换一个有 IPv4 的网络，或关掉代理 / VPN 再试。" = "Ini alamat IPv6: jaringan ini tidak punya IPv4, atau proxy / VPN terhubung ke SafeTrade lewat IPv6. Daftar izin hanya mencocokkan IPv4, jadi tidak cocok — pindah ke jaringan yang punya IPv4, atau matikan proxy / VPN lalu coba lagi.";
+"已保存，但当前网络的 IP 不在这把密钥的 Trusted IPs 里。到交易页查看 SafeTrade 看到的 IPv4 地址，把它加进白名单。" = "Tersimpan, tetapi IP jaringan ini tidak ada di Trusted IPs kunci. Buka tab Trading untuk melihat alamat IPv4 yang dilihat SafeTrade, lalu tambahkan ke daftar izin.";
+"API 密钥需在 SafeTrade 开启 Enable Withdraw；它的 Trusted IPs 白名单对所有请求都生效，不只是提现。" = "Kunci API harus mengaktifkan Enable Withdraw di SafeTrade; daftar izin Trusted IPs-nya berlaku untuk semua permintaan, bukan hanya penarikan.";

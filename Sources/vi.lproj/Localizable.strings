@@ -769,7 +769,6 @@
 "SafeTrade 地址簿「%@」· 免邮箱验证码" = "Sổ địa chỉ SafeTrade “%@” · không cần mã email";
 "SafeTrade 地址簿（免邮箱验证码）" = "Sổ địa chỉ SafeTrade (không cần mã email)";
 "SafeTrade 拒绝了这个 API 密钥的提现请求（%@）。到 SafeTrade「API 管理」编辑这个密钥：勾选 Enable Withdraw，并把当前网络的公网 IP 加入 Trusted IPs。" = "SafeTrade từ chối yêu cầu rút bằng API key này (%@). Vào phần API của SafeTrade, sửa key: bật Enable Withdraw và thêm IP công khai của mạng hiện tại vào Trusted IPs.";
-"API 密钥需在 SafeTrade 开启 Enable Withdraw，且只能从它的 Trusted IPs 里的网络提现。" = "API key cần bật Enable Withdraw trên SafeTrade, và chỉ rút được từ các mạng có trong Trusted IPs.";
 "手续费 %@ · 最少 %@" = "Phí %@ · tối thiểu %@";
 "SafeTrade 地址簿有 %d 个地址（%@），但没有可用于 %@ 的。" = "Sổ địa chỉ SafeTrade có %d địa chỉ (%@), nhưng không có địa chỉ nào dùng được cho %@.";
 "读取 SafeTrade 地址簿失败：%@" = "Không đọc được sổ địa chỉ SafeTrade: %@";
@@ -820,21 +819,12 @@
 "价格的小数位太多" = "Giá có quá nhiều chữ số thập phân";
 "价格超出交易所允许的范围" = "Giá nằm ngoài phạm vi sàn cho phép";
 "价格需在 %@ – %@ USDT 之间" = "Giá phải trong khoảng %1$@ – %2$@ USDT";
-"使用提现专用密钥（%@）。它只能从 Trusted IPs 里的网络提现。" = "Dùng key riêng để rút (%@). Chỉ rút được từ các mạng trong Trusted IPs của nó.";
-"保存提现密钥" = "Lưu key rút tiền";
-"切换 Wi-Fi 和蜂窝网络、开关代理或 VPN 都会改变这个 IP。" = "IP này thay đổi khi chuyển giữa Wi-Fi và dữ liệu di động, hoặc bật/tắt proxy hay VPN.";
 "刷新失败，显示的是上次的数据" = "Làm mới thất bại — đang hiện dữ liệu lần trước";
-"已保存。当前网络的 IP 不在这把密钥的 Trusted IPs 里，只有在名单里的网络才能提现。" = "Đã lưu. IP của mạng này không có trong Trusted IPs của key — chỉ rút được từ các mạng trong danh sách.";
-"已保存，但当前网络的 IP 不在这把密钥的 Trusted IPs 里。交易密钥建议不绑 IP，否则换网络就会被拒。" = "Đã lưu, nhưng IP của mạng này không có trong Trusted IPs của key. Key giao dịch nên để trống danh sách IP, nếu không sẽ bị từ chối mỗi khi đổi mạng.";
 "已保存，但请求被 SafeTrade 的防火墙拦截（网络或代理），换个网络后在交易页确认。" = "Đã lưu, nhưng tường lửa của SafeTrade đã chặn yêu cầu (mạng hoặc proxy). Kiểm tra lại ở tab Giao dịch bằng mạng khác.";
 "已保存，但验证未通过：本机时间和 SafeTrade 相差太多，请打开「自动设置时间」。" = "Đã lưu, nhưng kiểm tra thất bại: đồng hồ máy lệch quá nhiều so với SafeTrade. Hãy bật đặt giờ tự động.";
 "已在订单列表找到这笔订单 #%@" = "Đã tìm thấy lệnh trong danh sách: #%@";
-"建议在 SafeTrade 另建一把只开交易、不绑 IP 的密钥，填到「设置 → 交易」；开了提现、绑了 IP 的那把填到「提现专用密钥」，只在提现时使用。" = "Hãy tạo trên SafeTrade một key riêng chỉ để giao dịch, không có danh sách IP, rồi nhập ở Cài đặt → Giao dịch. Key có quyền rút và gắn IP thì nhập vào Key riêng để rút — chỉ dùng khi rút tiền.";
-"开了 Enable Withdraw 的密钥必须绑定 Trusted IPs，之后它的所有请求都只认名单里的 IP，手机一换网络交易页就会报错。把这把密钥单独填在这里：交易只用上面那把（不开提现、不绑 IP），这把只在提现时使用。" = "Key bật Enable Withdraw bắt buộc có Trusted IPs, và khi đó mọi yêu cầu của nó chỉ được chấp nhận từ IP trong danh sách — tab Giao dịch sẽ báo lỗi mỗi khi điện thoại đổi mạng. Hãy nhập key đó ở đây: giao dịch chỉ dùng key ở trên (không rút, không danh sách IP), còn key này chỉ dùng để rút.";
 "当前网络的 IP 不在密钥的白名单里" = "IP của mạng này không có trong danh sách cho phép của key";
 "我已在网站核对，解除锁定" = "Tôi đã kiểm tra trên web — mở khóa";
-"提现专用密钥（可选）" = "Key riêng để rút (tùy chọn)";
-"提现用的密钥绑定了 Trusted IPs：把上面的 IP 加进这把密钥的白名单，或换到名单里的网络再提现。" = "Key dùng để rút có Trusted IPs: thêm IP ở trên vào danh sách của key đó, hoặc rút từ mạng có trong danh sách.";
 "提现记录里出现了这笔提现（%@ %@），已提交成功。" = "Lệnh rút (%1$@ %2$@) đã có trong lịch sử — đã gửi thành công.";
 "提现记录里没有新的提现，这次没有提交成功，可以重新提交。" = "Không có lệnh rút mới trong lịch sử — lần này chưa gửi được. Bạn có thể gửi lại.";
 "数量低于交易所的最小下单量" = "Số lượng thấp hơn mức đặt lệnh tối thiểu của sàn";
@@ -844,7 +834,6 @@
 "最少下单 %@ PRL" = "Lệnh tối thiểu %@ PRL";
 "正在查询…" = "Đang tra cứu…";
 "正在核对…" = "Đang kiểm tra…";
-"清除提现密钥" = "Xóa key rút tiền";
 "盘口深度不够，市价单成交不了这么多，请减少数量或改用限价单" = "Sổ lệnh quá mỏng để khớp chừng này bằng lệnh thị trường — giảm số lượng hoặc dùng lệnh giới hạn";
 "等待盘口数据后才能下市价单" = "Đang chờ dữ liệu sổ lệnh để đặt lệnh thị trường";
 "签名已过期：本机时间和 SafeTrade 相差太多，请打开「自动设置时间」后重试。" = "Chữ ký đã hết hạn: đồng hồ máy lệch quá nhiều so với SafeTrade. Hãy bật đặt giờ tự động rồi thử lại.";
@@ -852,7 +841,6 @@
 "请求被 SafeTrade 的防火墙（Cloudflare）拦截，通常是当前网络或代理的出口被拦，换个网络再试。" = "Tường lửa của SafeTrade (Cloudflare) đã chặn yêu cầu — thường do lối ra của mạng hoặc proxy này bị chặn. Hãy thử mạng khác.";
 "身份验证未通过，已取消提现" = "Xác thực thất bại — đã hủy lệnh rút";
 "这把 API 密钥设置了 Trusted IPs，SafeTrade 只接受名单里的 IP。SafeTrade 看到你现在的 IP 是：" = "API key này có Trusted IPs, nên SafeTrade chỉ chấp nhận IP trong danh sách. IP của bạn mà SafeTrade đang thấy là:";
-"这是 IPv6 地址：手机的 IPv6 地址会定期更换，同一个 Wi-Fi 下也会在 IPv4 和 IPv6 之间切换，所以白名单很难一直有效。" = "Đây là địa chỉ IPv6: địa chỉ IPv6 của điện thoại thay đổi định kỳ, và ngay trên cùng một Wi-Fi kết nối cũng chuyển qua lại giữa IPv4 và IPv6 — nên danh sách cho phép khó giữ được lâu.";
 "重新核对" = "Kiểm tra lại";
 "验证身份以确认提现" = "Xác minh danh tính để xác nhận rút";
 "链上查询失败" = "Không tra cứu được on-chain";
@@ -869,3 +857,8 @@
 "确认超时，请重新发送" = "Hết thời gian xác nhận, vui lòng gửi lại.";
 "网络异常，无法确认转账是否已发出（%@）。请先查看交易记录，切勿重复发送。" = "Lỗi mạng — không xác định được giao dịch đã gửi đi chưa (%@). Hãy xem lịch sử giao dịch trước, đừng gửi lại.";
 "解锁钱包" = "Mở khóa ví";
+"App 固定用 IPv4 连接 SafeTrade：把上面这个 IP 加进这把密钥的 Trusted IPs 即可。" = "Ứng dụng luôn kết nối SafeTrade qua IPv4: thêm IP ở trên vào Trusted IPs của key này.";
+"换网络（Wi-Fi 和蜂窝互切、换一个 Wi-Fi）后 IP 会变，需要再加一次；蜂窝网络的 IP 经常变。开着代理或 VPN 时，这里显示的是代理的出口 IP。" = "IP sẽ thay đổi khi bạn đổi mạng (Wi-Fi ↔ di động, hoặc sang Wi-Fi khác) và cần thêm lại; IP mạng di động thay đổi thường xuyên. Khi bật proxy hoặc VPN, đây là IP đầu ra của proxy.";
+"这是 IPv6 地址：当前网络没有 IPv4，或者代理 / VPN 用 IPv6 连接了 SafeTrade。白名单只认 IPv4，所以匹配不上——换一个有 IPv4 的网络，或关掉代理 / VPN 再试。" = "Đây là địa chỉ IPv6: mạng này không có IPv4, hoặc proxy / VPN đã kết nối SafeTrade qua IPv6. Danh sách cho phép chỉ khớp IPv4 nên không khớp được — hãy chuyển sang mạng có IPv4, hoặc tắt proxy / VPN rồi thử lại.";
+"已保存，但当前网络的 IP 不在这把密钥的 Trusted IPs 里。到交易页查看 SafeTrade 看到的 IPv4 地址，把它加进白名单。" = "Đã lưu, nhưng IP của mạng này không có trong Trusted IPs của key. Mở tab Giao dịch để xem địa chỉ IPv4 mà SafeTrade thấy và thêm vào danh sách cho phép.";
+"API 密钥需在 SafeTrade 开启 Enable Withdraw；它的 Trusted IPs 白名单对所有请求都生效，不只是提现。" = "API key cần bật Enable Withdraw trên SafeTrade; danh sách cho phép Trusted IPs của nó áp dụng cho mọi yêu cầu, không chỉ rút tiền.";

@@ -440,11 +440,9 @@ struct WithdrawView: View {
             if store.needsPhoneCode {
                 codeField(Loc("短信验证码"), text: $phoneCode, sendType: "phone")
             }
-            // Which key signs this withdrawal: SafeTrade keys may only withdraw with
-            // Enable Withdraw + a Trusted IPs list, which is why a separate one exists.
-            Text(SafeTradeSecrets.hasWithdrawCredentials
-                 ? Loc("使用提现专用密钥（%@）。它只能从 Trusted IPs 里的网络提现。", SafeTradeSecrets.maskedWithdrawKey)
-                 : Loc("API 密钥需在 SafeTrade 开启 Enable Withdraw，且只能从它的 Trusted IPs 里的网络提现。"))
+            // SafeTrade keys may only withdraw with Enable Withdraw; the key's Trusted
+            // IPs list gates every call it makes, withdrawals included.
+            Text(Loc("API 密钥需在 SafeTrade 开启 Enable Withdraw；它的 Trusted IPs 白名单对所有请求都生效，不只是提现。"))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button { focused = false; confirming = true } label: { Text(Loc("提现")) }
@@ -492,7 +490,7 @@ struct WithdrawView: View {
                              recheck: { Task { await store.verifyUnverified() } },
                              dismiss: { store.dismissUnverified() })
         }
-        if let issue = store.ipIssue { UntrustedIPCard(issue: issue, forWithdraw: true) }
+        if let issue = store.ipIssue { UntrustedIPCard(issue: issue) }
         TradeStatusLines(notice: store.notice, errors: [store.error])
     }
 

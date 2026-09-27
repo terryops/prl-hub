@@ -37,13 +37,12 @@ struct TradeStatusLines: View {
 }
 
 /// "Your IP isn't on this key's Trusted IPs": shows the address SafeTrade actually
-/// sees (from Cloudflare's trace, so IPv6 / proxy exits show up as they are) with a
-/// copy button, why it keeps changing, and the way out — a trading key without an IP
-/// list, with the IP-bound key kept for withdrawals only.
+/// sees (from Cloudflare's trace, over the same IPv4 path as the API calls) with a
+/// copy button, and what to do — add it to the key's list, again after a network
+/// change. An IPv6 address there means no IPv4 path (or a proxy using IPv6), which an
+/// IPv4 whitelist can't match.
 struct UntrustedIPCard: View {
     let issue: SafeTradeIPIssue
-    /// The refusal came from a withdrawal (the withdraw key), not from trading.
-    var forWithdraw = false
     @State private var copied = false
 
     var body: some View {
@@ -68,16 +67,18 @@ struct UntrustedIPCard: View {
                     Text(Loc("正在查询…")).font(.caption).foregroundStyle(.secondary)
                 }
             }
-            Text(issue.isIPv6
-                 ? Loc("这是 IPv6 地址：手机的 IPv6 地址会定期更换，同一个 Wi-Fi 下也会在 IPv4 和 IPv6 之间切换，所以白名单很难一直有效。")
-                 : Loc("切换 Wi-Fi 和蜂窝网络、开关代理或 VPN 都会改变这个 IP。"))
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(forWithdraw
-                 ? Loc("提现用的密钥绑定了 Trusted IPs：把上面的 IP 加进这把密钥的白名单，或换到名单里的网络再提现。")
-                 : Loc("建议在 SafeTrade 另建一把只开交易、不绑 IP 的密钥，填到「设置 → 交易」；开了提现、绑了 IP 的那把填到「提现专用密钥」，只在提现时使用。"))
-                .font(.caption)
-                .fixedSize(horizontal: false, vertical: true)
+            if issue.isIPv6 {
+                Text(Loc("这是 IPv6 地址：当前网络没有 IPv4，或者代理 / VPN 用 IPv6 连接了 SafeTrade。白名单只认 IPv4，所以匹配不上——换一个有 IPv4 的网络，或关掉代理 / VPN 再试。"))
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(Loc("App 固定用 IPv4 连接 SafeTrade：把上面这个 IP 加进这把密钥的 Trusted IPs 即可。"))
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(Loc("换网络（Wi-Fi 和蜂窝互切、换一个 Wi-Fi）后 IP 会变，需要再加一次；蜂窝网络的 IP 经常变。开着代理或 VPN 时，这里显示的是代理的出口 IP。"))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)

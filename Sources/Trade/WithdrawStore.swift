@@ -25,8 +25,6 @@ struct PendingWithdrawCheck: Equatable {
 ///      email_code, otp_code (2FA on), phone_code (phone verified)}
 ///   Or, to a SafeTrade address-book entry: {currency, amount, blockchain_key,
 ///   beneficiary_id, otp_code, phone_code} — no address, no e-mail code.
-/// The two POSTs sign with the withdraw-only key when one is set; the reads
-/// (history, address book) use the trading key, which works from any network.
 @MainActor
 final class WithdrawStore: ObservableObject {
     let currency: String                     // "prl" | "usdt"
@@ -64,7 +62,7 @@ final class WithdrawStore: ObservableObject {
     @Published var needsPhoneCode = false    // revealed when the exchange asks for an SMS code
     @Published var error: String?
     @Published var notice: String?
-    /// The withdraw key was refused for this network's IP — see UntrustedIPCard.
+    /// The key was refused for this network's IP — see UntrustedIPCard.
     @Published var ipIssue: SafeTradeIPIssue?
     @Published private(set) var verifying = false
 
@@ -223,8 +221,8 @@ final class WithdrawStore: ObservableObject {
         }
         switch (error as? SafeTradeError)?.authProblem {
         case .untrustedIP:
-            // The signing key (the withdraw-only key when set) has a Trusted IPs list
-            // without this network's address: show which address SafeTrade sees.
+            // The key's Trusted IPs list doesn't have this network's address:
+            // show which address SafeTrade sees.
             self.error = nil
             ipIssue = SafeTradeIPIssue(ip: nil)
             if let ip = try? await client.publicIP() { ipIssue = SafeTradeIPIssue(ip: ip) }

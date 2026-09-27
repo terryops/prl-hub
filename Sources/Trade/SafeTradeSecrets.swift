@@ -10,21 +10,13 @@ import os
 /// The wallet *seed* lives in its own device-only Keychain item; these are just
 /// exchange API keys. Nothing is hardcoded, so this file holds no secret.
 ///
-/// Two pairs: the trading key (balances, orders — required) and an optional
-/// withdraw-only key. SafeTrade only lets a key withdraw once it has a Trusted IPs
-/// list, and that list then gates EVERY call the key makes — so a phone, whose IP
-/// changes with the network (and flips between IPv4 and IPv6), kept getting
-/// `authz.*trusted*ip` on the Trade tab. Keeping the IP-bound key for withdrawals
-/// only leaves trading on a key without an IP list.
+/// One pair for everything: SafeTrade binds every key to a Trusted IPs list whether
+/// or not it may withdraw, so a second key wouldn't dodge the IP check (requests go
+/// out over IPv4 instead — see SafeTradeIPv4).
 enum SafeTradeSecrets {
-    /// Which stored pair a request signs with.
-    enum Role: Sendable { case trading, withdraw }
-
     // Keychain accounts (synchronizable → iCloud Keychain).
     private static let aKey = "safetrade.apikey"
     private static let aSecret = "safetrade.apisecret"
-    private static let aWithdrawKey = "safetrade.withdraw.apikey"
-    private static let aWithdrawSecret = "safetrade.withdraw.apisecret"
     // Legacy UserDefaults / iCloud-KVS keys to migrate away from + scrub.
     private static let legacyKeyDefault = "safetrade.apikey"
     private static let legacySecretDefault = "safetrade.apisecret"
@@ -34,15 +26,9 @@ enum SafeTradeSecrets {
     static var apiSecret: String { cached(aSecret) }
     static var hasCredentials: Bool { !apiKey.isEmpty && !apiSecret.isEmpty }
 
-    static var withdrawKey: String { cached(aWithdrawKey) }
-    static var withdrawSecret: String { cached(aWithdrawSecret) }
-    static var hasWithdrawCredentials: Bool { !withdrawKey.isEmpty && !withdrawSecret.isEmpty }
-
-    /// The pair to sign with: withdrawals prefer the withdraw-only key and fall back
-    /// to the trading key (so a single key that may do both keeps working).
-    static func credentials(for role: Role) -> (key: String, secret: String)? {
-        if role == .withdraw, hasWithdrawCredentials { return (withdrawKey, withdrawSecret) }
-        return hasCredentials ? (apiKey, apiSecret) : nil
+    /// The pair to sign with, nil until both are set.
+    static var credentials: (key: String, secret: String)? {
+        hasCredentials ? (apiKey, apiSecret) : nil
     }
 
     // MARK: read cache
@@ -89,10 +75,8 @@ enum SafeTradeSecrets {
         return Keychain.set(value, account: account, synchronizable: false)
     }
 
-    static var maskedKey: String { mask(apiKey) }
-    static var maskedWithdrawKey: String { mask(withdrawKey) }
-
-    private static func mask(_ k: String) -> String {
+    static var maskedKey: String {
+        let k = apiKey
         guard !k.isEmpty else { return Loc("未设置") }
         guard k.count > 6 else { return "••••" }
         return k.prefix(4) + "••••" + k.suffix(2)
@@ -101,25 +85,19 @@ enum SafeTradeSecrets {
     /// Returns false if either item failed to write to the Keychain, so the UI can
     /// report the failure instead of falsely showing "已保存".
     @discardableResult
-    static func save(apiKey: String, apiSecret: String, role: Role = .trading) -> Bool {
+    static func save(apiKey: String, apiSecret: String) -> Bool {
         defer { invalidateCache() }
-        let okKey = setEither(apiKey, account: role == .trading ? aKey : aWithdrawKey)
-        let okSecret = setEither(apiSecret, account: role == .trading ? aSecret : aWithdrawSecret)
+        let okKey = setEither(apiKey, account: aKey)
+        let okSecret = setEither(apiSecret, account: aSecret)
         return okKey && okSecret
     }
 
-    /// Remove both pairs (the last wallet is gone → de-provision the exchange entirely).
     static func clear() {
-        clear(role: .trading)
-        clear(role: .withdraw)
-    }
-
-    static func clear(role: Role) {
         defer { invalidateCache() }
         // Remove every variant (sync/non-sync × data-protection/legacy keychain) so
         // nothing reads back as "已设置" afterwards.
-        Keychain.deleteAll(account: role == .trading ? aKey : aWithdrawKey)
-        Keychain.deleteAll(account: role == .trading ? aSecret : aWithdrawSecret)
+        Keychain.deleteAll(account: aKey)
+        Keychain.deleteAll(account: aSecret)
     }
 
     /// One-time migration: lift any credentials saved by an older build (plaintext
