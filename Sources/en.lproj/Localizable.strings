@@ -862,3 +862,24 @@
 "这是 IPv6 地址：当前网络没有 IPv4，或者代理 / VPN 用 IPv6 连接了 SafeTrade。白名单只认 IPv4，所以匹配不上——换一个有 IPv4 的网络，或关掉代理 / VPN 再试。" = "This is an IPv6 address: this network has no IPv4, or a proxy / VPN reached SafeTrade over IPv6. The allowlist only matches IPv4, so it can't match — switch to a network with IPv4, or turn off the proxy / VPN and try again.";
 "已保存，但当前网络的 IP 不在这把密钥的 Trusted IPs 里。到交易页查看 SafeTrade 看到的 IPv4 地址，把它加进白名单。" = "Saved, but this network's IP isn't on the key's Trusted IPs. Open the Trade tab to see the IPv4 address SafeTrade sees, and add it to the allowlist.";
 "API 密钥需在 SafeTrade 开启 Enable Withdraw；它的 Trusted IPs 白名单对所有请求都生效，不只是提现。" = "The API key needs Enable Withdraw turned on in SafeTrade; its Trusted IPs allowlist applies to every request, not just withdrawals.";
+
+/* 买卖深度图 (Pro) */
+"买卖深度" = "Order Book Depth";
+"未能更新" = "Not updated";
+"高级版功能：买卖深度图" = "Pro feature: order book depth";
+"加载深度…" = "Loading order book…";
+"暂无挂单" = "No open orders on the book";
+"买卖深度图是高级版功能" = "Order book depth is a Pro feature";
+"看清各价位的挂单量，以及买盘和卖盘谁更强" = "See how much is waiting at each price, and whether buyers or sellers are stronger";
+"买一" = "Bid";
+"卖一" = "Ask";
+"价差" = "Spread";
+"买盘 %@" = "Bids %@";
+"卖盘 %@" = "Asks %@";
+"中间价 ±%@ 以内" = "Within ±%@ of mid";
+"买盘" = "Bids";
+"卖盘" = "Asks";
+"价格" = "Price";
+"累计数量" = "Total amount";
+"累计金额" = "Total value";
+"买卖深度图：看清各价位的挂单和买卖力量" = "Order book depth: every price level, and who's stronger — buyers or sellers";

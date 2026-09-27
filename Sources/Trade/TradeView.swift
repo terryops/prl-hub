@@ -137,7 +137,9 @@ struct TradeView: View {
             VStack(spacing: Pearl.Space.lg) {
                 notices
                 HStack(alignment: .top, spacing: Pearl.Space.lg) {
-                    VStack(spacing: Pearl.Space.lg) { balancesRow; MarketSection(store: store); PriceAlertPromoCard() }
+                    VStack(spacing: Pearl.Space.lg) {
+                        balancesRow; MarketSection(store: store); DepthSection(store: store); PriceAlertPromoCard()
+                    }
                         .frame(maxWidth: .infinity)
                     VStack(spacing: Pearl.Space.lg) { orderSection; statusMessages; ordersList }
                         .frame(width: 360)
@@ -148,6 +150,7 @@ struct TradeView: View {
                 notices
                 balancesRow
                 MarketSection(store: store)
+                DepthSection(store: store)
                 PriceAlertPromoCard()
                 orderSection
                 statusMessages

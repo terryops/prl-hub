@@ -25,6 +25,9 @@ struct ProPaywallCard: View {
                 if PriceLiveActivity.supported {
                     feature("lock.iphone", Loc("锁屏盯盘：锁屏和灵动岛实时显示价格"))
                 }
+                if AppFeatures.tradeEnabled {
+                    feature("chart.bar.xaxis", Loc("买卖深度图：看清各价位的挂单和买卖力量"))
+                }
                 feature("laptopcomputer.and.iphone", Loc("一次购买，iPhone、iPad 和 Mac 通用"))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -73,9 +76,13 @@ struct ProPaywallCard: View {
 // MARK: - One-time upsell sheet
 
 /// The paywall as a sheet — shown once, after repeated manual refreshes on 交易
-/// (UpsellPrompt).
+/// (UpsellPrompt), or when a locked feature's unlock button is tapped (which passes its
+/// own headline).
 /// Closes itself when the purchase goes through; TradeView then opens 价格提醒.
 struct ProUpsellSheet: View {
+    /// The pill above the card; nil = the price-alert one.
+    var headline: String? = nil
+    var headlineIcon = "bell.badge"
     @ObservedObject private var pro = ProStore.shared
     @Environment(\.dismiss) private var dismiss
     @State private var contentHeight: CGFloat = 620   // measured; the sheet hugs its content
@@ -83,7 +90,7 @@ struct ProUpsellSheet: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Pearl.Space.md) {
-                PearlBadge(text: Loc("新功能：价格提醒"), systemImage: "bell.badge")
+                PearlBadge(text: headline ?? Loc("新功能：价格提醒"), systemImage: headlineIcon)
                 ProPaywallCard(pro: pro)
                 Button(Loc("暂不")) { dismiss() }
                     .font(.subheadline)

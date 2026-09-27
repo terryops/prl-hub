@@ -862,3 +862,24 @@
 "这是 IPv6 地址：当前网络没有 IPv4，或者代理 / VPN 用 IPv6 连接了 SafeTrade。白名单只认 IPv4，所以匹配不上——换一个有 IPv4 的网络，或关掉代理 / VPN 再试。" = "Đây là địa chỉ IPv6: mạng này không có IPv4, hoặc proxy / VPN đã kết nối SafeTrade qua IPv6. Danh sách cho phép chỉ khớp IPv4 nên không khớp được — hãy chuyển sang mạng có IPv4, hoặc tắt proxy / VPN rồi thử lại.";
 "已保存，但当前网络的 IP 不在这把密钥的 Trusted IPs 里。到交易页查看 SafeTrade 看到的 IPv4 地址，把它加进白名单。" = "Đã lưu, nhưng IP của mạng này không có trong Trusted IPs của key. Mở tab Giao dịch để xem địa chỉ IPv4 mà SafeTrade thấy và thêm vào danh sách cho phép.";
 "API 密钥需在 SafeTrade 开启 Enable Withdraw；它的 Trusted IPs 白名单对所有请求都生效，不只是提现。" = "API key cần bật Enable Withdraw trên SafeTrade; danh sách cho phép Trusted IPs của nó áp dụng cho mọi yêu cầu, không chỉ rút tiền.";
+
+/* 买卖深度图 (Pro) */
+"买卖深度" = "Độ sâu sổ lệnh";
+"未能更新" = "Chưa cập nhật được";
+"高级版功能：买卖深度图" = "Tính năng Pro: biểu đồ độ sâu";
+"加载深度…" = "Đang tải sổ lệnh…";
+"暂无挂单" = "Chưa có lệnh trên sổ";
+"买卖深度图是高级版功能" = "Biểu đồ độ sâu là tính năng Pro";
+"看清各价位的挂单量，以及买盘和卖盘谁更强" = "Xem lượng lệnh chờ ở từng mức giá, và bên mua hay bên bán mạnh hơn";
+"买一" = "Giá mua";
+"卖一" = "Giá bán";
+"价差" = "Chênh lệch";
+"买盘 %@" = "Bên mua %@";
+"卖盘 %@" = "Bên bán %@";
+"中间价 ±%@ 以内" = "Trong ±%@ quanh giá giữa";
+"买盘" = "Bên mua";
+"卖盘" = "Bên bán";
+"价格" = "Giá";
+"累计数量" = "Tổng khối lượng";
+"累计金额" = "Tổng giá trị";
+"买卖深度图：看清各价位的挂单和买卖力量" = "Biểu đồ độ sâu: lệnh ở từng mức giá và tương quan mua – bán";

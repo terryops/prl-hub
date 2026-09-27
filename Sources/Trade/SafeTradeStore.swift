@@ -41,8 +41,12 @@ final class SafeTradeStore: ObservableObject {
     @Published var minuteCandles: [STCandle] = []
     private var minutesFetchedAt: Date?
     @Published var period = 60          // minutes: 15 / 60 / 240 / 1440
-    /// The order book — polled only while the order form is on 市价 (`wantsDepth`).
+    /// The order book — polled only while the order form is on 市价 (`wantsDepth`) or
+    /// the Pro depth chart is on screen (`wantsDepthChart`).
     @Published private(set) var depth: STDepth?
+    /// The last book read failed: `depth` is from before (the chart says so, but keeps it).
+    @Published private(set) var depthStale = false
+    private var depthFetchedAt: Date?
     /// The market's order rules (precisions, minimum); the built-in values until they load.
     @Published private(set) var rules = SafeTradeMarketRules.prlusdt
     private var rulesLoaded = false
@@ -76,6 +80,12 @@ final class SafeTradeStore: ObservableObject {
     var wantsDepth = false {
         didSet { if wantsDepth, !oldValue { Task { await refreshDepth() } } }
     }
+    /// The 买卖深度图 card is showing its live (Pro) chart — poll the book every ~10 s.
+    var wantsDepthChart = false {
+        didSet { if wantsDepthChart, !oldValue, depthDue(every: Self.depthChartInterval) { Task { await refreshDepth() } } }
+    }
+    /// The chart only needs a gentle refresh; the 市价 estimate keeps its per-tick poll.
+    private static let depthChartInterval: TimeInterval = 9
 
     private let client = SafeTradeClient()
     private var candleRequestID = 0
@@ -167,7 +177,8 @@ final class SafeTradeStore: ObservableObject {
         let requestID = nextCandleRequestID()
         async let m: Void = refreshMinutesIfDue(force: true)
         async let r: Void = loadRulesIfNeeded()
-        async let d: Void = wantsDepth ? refreshDepth() : ()
+        let bookWanted = wantsDepth || wantsDepthChart
+        async let d: Void = bookWanted ? refreshDepth() : ()
         async let t = try? client.ticker(market: market)
         async let k = try? client.kline(market: market, period: candlePeriod)
         setTicker(await t)
@@ -175,11 +186,13 @@ final class SafeTradeStore: ObservableObject {
         await m; await r; await d
     }
 
-    /// The periodic 现价 poll (plus the book on 市价). The 1-minute candles only gain a
-    /// row per minute, so they're re-fetched at most every 30 s.
+    /// The periodic 现价 poll (plus the book: every tick on 市价, every ~10 s for the
+    /// depth chart). The 1-minute candles only gain a row per minute, so they're
+    /// re-fetched at most every 30 s.
     func refreshTickerOnly() async {
         async let m: Void = refreshMinutesIfDue(force: false)
-        async let d: Void = wantsDepth ? refreshDepth() : ()
+        let bookDue = wantsDepth || (wantsDepthChart && depthDue(every: Self.depthChartInterval))
+        async let d: Void = bookDue ? refreshDepth() : ()
         setTicker(try? await client.ticker(market: market))
         await m; await d
     }
@@ -204,8 +217,22 @@ final class SafeTradeStore: ObservableObject {
         }
     }
 
+    /// 100 levels: enough for the chart's ±15 % window and for walking a market order.
+    /// A failed read keeps the last book, flagged stale, so one bad poll can't blank it.
     private func refreshDepth() async {
-        if let d = try? await client.depth(market: market), d != depth { depth = d }
+        do {
+            let d = try await client.depth(market: market, limit: 100)
+            depthFetchedAt = Date()
+            if d != depth { depth = d }
+            if depthStale { depthStale = false }
+        } catch {
+            if depth != nil, !depthStale { depthStale = true }
+        }
+    }
+
+    private func depthDue(every seconds: TimeInterval) -> Bool {
+        guard let t = depthFetchedAt else { return true }
+        return Date().timeIntervalSince(t) >= seconds
     }
 
     private func loadRulesIfNeeded() async {

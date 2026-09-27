@@ -862,3 +862,24 @@
 "这是 IPv6 地址：当前网络没有 IPv4，或者代理 / VPN 用 IPv6 连接了 SafeTrade。白名单只认 IPv4，所以匹配不上——换一个有 IPv4 的网络，或关掉代理 / VPN 再试。" = "Ini alamat IPv6: jaringan ini tidak punya IPv4, atau proxy / VPN terhubung ke SafeTrade lewat IPv6. Daftar izin hanya mencocokkan IPv4, jadi tidak cocok — pindah ke jaringan yang punya IPv4, atau matikan proxy / VPN lalu coba lagi.";
 "已保存，但当前网络的 IP 不在这把密钥的 Trusted IPs 里。到交易页查看 SafeTrade 看到的 IPv4 地址，把它加进白名单。" = "Tersimpan, tetapi IP jaringan ini tidak ada di Trusted IPs kunci. Buka tab Trading untuk melihat alamat IPv4 yang dilihat SafeTrade, lalu tambahkan ke daftar izin.";
 "API 密钥需在 SafeTrade 开启 Enable Withdraw；它的 Trusted IPs 白名单对所有请求都生效，不只是提现。" = "Kunci API harus mengaktifkan Enable Withdraw di SafeTrade; daftar izin Trusted IPs-nya berlaku untuk semua permintaan, bukan hanya penarikan.";
+
+/* 买卖深度图 (Pro) */
+"买卖深度" = "Kedalaman Order Book";
+"未能更新" = "Gagal diperbarui";
+"高级版功能：买卖深度图" = "Fitur Pro: kedalaman order book";
+"加载深度…" = "Memuat order book…";
+"暂无挂单" = "Belum ada order di buku";
+"买卖深度图是高级版功能" = "Kedalaman order book adalah fitur Pro";
+"看清各价位的挂单量，以及买盘和卖盘谁更强" = "Lihat berapa banyak order di tiap harga, dan siapa yang lebih kuat — pembeli atau penjual";
+"买一" = "Bid";
+"卖一" = "Ask";
+"价差" = "Spread";
+"买盘 %@" = "Bid %@";
+"卖盘 %@" = "Ask %@";
+"中间价 ±%@ 以内" = "Dalam ±%@ dari harga tengah";
+"买盘" = "Bid";
+"卖盘" = "Ask";
+"价格" = "Harga";
+"累计数量" = "Jumlah total";
+"累计金额" = "Nilai total";
+"买卖深度图：看清各价位的挂单和买卖力量" = "Kedalaman order book: order di tiap harga, dan kekuatan pembeli vs penjual";

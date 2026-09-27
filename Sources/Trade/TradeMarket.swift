@@ -111,8 +111,9 @@ struct MarketSection: View {
 /// (a zero-distance drag, and even a LongPress→Drag sequence) swallowed every swipe that
 /// began on the chart, so the page wouldn't scroll there. UILongPressGestureRecognizer
 /// fails as soon as the finger moves before 0.2 s, handing the touch to the enclosing
-/// scroll view; once it has begun, the drag moves only the crosshair.
-private struct HoldToScrub: UIViewRepresentable {
+/// scroll view; once it has begun, the drag moves only the crosshair. Shared with the
+/// depth chart (TradeDepthChart).
+struct HoldToScrub: UIViewRepresentable {
     var onChange: (CGPoint?) -> Void
 
     func makeUIView(context: Context) -> UIView {
