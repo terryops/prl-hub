@@ -127,10 +127,12 @@ struct TradeView: View {
             // on screen yet. Later refreshes run quietly (toolbar spinner).
             .processingOverlay(store.placing || (store.refreshing && store.balances.isEmpty && store.ticker == nil))
             // Catch up once on appearing / returning to the foreground, then keep 现价
-            // fresh — only while the scene is visible.
+            // fresh — only while the scene is visible. The catch-up waits for .active:
+            // .inactive is the half-second on the way in (or out, where a refresh begun
+            // would be suspended mid-flight).
             .task(id: scenePhase) {
                 guard let seconds = Self.pollSeconds(scenePhase) else { return }
-                await store.refreshIfStale()
+                if scenePhase == .active { await store.refreshIfStale() }
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(seconds))
                     if Task.isCancelled { break }

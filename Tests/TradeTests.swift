@@ -76,6 +76,22 @@ struct SafeTradeErrorTests {
         #expect(SafeTradeClient.isAmbiguousPostFailure(URLError(.timedOut)))
         #expect(!SafeTradeClient.isAmbiguousPostFailure(URLError(.notConnectedToInternet)))
     }
+
+    /// A GET is re-sent once only when the connection dropped under it; a cancelled read
+    /// (the view task went away) is no verdict at all.
+    @Test func droppedAndCancelledRequests() {
+        #expect(SafeTradeClient.isDroppedConnection(URLError(.networkConnectionLost)))
+        #expect(SafeTradeClient.isDroppedConnection(NSError(domain: NSURLErrorDomain, code: NSURLErrorNetworkConnectionLost)))
+        #expect(SafeTradeClient.isDroppedConnection(NSError(domain: NSPOSIXErrorDomain, code: Int(ECONNABORTED))))
+        #expect(!SafeTradeClient.isDroppedConnection(URLError(.timedOut)))
+        #expect(!SafeTradeClient.isDroppedConnection(URLError(.notConnectedToInternet)))
+        #expect(!SafeTradeClient.isDroppedConnection(URLError(.cancelled)))
+        #expect(SafeTradeClient.isCancellation(URLError(.cancelled)))
+        #expect(SafeTradeClient.isCancellation(NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled)))
+        #expect(SafeTradeClient.isCancellation(CancellationError()))
+        #expect(!SafeTradeClient.isCancellation(URLError(.networkConnectionLost)))
+        #expect(!SafeTradeClient.isCancellation(SafeTradeError.http(401, "")))
+    }
 }
 
 @MainActor

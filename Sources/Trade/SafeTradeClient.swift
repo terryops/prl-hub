@@ -568,12 +568,22 @@ struct SafeTradeClient {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = try JSONSerialization.data(withJSONObject: json)
         }
-        for attempt in 0..<2 {
+        var resigned = false, redialed = false
+        while true {
             if let credentials {
                 let headers = await signedHeaders(apiKey: credentials.key, apiSecret: credentials.secret)
                 headers.forEach { req.setValue($1, forHTTPHeaderField: $0) }
             }
-            let (data, resp) = try await Self.session.data(for: req)
+            let reply: (Data, URLResponse)
+            do {
+                reply = try await Self.session.data(for: req)
+            } catch let error where method == "GET" && !redialed && Self.isDroppedConnection(error) {
+                // The pooled connection died while the app was suspended; the first request
+                // on it after coming back fails. A GET is safe to send once more.
+                redialed = true
+                continue
+            }
+            let (data, resp) = reply
             guard let http = resp as? HTTPURLResponse else { throw URLError(.badServerResponse) }
             if let date = http.value(forHTTPHeaderField: "Date") { await Self.nonceGenerator.observe(serverDate: date) }
             let code = http.statusCode
@@ -582,11 +592,25 @@ struct SafeTradeClient {
             // A stale nonce is refused at the gateway before the request is acted on,
             // so one re-sign on the clock just learned from this reply is safe even
             // for a POST.
-            if credentials != nil, attempt == 0,
-               SafeTradeError.errorKeys(body).contains(where: SafeTradeAuthProblem.isNonceKey) { continue }
+            if credentials != nil, !resigned,
+               SafeTradeError.errorKeys(body).contains(where: SafeTradeAuthProblem.isNonceKey) {
+                resigned = true
+                continue
+            }
             throw SafeTradeError.http(code, body)
         }
-        throw SafeTradeError.invalidURL   // unreachable: the loop returns or throws
+    }
+
+    /// The connection went away under the request (as opposed to never being made).
+    static func isDroppedConnection(_ e: Error) -> Bool {
+        if let u = e as? URLError { return u.code == .networkConnectionLost }
+        let ns = e as NSError
+        return ns.domain == NSPOSIXErrorDomain && [ECONNABORTED, ECONNRESET, ENOTCONN].contains(Int32(ns.code))
+    }
+
+    /// The caller gave up on the request — not a verdict on the exchange or the network.
+    static func isCancellation(_ e: Error) -> Bool {
+        e is CancellationError || (e as? URLError)?.code == .cancelled
     }
 
     func balances() async throws -> [STBalance] {

@@ -39,6 +39,9 @@ final class SafeTradeStore: ObservableObject {
     /// Every open order (newest first), then the recent finished ones.
     @Published var orders: [STOrder] = []
     @Published var candles: [STCandle] = []
+    /// The period `candles` were read for; nil until the first read lands. Behind
+    /// `period` after a failed read — the next 现价 tick asks again.
+    private var candlesPeriod: Int?
     /// 1-minute candles for the last ~4 h — only used to work out the rolling
     /// "last 5 min / 15 min / 1 h / 4 h" change shown next to the price.
     @Published var minuteCandles: [STCandle] = []
@@ -98,6 +101,11 @@ final class SafeTradeStore: ObservableObject {
 
     private let client = SafeTradeClient()
     private var candleRequestID = 0
+    /// The full refresh under way. The store owns it, not the view task that asked:
+    /// that task is cancelled on every scene-phase flip (a launch or a return from
+    /// another app goes inactive → active within half a second), and a cancelled
+    /// read would count as a failed one.
+    private var refreshRun: Task<Void, Never>?
     let market = SafeTradeMarket.defaultValue
 
     #if DEBUG
@@ -128,10 +136,14 @@ final class SafeTradeStore: ObservableObject {
         balances.first { $0.currency.lowercased() == currency.lowercased() }
     }
 
-    /// A full refresh unless one ran within `seconds` — for re-entering the tab or the
-    /// foreground, which can flip several times in a row (Control Center, app switcher).
+    /// A full refresh unless one ran within `seconds` and left nothing missing — for
+    /// re-entering the tab or the foreground, which can flip several times in a row
+    /// (Control Center, app switcher). A refresh still under way (say, from just before
+    /// the app was suspended) is waited out first, then judged like any other.
     func refreshIfStale(olderThan seconds: TimeInterval = 30) async {
-        if let t = lastRefreshAt, Date().timeIntervalSince(t) < seconds { return }
+        if let run = refreshRun { await run.value }
+        if let t = lastRefreshAt, Date().timeIntervalSince(t) < seconds,
+           !accountStale, candlesPeriod == period { return }
         await refresh()
     }
 
@@ -145,7 +157,13 @@ final class SafeTradeStore: ObservableObject {
         #if DEBUG
         if Self.shotDemo { seedDemo(); await loadPublic(); return }   // demo account + real public market
         #endif
-        guard !refreshing else { return }
+        if let run = refreshRun { await run.value; return }   // join the one under way
+        let run = Task { await runRefresh(); refreshRun = nil }
+        refreshRun = run
+        await run.value
+    }
+
+    private func runRefresh() async {
         refreshing = true
         defer { refreshing = false; lastRefreshAt = Date() }
         // Keys may have synced in from another device since the last look.
@@ -237,8 +255,13 @@ final class SafeTradeStore: ObservableObject {
         async let m: Void = refreshMinutesIfDue(force: false)
         let bookDue = wantsDepth || (wantsDepthChart && depthDue(every: Self.depthChartInterval))
         async let d: Void = bookDue ? refreshDepth() : ()
+        // The candles' last read failed (or was for another period): ask again now, not
+        // at the next full refresh — the book, polled here, would otherwise beat them.
+        let candlesDue = candlesPeriod != period
+        let p = period, requestID = candlesDue ? nextCandleRequestID() : 0
+        async let k: Void = candlesDue ? loadCandles(period: p, requestID: requestID) : ()
         setTicker(try? await client.ticker(market: market))
-        await m; await d
+        await m; await d; await k
     }
 
     /// Publish only a quote that actually changed: an identical tick every 5 s would
@@ -270,7 +293,8 @@ final class SafeTradeStore: ObservableObject {
             if d != depth { depth = d }
             if depthStale { depthStale = false }
         } catch {
-            if depth != nil, !depthStale { depthStale = true }
+            // A poll cancelled by a scene-phase flip says nothing about the book.
+            if depth != nil, !depthStale, !SafeTradeClient.isCancellation(error) { depthStale = true }
         }
     }
 
@@ -470,6 +494,7 @@ final class SafeTradeStore: ObservableObject {
     /// One verdict for an account read: clear the flags, or keep what's on screen
     /// flagged stale and show why.
     private func settleAccount(_ error: Error?) async {
+        if let error, SafeTradeClient.isCancellation(error) { return }   // no verdict either way
         if let error {
             accountStale = true
             await present(error, account: true)
@@ -516,9 +541,12 @@ final class SafeTradeStore: ObservableObject {
         #if DEBUG
         // Demo runs where SafeTrade is unreachable (its WAF blocks datacenter/proxy IPs):
         // draw a synthetic series so the chart can still be checked.
-        if Self.shotDemo && nextCandles.isEmpty { candles = Self.demoCandles(period: requestedPeriod); return }
+        if Self.shotDemo && nextCandles.isEmpty {
+            candles = Self.demoCandles(period: requestedPeriod); candlesPeriod = requestedPeriod; return
+        }
         #endif
         if nextCandles != candles { candles = nextCandles }
+        candlesPeriod = requestedPeriod
     }
 
     #if DEBUG
