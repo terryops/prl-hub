@@ -75,13 +75,11 @@ private func saneEH(_ eh: Double) -> Bool { eh > 1e-6 && eh < 1e6 }
 /// 但难度与奖励取自链上原值、快一倍，也不依赖第三方站点继续维护这个币种。
 /// difficulty24/3/7 由整链难度序列按时间加权算出（见 averageDifficulty），与 WhatToMine 的
 /// 三个窗口实测相差均 <0.2%。返回已更新的字段名；空数组 = 这个源没用上，调用方回落。
-private func applyLordOfPearls(_ c: inout Config) async -> [String] {
-    guard let s = try? await LordOfPearlsClient().publicStats(),
-          let diff = s.difficulty, diff > 0 else { return [] }
-    // 24h 实测优先；它缺席才退回 60 块窗口（口径略短，但仍是链上实测）。
-    guard let bt = s.blockTime24h ?? s.blockTimeSec, bt > 0 else { return [] }
-    let nh = diff * prlWorkPerDifficulty / bt
-    guard saneEH(ehOf(nh)) else { return [] }
+private func applyLordOfPearls(_ c: inout Config, live: Bool) async -> [String] {
+    guard let s = try? await LordOfPearlsClient(live: live).publicStats(),
+          let diff = s.difficulty, diff > 0,
+          // 24h 实测优先；它缺席才退回 60 块窗口（口径略短，但仍是链上实测）。矿池总览的「占比」用的是同一个数。
+          let nh = s.networkHashrate24h, saneEH(ehOf(nh)) else { return [] }
 
     var got = [Loc("全网算力")]
     c.diffNow = diff
@@ -135,9 +133,10 @@ private func applyWhatToMine(_ c: inout Config, _ o: [String: Any]) -> [String] 
 }
 
 /// 联网刷新行情；返回更新后的 Config + 成功标志 + 状态文案。
-func fetchLive(_ input: Config) async -> (Config, Bool, String) {
+/// `live` = 手动刷新：绕过 HTTP 缓存；自动刷新则按站点自己的 Cache-Control（max-age 60）走缓存。
+func fetchLive(_ input: Config, live: Bool = true) async -> (Config, Bool, String) {
     var c = input
-    var got = await applyLordOfPearls(&c)
+    var got = await applyLordOfPearls(&c, live: live)
     // 链上源不可达 → WhatToMine。
     if got.isEmpty, let o = await fetchWhatToMineCoin() { got = applyWhatToMine(&c, o) }
     // 预估「难度月增长 %」：把"近7天难度趋势"(当前 vs 近7天均值，与设置页显示同口径)
@@ -184,7 +183,6 @@ final class PRLStore: ObservableObject {
     /// false = the local-currency rate (cfg.fx) auto-follows the live secondary
     /// currency rate (daily-updated); true = user pinned a custom rate via slider.
     @Published var fxManual = false { didSet { savePrefs() } }
-    private var timer: Timer?
     /// Suppresses savePrefs() during init() — otherwise the first loaded field
     /// triggers a save that overwrites the not-yet-loaded fields with defaults.
     private var initializing = true
@@ -217,8 +215,10 @@ final class PRLStore: ObservableObject {
         let resign = NSApplication.willResignActiveNotification
         #endif
         resignSub = NotificationCenter.default.publisher(for: resign).sink { [weak self] _ in
-            guard let self, let work = self.prefsSave else { return }
-            work.cancel(); self.writePrefs()
+            guard let self else { return }
+            if let work = self.prefsSave { work.cancel(); self.writePrefs() }
+            if let work = self.devicesSave { work.cancel(); self.writeDevices() }
+            if let work = self.rentsSave { work.cancel(); self.writeRents() }
         }
         syncFx()   // align cfg.fx with the live secondary rate when in auto mode
         // Live mode shows the app-wide price the moment anything refreshes it (the
@@ -277,8 +277,20 @@ final class PRLStore: ObservableObject {
         for g in GPUS { def[g.name] = g.rentDefault }
         return def
     }
+    /// Coalesced like savePrefs(): the device-name field and the rent stepper are bound straight
+    /// to this data, so an unthrottled save JSON-encoded the whole list and pushed it to iCloud
+    /// on every keystroke / step.
     func saveDevices() {
         guard !initializing && !applyingRemote else { return }   // skip during load / remote-adopt
+        devicesSave?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.writeDevices() }
+        devicesSave = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
+    }
+    private var devicesSave: DispatchWorkItem?
+
+    private func writeDevices() {
+        devicesSave = nil
         if let d = try? JSONEncoder().encode(devices) { UserDefaults.standard.set(d, forKey: "prl.devices") }
         CloudSync.push("prl.devices")   // mirror 设备资料 to iCloud (no-op if not provisioned)
     }
@@ -293,6 +305,15 @@ final class PRLStore: ObservableObject {
     }
     func saveRents() {
         guard !initializing && !applyingRemote else { return }
+        rentsSave?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.writeRents() }
+        rentsSave = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
+    }
+    private var rentsSave: DispatchWorkItem?
+
+    private func writeRents() {
+        rentsSave = nil
         if let d = try? JSONEncoder().encode(rentByGPU) { UserDefaults.standard.set(d, forKey: "prl.rents") }
         // Stamp the currency the rents are entered in so a device whose own secondary
         // currency differs still converts these numbers correctly.
@@ -477,10 +498,7 @@ final class PRLStore: ObservableObject {
     /// One-shot guard so the “要不要同步” prompt is offered at most once per launch.
     var didOfferSync = false
     /// How many pool watches the user set up in 我的监控 — the source for syncing.
-    var poolWatchCount: Int {
-        (UserDefaults.standard.data(forKey: "pool.watches")
-            .flatMap { try? JSONDecoder().decode([PoolWatch].self, from: $0) } ?? []).count
-    }
+    var poolWatchCount: Int { PoolStore.storedWatches().count }
     /// True once at least one device came from a pool sync (so we don't re-ask).
     var hasSyncedDevices: Bool { devices.contains { $0.synced } }
     /// Pull every pool watch's miners (workers) and turn them into synced devices,
@@ -491,8 +509,9 @@ final class PRLStore: ObservableObject {
         syncing = true
         Task { [weak self] in
             guard let self else { return }
-            let watches = UserDefaults.standard.data(forKey: "pool.watches")
-                .flatMap { try? JSONDecoder().decode([PoolWatch].self, from: $0) } ?? []
+            // Lenient read: one watch this build can't decode (a newer pool) must not empty
+            // the whole list — that used to make every synced device look orphaned.
+            let watches = PoolStore.storedWatches()
             let previousSynced = self.devices.filter(\.synced)
             var previousByKey: [String: Device] = [:]
             for dev in previousSynced {
@@ -605,70 +624,29 @@ final class PRLStore: ObservableObject {
 
     // MARK: actual pool income (on-chain "以矿池为准") for 24h / 7d
 
-    struct ActualIncome: Identifiable { let pool: String; let addr: String; let prl24h: Double; let prl7d: Double; var id: String { pool + addr } }
+    /// One mining address's on-chain income. nil figures = the lookup failed: shown as "—" and
+    /// left out of the totals, never counted as a real 0 PRL.
+    struct ActualIncome: Identifiable { let pool: String; let addr: String; let prl24h: Double?; let prl7d: Double?; var id: String { pool + addr } }
     @Published var actualIncome: [ActualIncome] = []
+    /// Bumped per income refresh; a slower, older one can't overwrite a newer result.
+    private var incomeGeneration = 0
 
-    typealias BBBucket = (t: Int, recv: Double, sent: Double)   // sat; recv & sent are net of self-change
-
-    /// balancehistory at 1s granularity (≈ per-tx) — gives received + sent per timestamp,
-    /// which lets us match (and exclude) transfers between the user's own addresses.
-    nonisolated static func bbBuckets(_ addr: String, hours: Double) async -> [BBBucket] {
-        let now = Int(Date().timeIntervalSince1970)
-        let from = now - Int(hours * 3600)
-        guard let d = await httpGET("https://blockbook.pearlresearch.ai/api/v2/balancehistory/\(addr)?from=\(from)&to=\(now + 60)&groupBy=1", timeout: 25),
-              let arr = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]] else { return [] }
-        return arr.map {
-            // Blockbook reports GROSS legs: a send-with-change tx has sent = all inputs and
-            // received = the change paid back to self (received == sentToSelf for a pure send).
-            // Net BOTH legs by sentToSelf so a sibling's net send (= what actually left the
-            // address, ± fee) cancels this address's net receive — otherwise inter-address
-            // transfers leak through the matcher and inflate the "actual income" totals.
-            let recv   = Double(($0["received"]   as? String) ?? "0") ?? 0
-            let sent   = Double(($0["sent"]       as? String) ?? "0") ?? 0
-            let toSelf = Double(($0["sentToSelf"] as? String) ?? "0") ?? 0
-            return (t: ($0["time"] as? Int) ?? 0,
-                    recv: max(0, recv - toSelf),
-                    sent: max(0, sent - toSelf))
-        }
-    }
-
-    /// External income (PRL): received minus any chunk that matches another own-address's
-    /// send at the same timestamp (i.e. an inter-address transfer — not real income).
-    nonisolated private static func externalReceived(_ buckets: [BBBucket], others: [[BBBucket]]) -> Double {
-        var ext = 0.0
-        for bk in buckets where bk.recv > 0 {
-            let isTransfer = others.contains { ob in
-                ob.contains { $0.t == bk.t && $0.sent > 0 && abs($0.sent - bk.recv) <= max(2_000_000, bk.recv * 0.02) }
-            }
-            if !isTransfer { ext += bk.recv }
-        }
-        return ext / 1e8
-    }
-
-    func refreshActualIncome() {
+    /// Same service, same self-transfer exclusion and same addresses as the 我的监控 cards'
+    /// 链上到账 — the two screens now agree, and share each fetch when they refresh together.
+    func refreshActualIncome(force: Bool = false) {
+        incomeGeneration += 1
+        let generation = incomeGeneration
         Task { [weak self] in
-            guard let self else { return }
-            let watches = UserDefaults.standard.data(forKey: "pool.watches")
-                .flatMap { try? JSONDecoder().decode([PoolWatch].self, from: $0) } ?? []
             var seen = Set<String>(); var items: [(pool: String, addr: String)] = []
-            for w in watches where w.isEnabled {
+            for w in PoolStore.storedWatches() where w.isEnabled && w.pool.isAddressBased {
                 let a = PoolStore.cleanAddr(w.address).lowercased()
                 guard PRLAddress.isValid(a, network: .mainnet), !seen.contains(a) else { continue }
                 seen.insert(a); items.append((w.pool.label, a))
             }
-            func external(_ hours: Double) async -> [String: Double] {
-                var b: [String: [BBBucket]] = [:]
-                for it in items { b[it.addr] = await Self.bbBuckets(it.addr, hours: hours) }
-                var out: [String: Double] = [:]
-                for it in items {
-                    let others = items.filter { $0.addr != it.addr }.map { b[$0.addr] ?? [] }
-                    out[it.addr] = Self.externalReceived(b[it.addr] ?? [], others: others)
-                }
-                return out
-            }
-            let d24 = await external(24), d7 = await external(24 * 7)
+            let recent = await ChainIncome.shared.recent(items.map(\.addr), force: force)
+            guard let self, generation == self.incomeGeneration else { return }
             self.actualIncome = items.map {
-                ActualIncome(pool: $0.pool, addr: $0.addr, prl24h: d24[$0.addr] ?? 0, prl7d: d7[$0.addr] ?? 0)
+                ActualIncome(pool: $0.pool, addr: $0.addr, prl24h: recent[$0.addr]?.h24, prl7d: recent[$0.addr]?.d7)
             }
         }
     }
@@ -693,15 +671,23 @@ final class PRLStore: ObservableObject {
         }
     }
 
-    func refresh() {
-        refreshActualIncome()   // pool actual income is independent of the WhatToMine fetch
+    /// Bumped per market refresh; only the newest one may write `cfg` (a slow older fetch
+    /// finishing last used to overwrite fresher numbers).
+    private var liveGeneration = 0
+
+    /// `force` = the user asked (refresh button): bypass the on-chain cache and HTTP caching.
+    /// The 60s auto-refresh passes false and lets both caches absorb a burst.
+    func refresh(force: Bool = true) {
+        refreshActualIncome(force: force)   // pool actual income is independent of the market fetch
         loadPriceHistory()      // price-trend candles (SafeTrade public k-line)
         guard live else { status = Loc("本地参数(手动)"); lastUpdate = nowHMS(); return }
         loading = true; status = Loc("联网中…")
+        liveGeneration += 1
+        let generation = liveGeneration
         let snap = cfg
         Task { [weak self] in
-            let (c, ok, msg) = await fetchLive(snap)
-            guard let self else { return }
+            let (c, ok, msg) = await fetchLive(snap, live: force)
+            guard let self, generation == self.liveGeneration else { return }
             if ok {
                 self.cfg.price = c.price; self.cfg.nethashEH = c.nethashEH; self.cfg.perUnit = c.perUnit; self.cfg.diffConst = c.diffConst
                 self.cfg.diffNow = c.diffNow; self.cfg.diff24 = c.diff24; self.cfg.diff3 = c.diff3; self.cfg.diff7 = c.diff7
@@ -712,19 +698,15 @@ final class PRLStore: ObservableObject {
             self.lastUpdate = nowHMS(); self.loading = false
         }
     }
+    /// The 60s auto-refresh itself is a `.task` on PRLMonitorView, keyed on this flag and the
+    /// scene phase — so it runs only while the monitor tab is on screen and the app is in the
+    /// foreground. (A Timer on this store kept polling from every other tab, and one left
+    /// behind by a rebuilt view tree ticked on forever.)
     func setAuto(_ on: Bool) {
-        // Idempotent: only rebuild the timer / persist when the state actually
-        // changes. reloadPrefs() re-applies prefs on EVERY incoming iCloud change
-        // (including unrelated keys), and an unconditional rebuild here would
-        // perpetually reset the 60s auto-refresh countdown.
-        guard on != autoRefresh || (on == (timer == nil)) else { return }
+        // Idempotent: reloadPrefs() re-applies prefs on EVERY incoming iCloud change
+        // (including unrelated keys) — only a real change is persisted.
+        guard on != autoRefresh else { return }
         autoRefresh = on
-        timer?.invalidate(); timer = nil
-        if on {
-            timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-                Task { @MainActor in self?.refresh() }
-            }
-        }
         savePrefs()
     }
 }

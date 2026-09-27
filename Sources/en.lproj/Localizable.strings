@@ -857,3 +857,4 @@
 "这是 IPv6 地址：手机的 IPv6 地址会定期更换，同一个 Wi-Fi 下也会在 IPv4 和 IPv6 之间切换，所以白名单很难一直有效。" = "That's an IPv6 address: a phone's IPv6 address changes regularly, and even on the same Wi-Fi it switches between IPv4 and IPv6 — so an allowlist rarely stays valid.";
 "重新核对" = "Check again";
 "验证身份以确认提现" = "Verify it's you to confirm the withdrawal";
+"链上查询失败" = "On-chain lookup failed";

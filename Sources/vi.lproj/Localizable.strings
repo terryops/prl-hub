@@ -857,3 +857,4 @@
 "这是 IPv6 地址：手机的 IPv6 地址会定期更换，同一个 Wi-Fi 下也会在 IPv4 和 IPv6 之间切换，所以白名单很难一直有效。" = "Đây là địa chỉ IPv6: địa chỉ IPv6 của điện thoại thay đổi định kỳ, và ngay trên cùng một Wi-Fi kết nối cũng chuyển qua lại giữa IPv4 và IPv6 — nên danh sách cho phép khó giữ được lâu.";
 "重新核对" = "Kiểm tra lại";
 "验证身份以确认提现" = "Xác minh danh tính để xác nhận rút";
+"链上查询失败" = "Không tra cứu được on-chain";

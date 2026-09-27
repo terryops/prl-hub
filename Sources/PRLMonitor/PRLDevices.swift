@@ -110,7 +110,7 @@ struct DevicesSection: View {
 /// Tallest device-card height across the grid, so the others stretch to match
 /// (equal-height cards → their 日净利 footers line up). Reduces to the max.
 private struct DeviceCardHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
+    static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
     }

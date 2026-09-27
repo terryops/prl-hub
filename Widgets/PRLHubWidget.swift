@@ -254,7 +254,7 @@ private struct SmallCombined: View {
             if !snap.pools.isEmpty {
                 HStack(spacing: 5) {
                     Image(systemName: "bolt.fill").foregroundStyle(Color.pearlGold)
-                    Text(formatHashrate(raw)).lineLimit(1).minimumScaleFactor(0.6)
+                    Text(raw > 0 ? formatHashrate(raw) : "—").lineLimit(1).minimumScaleFactor(0.6)
                     Spacer(minLength: 2)
                     Image(systemName: "desktopcomputer")
                     Text("\(online)/\(total)").monospacedDigit()

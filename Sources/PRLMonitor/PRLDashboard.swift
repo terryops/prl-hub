@@ -70,8 +70,13 @@ struct DashboardSection: View {
 
                 // 按矿池实测到账（链上，以矿池为准）— 与上面的「设备估算」两个版本对照
                 if ready && !store.actualIncome.isEmpty {
-                    let inc24 = store.actualIncome.reduce(0.0) { $0 + $1.prl24h }
-                    let inc7  = store.actualIncome.reduce(0.0) { $0 + $1.prl7d } / 7.0
+                    // A failed lookup is nil — left out of the sum, and a sum with nothing in it
+                    // is "—", never a confident 0 PRL (which read as a red, loss-making day).
+                    let got24 = store.actualIncome.compactMap(\.prl24h)
+                    let got7  = store.actualIncome.compactMap(\.prl7d)
+                    let sum7  = got7.reduce(0, +)
+                    let inc24: Double? = got24.isEmpty ? nil : got24.reduce(0, +)
+                    let inc7: Double?  = got7.isEmpty ? nil : sum7 / 7.0
                     let cost  = fl.powerDay + fl.rentDay   // 设备电费 + 租金 (USD/天)
                     VStack(alignment: .leading, spacing: Pearl.Space.sm) {
                         cardTitle(Loc("日净利 · 链上实收"), Loc("矿池实际到账（已排除自己地址间的互转）− 电费/租金"))
@@ -87,14 +92,14 @@ struct DashboardSection: View {
                                 Text(String(ai.addr.prefix(8)) + "…" + String(ai.addr.suffix(4)))
                                     .font(.caption2.monospaced()).foregroundColor(.secondary)
                                 Spacer()
-                                Text(Loc("24h %@ · 7天 %@ PRL", f(ai.prl24h, 1), f(ai.prl7d, 1)))
+                                Text(Loc("24h %@ · 7天 %@ PRL", ai.prl24h.map { f($0, 1) } ?? "—", ai.prl7d.map { f($0, 1) } ?? "—"))
                                     .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
                             }
                         }
                         // 实测每 P·天 = 链上日均到账 ÷ 你的总算力(P=1000T)，与理论「单位日产」对照看真实效率。
-                        // 用近7日均(更稳)，缺则退回 24h。仅在已有设备算力时显示。
-                        if fl.pearl > 0 {
-                            let dailyInc = inc7 > 0 ? inc7 : inc24
+                        // 日均与「我的监控」卡片上的每 P·天同一算法（按实际挖矿天数平滑）。仅在已有设备算力时显示。
+                        if fl.pearl > 0, inc24 != nil || inc7 != nil {
+                            let dailyInc = ChainIncome.dailyAverage(h24: inc24 ?? 0, d7: sum7)
                             let perP = dailyInc / fl.pearl * 1000   // fl.pearl 为 T(=Pearl)，×1000 → 每 P
                             let theoP = c.perUnit * 1000
                             // Two lines — label + value, then theory/efficiency — instead of three
@@ -185,16 +190,23 @@ struct DashboardSection: View {
         }
     }
 
-    @ViewBuilder private func actualBox(_ title: String, _ incPRL: Double, _ price: Double, _ costUSD: Double, _ fx: Double) -> some View {
-        let rev = incPRL * price
-        let net = rev - costUSD
+    /// `incPRL` nil = the chain lookup failed: "—", not a computed loss.
+    @ViewBuilder private func actualBox(_ title: String, _ incPRL: Double?, _ price: Double, _ costUSD: Double, _ fx: Double) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.caption).foregroundColor(.secondary).lineLimit(1).minimumScaleFactor(0.8)
-            Text(store.localSymbol + f(net * fx, 1)).font(.system(.title2, design: .rounded).weight(.bold))
-                .foregroundColor(net > 0 ? .green : .red).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
-            // With no power cost / rent the net IS the income, so don't repeat it.
-            Text(costUSD > 0 ? store.sym(Loc("%@ PRL · 收入 ¥%@", f(incPRL, 1), f(rev * fx, 1))) : "\(f(incPRL, 1)) PRL")
-                .font(.caption2).foregroundColor(.secondary)
+            if let incPRL {
+                let rev = incPRL * price
+                let net = rev - costUSD
+                Text(store.localSymbol + f(net * fx, 1)).font(.system(.title2, design: .rounded).weight(.bold))
+                    .foregroundColor(net > 0 ? .green : .red).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+                // With no power cost / rent the net IS the income, so don't repeat it.
+                Text(costUSD > 0 ? store.sym(Loc("%@ PRL · 收入 ¥%@", f(incPRL, 1), f(rev * fx, 1))) : "\(f(incPRL, 1)) PRL")
+                    .font(.caption2).foregroundColor(.secondary)
+            } else {
+                Text(verbatim: "—").font(.system(.title2, design: .rounded).weight(.bold))
+                    .foregroundColor(.secondary)
+                Text(Loc("链上查询失败")).font(.caption2).foregroundColor(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(12).background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
@@ -273,13 +285,16 @@ struct PowerBar: View {
 
 // MARK: - 行情趋势图
 
-/// One card under the 行情 stat row that charts the two headline metrics over time:
-/// 币价 (real SafeTrade daily candles) and 全网算力 (derived from WhatToMine's
-/// difficulty snapshots: now / 24h / 3d / 7d). Pick the metric with the segmented control.
+/// One card under the 行情 stat row that charts the headline metrics over time:
+/// 币价 (real SafeTrade daily candles); 全网算力 MEASURED from sampled blocks (难度 × 2^48 ÷
+/// 实测出块时间 — the same series as the 全网走势 chart); 单位日产 and 难度 from the
+/// difficulty snapshots (now / 24h / 3d / 7d). Pick the metric with the segmented control.
 struct MarketTrendCard: View {
     @ObservedObject var store: PRLStore
     @Binding var metric: Metric
     @State private var windowDays = 30
+    /// The last 7 days of sampled blocks (shared with the 全网走势 chart's cache).
+    @State private var week: [ChainSample] = []
 
     enum Metric: String, CaseIterable, Identifiable {
         case price = "币价", hashrate = "全网算力", perUnit = "单位日产", difficulty = "难度"
@@ -302,6 +317,10 @@ struct MarketTrendCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .pearlCard()
+        .task(id: metric) {
+            guard metric == .hashrate, week.isEmpty else { return }
+            if let s = await ChainHistory.shared.samples(for: .d7) { week = s }
+        }
     }
 
     // MARK: 币价走势（SafeTrade 日线）
@@ -354,13 +373,37 @@ struct MarketTrendCard: View {
         }
     }
 
-    // MARK: 全网算力 / 单位日产走势（难度快照推导）
+    // MARK: 全网算力（区块实测）/ 单位日产（难度快照推导）
 
+    /// NOT difficulty-scaled: 现值 × diffₓ/diffNow assumes the block time never moves, and it
+    /// moves a lot (144s…364s within one month) — that line was the difficulty curve relabelled,
+    /// and could climb while the 全网走势 chart right below it fell.
     @ViewBuilder private var hashrateTrend: some View {
         let c = store.cfg
-        diffTrend(points: diffPoints(c, base: c.nethashEH, inverse: false),
+        diffTrend(points: measuredHashPoints(c),
                   color: .orange, digits: 2, unit: "EH/s",
                   empty: store.liveReady ? Loc("暂无算力趋势数据") : Loc("联网后显示算力趋势"))
+    }
+
+    /// 7天前 / 3天前 / 24h from the measured block samples (the sample nearest each mark, if one
+    /// lies within half a day of it), then 现在 = the headline figure above.
+    private func measuredHashPoints(_ c: Config) -> [HRPoint] {
+        guard week.count >= 2, c.nethashEH > 0 else { return [] }
+        let hs = ChainHistory.hashrates(week)
+        let now = Date()
+        func at(daysAgo: Double) -> Double? {
+            let target = now.addingTimeInterval(-daysAgo * 86_400)
+            guard let i = week.indices.min(by: {
+                abs(week[$0].time.timeIntervalSince(target)) < abs(week[$1].time.timeIntervalSince(target))
+            }), abs(week[i].time.timeIntervalSince(target)) < 43_200, hs[i] > 0 else { return nil }
+            return hs[i] / 1e18
+        }
+        var pts: [HRPoint] = []
+        if let v = at(daysAgo: 7) { pts.append(.init(x: -7, label: Loc("7天前"), value: v)) }
+        if let v = at(daysAgo: 3) { pts.append(.init(x: -3, label: Loc("3天前"), value: v)) }
+        if let v = at(daysAgo: 1) { pts.append(.init(x: -1, label: Loc("24h"), value: v)) }
+        pts.append(.init(x: 0, label: Loc("现在"), value: c.nethashEH))
+        return pts.count >= 2 ? pts : []
     }
 
     @ViewBuilder private var perUnitTrend: some View {
@@ -380,7 +423,7 @@ struct MarketTrendCard: View {
                   empty: store.liveReady ? Loc("暂无难度趋势数据") : Loc("联网后显示难度趋势"))
     }
 
-    /// Shared 4-point line chart for the difficulty-derived metrics (算力 / 单位日产).
+    /// Shared 4-point line chart (算力 / 单位日产 / 难度).
     @ViewBuilder private func diffTrend(points pts: [HRPoint], color: Color, digits: Int,
                                         unit: String, empty: String) -> some View {
         if pts.count < 2 {

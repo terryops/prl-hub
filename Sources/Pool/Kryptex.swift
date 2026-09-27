@@ -17,8 +17,8 @@ import Foundation
 //   GET /api/v1/miner/balance/{addr}        → confirmed + unconfirmed (immature) balance
 //   GET /api/v1/miner/payouts/{addr}/stats  → lifetime paid + last week/month earned
 //
-// The per-miner endpoints answer 200 with zeros / [] for an address that never mined here, so
-// "not mining on Kryptex" is a data question, not an HTTP one — nothing to special-case on 404.
+// The per-miner endpoints (KryptexSource, shared with the widget) answer 200 with zeros / [] for
+// an address that never mined here, so "not mining on Kryptex" is a data question there.
 //
 // Every hashrate is REAL H/s (a rig reads "451547962638754.05" ≈ 451 TH/s, and the workers sum
 // to the pool total) — no HeroMiners-style bit-shift, no F2Pool-style per-worker unit change.
@@ -58,103 +58,19 @@ struct KryptexBlock: Decodable {
 
 private struct KryptexBlocksResp: Decodable { let results: [KryptexBlock]? }
 
-/// `/miner/balance/{addr}` — `total` = confirmed + unconfirmed, where unconfirmed is the part
-/// still maturing (100 blocks). Both are money the miner has earned, so 待支付 shows the total,
-/// as it does for HeroMiners.
-struct KryptexBalance: Decodable {
-    let total: FlexDouble?
-    let unconfirmed: FlexDouble?
-    let confirmed: FlexDouble?
-    let threshold: FlexDouble?     // payout threshold, PRL
-    let last_active: FlexDouble?   // epoch MILLISECONDS, 0 = never mined here
-}
-
-/// `/miner/payouts/{addr}/stats` — `paid` is the LIFETIME total (the payouts list itself is
-/// paginated, so it must not be summed for this), `unpaid` mirrors balance.confirmed.
-struct KryptexPayoutStats: Decodable {
-    struct Reward: Decodable { let week: FlexDouble?; let month: FlexDouble? }
-    let reward: Reward?
-    let paid: FlexDouble?
-    let unpaid: FlexDouble?
-}
-
-/// One rig, from the v3 workers endpoint. Kryptex publishes 30-minute / 3-hour / 24-hour
-/// rolling averages and NO instantaneous rate — its freshest figure is the 30-minute one.
-struct KryptexWorker: Decodable {
-    let worker: String?
-    let scheme: String?              // "pps" · "solo" — a wallet can run both at once
-    let status: String?              // "online" · "offline"
-    let last_share: FlexDouble?      // epoch MILLISECONDS
-    let avg_hashrate_30m: FlexDouble?
-    let avg_hashrate_3h: FlexDouble?
-    let avg_hashrate_24h: FlexDouble?
-
-    var online: Bool { (status ?? "").caseInsensitiveCompare("online") == .orderedSame }
-    /// Rig label. A wallet mining both schemes lists the same name twice, so the scheme is
-    /// appended for solo rows — otherwise two rows read as one rig reported inconsistently.
-    var displayName: String {
-        let n = (worker ?? "").trimmingCharacters(in: .whitespaces)
-        let base = n.isEmpty ? "—" : n
-        return (scheme ?? "").caseInsensitiveCompare("solo") == .orderedSame ? base + " (SOLO)" : base
-    }
-}
-
-private struct KryptexWorkersResp: Decodable { let results: [KryptexWorker]? }
-
-/// One address's snapshot across the three per-miner endpoints.
-struct KryptexMiner {
-    let workers: [KryptexWorker]
-    let balance: KryptexBalance?
-    let payouts: KryptexPayoutStats?
-
-    /// Everything earned and not yet paid out — matured plus still-maturing.
-    var pending: Double { balance?.total?.value ?? 0 }
-    var paid: Double { payouts?.paid?.value ?? 0 }
-    /// Has this address ever mined here? Every endpoint answers 200 for a stranger, so the
-    /// answer has to come from the payload: rigs, money, or a last-active stamp.
-    var active: Bool {
-        !workers.isEmpty || pending > 0 || paid > 0 || (balance?.last_active?.value ?? 0) > 0
-    }
-}
-
 struct KryptexClient {
-    private static let base = "https://prl-api.kryptex.network"
-
-    private func get<T: Decodable>(_ path: String, as: T.Type, timeout: TimeInterval = 20) async throws -> T {
-        guard let url = URL(string: Self.base + path) else { throw URLError(.badURL) }
-        var req = URLRequest(url: url)
-        req.timeoutInterval = timeout
-        req.cachePolicy = .reloadIgnoringLocalCacheData   // refresh must fetch live numbers
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(poolBrowserUA, forHTTPHeaderField: "User-Agent")
-        let (d, r) = try await URLSession.shared.data(for: req)
-        guard (r as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
-        return try JSONDecoder().decode(T.self, from: d)
+    private func get<T: Decodable>(_ path: String, as: T.Type, live: Bool) async throws -> T {
+        try PoolHTTP.decode(T.self, from: try await PoolHTTP.get(KryptexSource.base + path, live: live))
     }
 
     /// Address-free pool stats for the 矿池总览.
-    func poolStats() async throws -> KryptexPoolStats {
-        try await get("/api/v1/pool/stats", as: KryptexPoolStats.self)
+    func poolStats(live: Bool = true) async throws -> KryptexPoolStats {
+        try await get("/api/v1/pool/stats", as: KryptexPoolStats.self, live: live)
     }
 
     /// The pool's recent blocks — newest first, one page.
-    func blocks() async throws -> [KryptexBlock] {
-        try await get("/api/v1/pool/blocks", as: KryptexBlocksResp.self).results ?? []
-    }
-
-    /// Per-miner snapshot; nil when the address has never mined here (so the card says
-    /// "未在此矿池挖矿" rather than showing a row of zeros). The workers call decides whether
-    /// the pool answered at all — a failure there throws so the card retries; balance and
-    /// payouts are best-effort, since a hiccup on either must not blank an otherwise good card.
-    func minerStats(_ address: String) async throws -> KryptexMiner? {
-        let addr = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addr.isEmpty,
-              let enc = addr.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else { return nil }
-        async let bal = try? get("/api/v1/miner/balance/\(enc)", as: KryptexBalance.self)
-        async let pay = try? get("/api/v1/miner/payouts/\(enc)/stats", as: KryptexPayoutStats.self)
-        let workers = try await get("/api/v3/miner/workers/\(enc)", as: KryptexWorkersResp.self).results ?? []
-        let m = KryptexMiner(workers: workers, balance: await bal, payouts: await pay)
-        return m.active ? m : nil
+    func blocks(live: Bool = true) async throws -> [KryptexBlock] {
+        try await get("/api/v1/pool/blocks", as: KryptexBlocksResp.self, live: live).results ?? []
     }
 
     /// Seconds per block, MEASURED off the pool's block feed. Each entry carries the network

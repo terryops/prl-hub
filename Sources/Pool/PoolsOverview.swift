@@ -65,6 +65,10 @@ enum PoolsSource { case lordOfPearls, miningPoolStats, poolAPIs }
 
 @MainActor
 final class PoolsOverviewStore: ObservableObject {
+    /// One store for the app's lifetime: the 矿池 section is rebuilt every time the user
+    /// switches to it, and a per-view store refetched ~6 feeds from scratch on every switch.
+    static let shared = PoolsOverviewStore()
+
     @Published var pools: [PoolOverview] = []
     @Published var loading = false
     /// Days the measured columns span (1 for lordofpearls' 24h window, ≈2.5 for
@@ -73,34 +77,53 @@ final class PoolsOverviewStore: ObservableObject {
     /// Drives the "数据来源 …" caption; .poolAPIs until a source answers.
     @Published var source: PoolsSource = .poolAPIs
 
-    func refresh() async {
+    /// The aggregators re-poll the pools every ~10 minutes (lordofpearls sends max-age=300 on
+    /// /pools), so re-entering the section within 5 minutes shows what's here.
+    private static let ttl: TimeInterval = 300
+    private var fetchedAt: Date?
+
+    /// `force`: pull-to-refresh — skip the TTL AND the HTTP cache. Otherwise the feeds are read
+    /// with the protocol cache policy, so the sites' own Cache-Control applies.
+    func refresh(force: Bool = false) async {
+        if loading { return }
+        if !force, !pools.isEmpty, let t = fetchedAt, Date().timeIntervalSince(t) < Self.ttl { return }
         loading = true
         defer { loading = false }
-        if let rows = try? await Self.lordOfPearls(), !rows.isEmpty {
+        let live = force
+        if let rows = try? await Self.lordOfPearls(live: live), !rows.isEmpty {
             pools = rows
             sampleDays = 1          // the site's block column is a flat 24h count
             source = .lordOfPearls
+            fetchedAt = Date()
             return
         }
-        if let mps = try? await MiningPoolStatsClient().fetch() {
-            pools = Self.build(mps, kryptex: try? await KryptexClient().poolStats())
+        // Left the section mid-load: the requests above were cancelled, not refused — don't
+        // fall through and replace a good (shared) table with a fallback built from failures.
+        guard !Task.isCancelled else { return }
+        if let mps = try? await MiningPoolStatsClient(live: live).fetch() {
+            pools = Self.build(mps, kryptex: try? await KryptexClient().poolStats(live: live))
             sampleDays = mps.sampleDays
             source = .miningPoolStats
+            fetchedAt = Date()
             return
         }
+        guard !Task.isCancelled else { return }
         // Both aggregators unreachable → the six pools with their own public API, as before.
-        async let a = Self.alpha()
-        async let l = Self.lucky()
-        async let h = Self.hero()
-        async let p = Self.pearlHash()
-        async let f = Self.pearlFortune()
-        async let k = Self.kryptex()
+        async let a = Self.alpha(live: live)
+        async let l = Self.lucky(live: live)
+        async let h = Self.hero(live: live)
+        async let p = Self.pearlHash(live: live)
+        async let f = Self.pearlFortune(live: live)
+        async let k = Self.kryptex(live: live)
         // Sorted by hashrate like the primary path — the table renders rows in the order it
         // is handed them, so an unsorted fallback would shuffle the ranking under the user.
-        pools = [await a, await l, await h, await p, await f, await k]
-            .sorted { ($0.poolHashrate ?? 0) > ($1.poolHashrate ?? 0) }
+        let rows = [await a, await l, await h, await p, await f, await k]
+        guard !Task.isCancelled else { return }
+        pools = rows.sorted { ($0.poolHashrate ?? 0) > ($1.poolHashrate ?? 0) }
         sampleDays = 1
         source = .poolAPIs
+        // A fallback table is a degraded answer — worth retrying on the next visit.
+        fetchedAt = nil
     }
 
     // MARK: lordofpearls → the table
@@ -109,27 +132,30 @@ final class PoolsOverviewStore: ObservableObject {
     /// carries neither the network hashrate (→ 占比) nor the block reward (→ 收益/PH·天).
     /// HeroMiners rides along because the site prints "—" for its hashrate while the pool's
     /// own API does publish one — see `build` below.
-    private static func lordOfPearls() async throws -> [PoolOverview] {
-        let client = LordOfPearlsClient()
+    private static func lordOfPearls(live: Bool) async throws -> [PoolOverview] {
+        let client = LordOfPearlsClient(live: live)
         async let rowsTask = client.pools()
         async let chainTask = client.publicStats()
-        async let heroTask = HeroMinersClient().stats()
-        async let mpsTask = MiningPoolStatsClient().fetch()
-        async let kryptexTask = KryptexClient().poolStats()
+        async let heroTask = HeroMinersClient().stats(live: live)
+        async let mpsTask = MiningPoolStatsClient(live: live).fetch()
+        async let kryptexTask = KryptexClient().poolStats(live: live)
         let rows = try await rowsTask
         let chain = try? await chainTask
         let hero = try? await heroTask
         return build(rows, chain: chain,
-                     heroHashrate: (hero?.pool?.realHashrate?.value).flatMap { $0 > 0 ? $0 : nil },
+                     heroHashrate: hero?.poolHashrate,
                      mps: try? await mpsTask,
                      kryptex: try? await kryptexTask)
     }
 
     static func build(_ rows: [LOPPool], chain: LOPPublic?, heroHashrate: Double?,
                       mps: MPSCoin?, kryptex: KryptexPoolStats? = nil) -> [PoolOverview] {
-        let network = chain?.networkHashrate
+        // The 24h chain-identity figure, the same one the monitor's dashboard shows: the
+        // site's own 60-block `networkhashps` ran ~10% high, understating every pool's 占比.
+        let network = chain?.networkHashrate24h ?? chain?.networkHashrate
         let reward = chain?.rewardPerBlock ?? mps?.rewardPerBlock ?? 0
-        let expected = networkYield(reward: reward, network: network, blockTime: chain?.blockTimeSec)
+        let expected = networkYield(reward: reward, network: network,
+                                    blockTime: chain?.blockTime24h ?? chain?.blockTimeSec)
         var out = rows.map { r -> PoolOverview in
             let key = brandKey(r.host)
             let name = pretty[key] ?? r.name       // the site's own label when we have no better
@@ -337,11 +363,11 @@ final class PoolsOverviewStore: ObservableObject {
 
     // MARK: fallback — the pools that publish their own API
 
-    private static func alpha() async -> PoolOverview {
+    private static func alpha(live: Bool) async -> PoolOverview {
         var o = PoolOverview(id: "AlphaPool", name: "AlphaPool",
                              site: "https://pearl.alphapool.tech", gradient: Pearl.brand)
         do {
-            let s = try await PoolClient().stats()
+            let s = try await PoolClient().stats(live: live)
             let coin = s.coins?.first
             o.poolHashrate = (s.pool?.hashrate).map(parseHashrate)
             o.networkHashrate = (coin?.network_hash).map(parseHashrate)
@@ -358,11 +384,11 @@ final class PoolsOverviewStore: ObservableObject {
         return o
     }
 
-    private static func lucky() async -> PoolOverview {
+    private static func lucky(live: Bool) async -> PoolOverview {
         var o = PoolOverview(id: "Lucky Pool", name: "Lucky Pool",
                              site: "https://pearl.luckypool.io", gradient: Pearl.mint)
         do {
-            let v = try await LuckyPoolClient().statsV2()
+            let v = try await LuckyPoolClient().statsV2(live: live)
             o.feePercent = v.config?.fee
             o.poolHashrate = v.stats?.hashrate
             let now = Date().timeIntervalSince1970
@@ -380,15 +406,14 @@ final class PoolsOverviewStore: ObservableObject {
         return o
     }
 
-    private static func hero() async -> PoolOverview {
+    private static func hero(live: Bool) async -> PoolOverview {
         var o = PoolOverview(id: "HeroMiners", name: "HeroMiners",
                              site: "https://pearl.herominers.com", gradient: Pearl.positive)
         o.feePercent = HeroMinersClient.fee   // 3.0 — pool 0%, but PRL needs SRBMiner (~3% dev fee)
         o.feeNote = Loc("矿池 0%，SRBMiner 抽水约 3%")
         do {
-            let s = try await HeroMinersClient().stats()
-            o.poolHashrate = (s.pool?.realHashrate?.value).flatMap { $0 > 0 ? $0 : nil }
-                ?? s.pool?.hashrate?.value
+            let s = try await HeroMinersClient().stats(live: live)
+            o.poolHashrate = s.poolHashrate   // realHashrate, else the >>32 field scaled back up
             o.miners = s.pool?.miners
             o.workers = s.pool?.workers
             let now = Date().timeIntervalSince1970
@@ -409,7 +434,7 @@ final class PoolsOverviewStore: ObservableObject {
         return o
     }
 
-    private static func pearlHash() async -> PoolOverview {
+    private static func pearlHash(live: Bool) async -> PoolOverview {
         var o = PoolOverview(id: "PearlHash", name: "PearlHash",
                              site: "https://pearlhash.xyz", gradient: Pearl.brandVivid)
         o.feePercent = PearlHashClient.fee
@@ -417,9 +442,9 @@ final class PoolsOverviewStore: ObservableObject {
             let client = PearlHashClient()
             // The pool's own node answers for the network, and its wallet ledger for its blocks
             // — so this row carries 占比 and a measured 收益/PH even with every aggregator down.
-            async let chainTask = try? client.chainInfo()
-            async let blocksTask = try? client.recentBlocks()
-            let s = try await client.stats()
+            async let chainTask = try? client.chainInfo(live: live)
+            async let blocksTask = try? client.recentBlocks(live: live)
+            let s = try await client.stats(live: live)
             o.poolHashrate = s.hashrate
             o.miners = s.total_accounts
             o.workers = s.total_workers
@@ -445,13 +470,13 @@ final class PoolsOverviewStore: ObservableObject {
 
     /// Kryptex from its own API alone — no aggregator involved, so this row is also the
     /// yardstick the corrections above are written against.
-    private static func kryptex() async -> PoolOverview {
+    private static func kryptex(live: Bool) async -> PoolOverview {
         var o = PoolOverview(id: "Kryptex", name: "Kryptex",
                              site: "https://pool.kryptex.com/prl", gradient: Pearl.negative)
         do {
             let client = KryptexClient()
-            async let blocksTask = try? client.blocks()
-            let s = try await client.poolStats()
+            async let blocksTask = try? client.blocks(live: live)
+            let s = try await client.poolStats(live: live)
             o.poolHashrate = s.poolHashrate
             o.networkHashrate = s.networkHashrate
             o.miners = s.miners
@@ -472,11 +497,11 @@ final class PoolsOverviewStore: ObservableObject {
         return o
     }
 
-    private static func pearlFortune() async -> PoolOverview {
+    private static func pearlFortune(live: Bool) async -> PoolOverview {
         var o = PoolOverview(id: "Pearl Fortune", name: "Pearl Fortune",
                              site: "https://pearlfortune.org", gradient: Pearl.sunrise)
         do {
-            let s = try await PearlFortuneClient().summary()
+            let s = try await PearlFortuneClient().summary(live: live)
             let roll = Dictionary(
                 (s.pool_stats?.rolling_stats ?? []).compactMap { r in r.hours.map { ($0, r) } },
                 uniquingKeysWith: { a, _ in a })
@@ -497,7 +522,7 @@ final class PoolsOverviewStore: ObservableObject {
 
 /// Pool overview rendered as a section inside the PRL monitor's segmented control.
 struct PoolsOverviewSection: View {
-    @StateObject private var store = PoolsOverviewStore()
+    @ObservedObject private var store = PoolsOverviewStore.shared
 
     var body: some View {
         ScrollView {
@@ -515,8 +540,8 @@ struct PoolsOverviewSection: View {
             .animation(.snappy, value: store.pools.map(\.id))
             .padding(Pearl.Space.screen).frame(maxWidth: 860).frame(maxWidth: .infinity)
         }
-        .task { await store.refresh() }
-        .refreshable { await store.refresh() }
+        .task { await store.refresh() }                  // within the 5-min TTL: no network
+        .refreshable { await store.refresh(force: true) }
     }
 }
 

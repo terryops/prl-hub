@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 struct PoolView: View {
     @StateObject private var store = PoolStore()
     @EnvironmentObject private var wallet: WalletStore
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var adding = false
     /// nil = the sheet is adding a new watch; non-nil = editing this watch in place.
@@ -72,7 +73,7 @@ struct PoolView: View {
             }
             .navigationTitle(Loc("我的监控"))
             .toolbar {
-                Button { Task { await store.refresh() } } label: {
+                Button { Task { await store.refresh(force: true) } } label: {
                     // .small so the in-toolbar spinner stays icon-sized — a default
                     // ProgressView fills the macOS toolbar button's glass background
                     // and reads as a big white badge.
@@ -82,17 +83,20 @@ struct PoolView: View {
                 .disabled(store.loading)
                 .accessibilityLabel(Loc("刷新矿池数据"))
             }
-            // Auto-refresh while the tab is visible: load immediately, then every
-            // 60s. SwiftUI cancels this .task when the view disappears, which both
-            // ends the loop and cancels an in-flight fetch (fetchWatchData returns
-            // nil on cancellation, so cards keep their last state).
-            .task {
+            // Auto-refresh while the tab is on screen: load immediately, then every 60s.
+            // SwiftUI cancels this .task when the view disappears (another tab), which both
+            // ends the loop and cancels an in-flight fetch (fetchWatchData returns nil on
+            // cancellation, so cards keep their last state). Keyed on the background state so
+            // the loop also stops while the app is backgrounded / the Mac window minimized,
+            // and restarts — with a fresh load — when it comes back.
+            .task(id: scenePhase == .background) {
+                guard scenePhase != .background else { return }
                 while !Task.isCancelled {
                     await store.refresh()
                     try? await Task.sleep(for: .seconds(60))
                 }
             }
-            .refreshable { await store.refresh() }
+            .refreshable { await store.refresh(force: true) }
             // The good moment for the 评分提醒: the user's own rigs just reported in, so the
             // app has visibly done its job. Every other gate (launches, days installed, once
             // per version) lives in ReviewPrompt.
@@ -261,7 +265,7 @@ struct PoolView: View {
 /// Tallest monitor-card body in a row, so the others can match it (equal-height
 /// cards → their bottom-pinned 链上到账 footers line up). Reduces to the max.
 private struct CardBodyHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
+    static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
     }
@@ -296,9 +300,10 @@ private struct CardRow: View {
 
     @ViewBuilder private func card(_ w: PoolWatch) -> some View {
         // Equal heights only matter for side-by-side cards, so only pin in 2-up.
+        let addr = store.chainAddress(for: w)
         WatchCard(watch: w, data: store.watchData[w.id],
-                  onchain24h: store.onchain24h[w.id], onchain7d: store.onchain7d[w.id],
-                  onchainTotal: store.onchainTotal[w.id],
+                  onchain: addr.flatMap { store.onchain[$0] },
+                  addressHr24hRaw: addr.map { store.addressHashrate24h($0) } ?? 0,
                   prlUsd: store.prlUsd, minBodyHeight: cols > 1 ? rowHeight : 0,
                   onEdit: { onEdit(w) },
                   onDelete: { store.removeWatch(w.id) },
@@ -360,9 +365,10 @@ fileprivate func fiatLabel(_ prl: Double, prlUsd: Double?, currency: CurrencyMan
 private struct WatchCard: View {
     let watch: PoolWatch
     let data: WatchData?
-    let onchain24h: Double?
-    let onchain7d: Double?
-    let onchainTotal: Double?
+    /// This watch's payout address's on-chain income (shared by every watch on that address).
+    let onchain: OnchainIncome?
+    /// 24h hashrate of every enabled watch paying into that address — the 每 P·天 denominator.
+    let addressHr24hRaw: Double
     let prlUsd: Double?
     /// The tallest card's body height in the row, so every card matches it and
     /// their bottom-pinned 链上到账 footers line up. 0 = size to own content.
@@ -476,15 +482,15 @@ private struct WatchCard: View {
                                 Text(Loc("链上到账")).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                                 Spacer()
                             }
-                            onchainRow(Loc("近 24h"), onchain24h, big: true)
-                            onchainRow(Loc("近 7 天"), onchain7d, big: false)
-                            onchainRow(Loc("累计"), onchainTotal, big: false, plus: false)
-                            perPRow(hr24hRaw: d.hr24hRaw)
+                            onchainRow(Loc("近 24h"), onchain?.h24, big: true)
+                            onchainRow(Loc("近 7 天"), onchain?.d7, big: false)
+                            onchainRow(Loc("累计"), onchain?.total, big: false, plus: false)
+                            perPRow(hr24hRaw: max(addressHr24hRaw, d.hr24hRaw))
                         }
                         .accessibilityElement(children: .combine)
-                        .accessibilityLabel(Loc("链上近 24h 到账 %@ PRL", f(onchain24h ?? 0, 2))
-                            + (onchain7d.map { Loc("，近 7 天 %@ PRL", f($0, 2)) } ?? "")
-                            + (onchainTotal.map { Loc("，累计 %@ PRL", f($0, 2)) } ?? ""))
+                        .accessibilityLabel(((onchain?.h24).map { Loc("链上近 24h 到账 %@ PRL", f($0, 2)) } ?? Loc("链上到账"))
+                            + ((onchain?.d7).map { Loc("，近 7 天 %@ PRL", f($0, 2)) } ?? "")
+                            + ((onchain?.total).map { Loc("，累计 %@ PRL", f($0, 2)) } ?? ""))
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 }
@@ -600,23 +606,14 @@ private struct WatchCard: View {
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
     }
 
-    /// 每 P·天: on-chain daily income normalised to this address's 24h hashrate
-    /// (P = PH/s = H/s ÷ 1e15 = 1000 T — bigger, more readable than per-T). Lumpy
-    /// payouts are smoothed by dividing the 7-day income by the number of days actually
-    /// mined, estimated from the 24h share (d7/d24). A steadily-mining address gives
-    /// d7/d24 ≈ 7 (→ the intended /7 smoothing); an address that resumed only a day or
-    /// two ago gives ≈ 1, so it isn't under-reported up to ~7×. (Lifetime-vs-7day is the
-    /// WRONG gate: old income from before the window says nothing about days mined this
-    /// week.) Hidden when there's no hashrate or income yet.
+    /// 每 P·天: on-chain daily income normalised to the 24h hashrate of EVERY watch paying into
+    /// this address (P = PH/s = H/s ÷ 1e15 = 1000 T — bigger, more readable than per-T): the
+    /// income is the whole address's, so one card's hashrate alone over-stated the yield of an
+    /// address mined on several pools. Lumpy payouts are smoothed exactly as the monitor's
+    /// 实测每 P·天 is (ChainIncome.dailyAverage). Hidden when there's no hashrate or income yet.
     @ViewBuilder private func perPRow(hr24hRaw: Double) -> some View {
         let ph = hr24hRaw / 1e15
-        let d24 = onchain24h ?? 0
-        let d7 = onchain7d ?? 0
-        let daily: Double = {
-            guard d7 > 0 else { return d24 }                  // no 7-day data → use 24h
-            let days = d24 > 0 ? min(7, max(1, d7 / d24)) : 7 // active days from 24h share; steady-state if no 24h payout
-            return d7 / days
-        }()
+        let daily = ChainIncome.dailyAverage(h24: onchain?.h24 ?? 0, d7: onchain?.d7 ?? 0)
         if ph > 0 && daily > 0 {
             HStack(alignment: .firstTextBaseline, spacing: Pearl.Space.xs) {
                 Text(Loc("每 P·天")).font(.caption2).foregroundStyle(.secondary)
@@ -653,6 +650,11 @@ private struct WatchCard: View {
                         .font(.caption2).foregroundStyle(.secondary)
                         .lineLimit(1).minimumScaleFactor(0.7)
                 }
+            } else if onchain?.failed == true {
+                // The lookup answered nothing — say so, rather than spin on 查询中 forever or
+                // print a 0 that reads as "nothing arrived".
+                Text(verbatim: "—").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             } else {
                 Text(Loc("链上查询中…")).font(.caption2).foregroundStyle(.secondary)
                 Spacer(minLength: 0)

@@ -22,15 +22,13 @@ struct LordOfPearlsClient {
     private static let api = "https://lordofpearls.xyz/api/public"
     private static let poolsPage = "https://lordofpearls.xyz/pools"
 
-    private func get(_ s: String, timeout: TimeInterval = 20) async throws -> Data {
-        guard let url = URL(string: s) else { throw URLError(.badURL) }
-        var req = URLRequest(url: url)
-        req.timeoutInterval = timeout
-        req.cachePolicy = .reloadIgnoringLocalCacheData   // refresh must fetch live numbers
-        req.setValue(poolBrowserUA, forHTTPHeaderField: "User-Agent")
-        let (d, r) = try await URLSession.shared.data(for: req)
-        guard (r as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
-        return d
+    /// false = let the shared URLCache honour the site's own Cache-Control (max-age 60 on
+    /// /api/public, 300 on /pools — it re-polls the pools every ~10 min anyway); true for an
+    /// explicit refresh.
+    var live = true
+
+    private func get(_ s: String) async throws -> Data {
+        try await PoolHTTP.get(s, live: live, accept: nil)
     }
 
     /// Chain-wide stats from the site's node.
@@ -83,8 +81,19 @@ extension LOPPublic {
     private func positive(_ v: Double?) -> Double? { (v ?? 0) > 0 ? v : nil }
 
     var difficulty: Double? { positive(network?.difficulty) }
+    /// The site's own figure — computed over the last 60 blocks. Prefer `networkHashrate24h`:
+    /// on the 60-block window it ran ~10% above the chain identity the rest of the app uses.
     var networkHashrate: Double? { positive(network?.networkhashps) }
     var blockTimeSec: Double? { positive(network?.avg_block_time_s) }
+
+    /// 全网算力 on the chain identity over the 24h window — 难度 × 2^48 ÷ 24h 出块时间 — the ONE
+    /// network figure the monitor's dashboard and the pool overview's 占比 both use (they used
+    /// to differ by ~10%: this vs the site's 60-block `networkhashps`). Falls back to the
+    /// 60-block block time only when the 24h count is missing.
+    var networkHashrate24h: Double? {
+        guard let d = difficulty, let bt = blockTime24h ?? blockTimeSec else { return nil }
+        return positive(d * prlWorkPerDifficulty / bt)
+    }
 
     /// Seconds per block MEASURED over the site's 24h window (its on-chain block count for the
     /// last day). Prefer this to `avg_block_time_s`, which is a 60-block window: pairing a

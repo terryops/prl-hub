@@ -52,7 +52,8 @@ final class ChainHistory: ObservableObject {
     @Published var loading = false
 
     private var cache: [Span: (at: Date, samples: [ChainSample])] = [:]
-    private var inflight: Task<Void, Never>?
+    /// One fetch per window, shared by the chart and the 行情 trend card (which reads 7天).
+    private var loads: [Span: Task<[ChainSample]?, Never>] = [:]
     private static let cacheTTL: TimeInterval = 600   // chain moves ~1 block / 4 min
 
     /// How many blocks the window is sampled at. Blockbook has no header-only endpoint and a
@@ -61,7 +62,7 @@ final class ChainHistory: ObservableObject {
     /// host, 15–24 s before the chart appeared. 28 points still draw a smooth 190 pt line, and
     /// the wider spacing actually STEADIES the measured series (each block-time estimate then
     /// rests on more blocks). With the private session below a cold chart lands in ~4 s.
-    private static let sampleCount = 28
+    nonisolated private static let sampleCount = 28
 
     /// Private session purely so these fetches aren't capped at the shared session's 4–6
     /// connections per host. Ephemeral: the responses are big and already cached in `cache`.
@@ -72,58 +73,95 @@ final class ChainHistory: ObservableObject {
         return URLSession(configuration: c)
     }()
 
+    private func fresh(_ span: Span) -> [ChainSample]? {
+        guard let c = cache[span], Date().timeIntervalSince(c.at) < Self.cacheTTL else { return nil }
+        return c.samples
+    }
+
     func load(force: Bool = false) {
-        if !force, let c = cache[span], Date().timeIntervalSince(c.at) < Self.cacheTTL {
-            samples = c.samples
+        let span = self.span
+        // Switching windows abandons the previous one's download (~2.6 MB for 30天) — except
+        // 7天, which the 行情 trend card may be waiting on.
+        for (s, t) in loads where s != span && s != .d7 { t.cancel(); loads[s] = nil }
+        if !force, let cached = fresh(span) {
+            samples = cached
+            loading = false       // a cached window is instant — never leave a spinner over it
             return
         }
-        inflight?.cancel()
         loading = true
-        let span = self.span
-        inflight = Task { [weak self] in
-            guard let heights = await Self.plan(span: span), let self, !Task.isCancelled else {
-                self?.loading = false
-                return
-            }
+        let task = fetch(span, force: force)
+        Task { [weak self] in
+            let result = await task.value
+            // Only the window still on screen may touch the chart: a superseded or cancelled
+            // load neither clears the spinner nor flashes "加载失败" under its successor.
+            guard let self, span == self.span, !task.isCancelled else { return }
+            if let result { self.samples = result }
+            self.loading = false
+        }
+    }
+
+    /// The samples for `span` — cached, or one fetch shared with anyone else asking. Doesn't
+    /// touch the chart's own window (the trend card reads 7天 whatever the chart shows).
+    func samples(for span: Span) async -> [ChainSample]? {
+        if let cached = fresh(span) { return cached }
+        return await fetch(span, force: false).value
+    }
+
+    private func fetch(_ span: Span, force: Bool) -> Task<[ChainSample]?, Never> {
+        if let running = loads[span] {
+            if !force { return running }
+            running.cancel()
+        }
+        let t = Task { [weak self] () -> [ChainSample]? in
+            guard let plan = await Self.plan(span: span), !Task.isCancelled else { return nil }
             // Publish as blocks land instead of after the whole window: the first line shows up
             // in about a second and thickens, rather than a spinner sitting there for seconds.
-            var out: [ChainSample] = []
+            var out = plan.probed
             await withTaskGroup(of: ChainSample?.self) { group in
-                for h in heights { group.addTask { await Self.fetchBlock(h) } }
+                for h in plan.heights where !out.contains(where: { $0.height == h }) {
+                    group.addTask { await Self.fetchBlock(h) }
+                }
                 for await s in group {
                     guard let s else { continue }
                     out.append(s)
                     // Every 4th, so SwiftUI isn't asked to rebuild the chart 28 times.
-                    if out.count % 4 == 0, out.count >= 4, span == self.span, !Task.isCancelled {
+                    if out.count % 4 == 0, let self, span == self.span, !Task.isCancelled {
                         self.samples = out.sorted { $0.height < $1.height }
                     }
                 }
             }
-            guard !Task.isCancelled, out.count >= 2 else {
-                if span == self.span { self.loading = false }
-                return
-            }
+            guard !Task.isCancelled, out.count >= 2 else { return nil }
             let done = out.sorted { $0.height < $1.height }
-            self.cache[span] = (Date(), done)
-            if span == self.span { self.samples = done; self.loading = false }
+            self?.cache[span] = (Date(), done)
+            return done
         }
+        loads[span] = t
+        Task { [weak self] in
+            _ = await t.value
+            if self?.loads[span] == t { self?.loads[span] = nil }
+        }
+        return t
     }
 
     /// Tip height from Blockbook status, then the heights to sample across the window. The window
     /// is sized by the chain's REAL recent block time (probed over the last ~1000 blocks, both
     /// ends fetched concurrently); the x-axis uses each block's actual timestamp, so the probe
-    /// only sizes the window, never skews the chart.
-    nonisolated private static func plan(span: Span) async -> [Int]? {
+    /// only sizes the window, never skews the chart. `probed` hands back the blocks already
+    /// fetched for that probe that are also sample points (the tip always is), so they aren't
+    /// downloaded twice — each is ~87 KB.
+    nonisolated private static func plan(span: Span) async -> (heights: [Int], probed: [ChainSample])? {
         guard let d = await httpGET("https://blockbook.pearlresearch.ai/api/v2/", timeout: 15),
               let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
               let bb = o["blockbook"] as? [String: Any],
               let tip = bb["bestHeight"] as? Int, tip > 2 else { return nil }
         var estBlockSec = 235.0
+        var probes: [ChainSample] = []
         let probeFrom = max(1, tip - 1000)
         if span.seconds != nil, probeFrom < tip {
             async let a = fetchBlock(probeFrom)
             async let b = fetchBlock(tip)
             if let pa = await a, let pb = await b {
+                probes = [pa, pb]
                 let est = pb.time.timeIntervalSince(pa.time) / Double(tip - probeFrom)
                 if est.isFinite, est > 0 { estBlockSec = min(max(est, 10), 3600) }
             }
@@ -131,7 +169,8 @@ final class ChainHistory: ObservableObject {
         let spanBlocks = span.seconds.map { max(30, Int($0 / estBlockSec)) } ?? (tip - 1)
         let from = max(1, tip - spanBlocks)
         let n = sampleCount
-        return Array(Set((0 ..< n).map { from + Int(Double(tip - from) * Double($0) / Double(n - 1)) })).sorted()
+        let heights = Array(Set((0 ..< n).map { from + Int(Double(tip - from) * Double($0) / Double(n - 1)) })).sorted()
+        return (heights, probes.filter { heights.contains($0.height) })
     }
 
     // MARK: measured series (block time → hashrate)

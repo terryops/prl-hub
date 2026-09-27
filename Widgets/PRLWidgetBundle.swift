@@ -164,14 +164,8 @@ func priceLine(_ snap: WidgetSnapshot) -> String? {
     return moneyString("$", snap.prlUsd, decimals: 2)
 }
 
-/// Human-readable raw hashrate, e.g. "1.23 GH/s".
-func formatHashrate(_ hps: Double) -> String {
-    guard hps > 0 else { return "—" }
-    let units = ["H/s", "KH/s", "MH/s", "GH/s", "TH/s", "PH/s", "EH/s"]
-    var v = hps, i = 0
-    while v >= 1000 && i < units.count - 1 { v /= 1000; i += 1 }
-    return String(format: v >= 100 ? "%.0f %@" : "%.2f %@", v, units[i])
-}
+// formatHashrate / parseHashrate: Sources/WidgetShared/Pools/Hashrate.swift (one copy for the
+// app and the widget, so a rig's figure no longer flips format depending on who wrote last).
 
 // MARK: - Sample data (widget gallery / placeholder)
 

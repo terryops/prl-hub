@@ -16,21 +16,13 @@ struct MiningPoolStatsClient {
     private static let page = "https://miningpoolstats.stream/pearl"
     private static let data = "https://data.miningpoolstats.stream/data/pearl.js"
 
-    private func get(_ url: URL, timeout: TimeInterval = 20) async throws -> Data {
-        var req = URLRequest(url: url)
-        req.timeoutInterval = timeout
-        req.cachePolicy = .reloadIgnoringLocalCacheData
-        req.setValue(poolBrowserUA, forHTTPHeaderField: "User-Agent")
-        let (d, r) = try await URLSession.shared.data(for: req)
-        guard let code = (r as? HTTPURLResponse)?.statusCode, code == 200 else {
-            throw URLError(.badServerResponse)
-        }
-        return d
-    }
+    /// See LordOfPearlsClient.live. Governs only the data file: the page itself is always
+    /// fetched live, since a stale page would echo a `last_time` the data host may now refuse.
+    var live = true
 
     func fetch() async throws -> MPSCoin {
         guard let pageURL = URL(string: Self.page) else { throw URLError(.badURL) }
-        let html = String(data: try await get(pageURL), encoding: .utf8) ?? ""
+        let html = String(data: try await PoolHTTP.get(pageURL, accept: nil), encoding: .utf8) ?? ""
         guard let m = html.range(of: #"var last_time\s*=\s*"(\d+)""#, options: .regularExpression),
               let t = html[m].split(separator: "\"").dropFirst().first else {
             throw URLError(.cannotParseResponse)   // page layout changed → caller falls back
@@ -38,7 +30,7 @@ struct MiningPoolStatsClient {
         guard var c = URLComponents(string: Self.data) else { throw URLError(.badURL) }
         c.queryItems = [URLQueryItem(name: "t", value: String(t))]
         guard let url = c.url else { throw URLError(.badURL) }
-        return try JSONDecoder().decode(MPSCoin.self, from: try await get(url))
+        return try PoolHTTP.decode(MPSCoin.self, from: try await PoolHTTP.get(url, live: live, accept: nil))
     }
 }
 

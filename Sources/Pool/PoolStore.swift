@@ -2,22 +2,37 @@ import Foundation
 import Combine
 import SwiftUI
 
+/// On-chain income for one mining address, as the 链上到账 rows show it. A figure is nil until
+/// it first loads; `failed` then says whether that's still "查询中" or a lookup that didn't
+/// answer ("—"). A later failure keeps the last good figures rather than blanking them.
+struct OnchainIncome: Equatable {
+    var h24: Double?
+    var d7: Double?
+    var total: Double?
+    var failed = false
+}
+
 @MainActor
 final class PoolStore: ObservableObject {
     // Per-miner watches the user added.
     @Published var watches: [PoolWatch] = []
     @Published var watchData: [UUID: WatchData] = [:]
-    /// On-chain actual income (Blockbook balancehistory) per watch — 近24h / 近7天 / 累计.
-    @Published var onchain24h: [UUID: Double] = [:]
-    @Published var onchain7d: [UUID: Double] = [:]
-    @Published var onchainTotal: [UUID: Double] = [:]
+    /// On-chain actual income (Blockbook balance history), keyed by ADDRESS — two watches on
+    /// one address are one lookup and show one set of figures.
+    @Published var onchain: [String: OnchainIncome] = [:]
     /// Live fiat conversion for displaying PRL amounts.
     @Published var prlUsd: Double?   // 1 PRL = ? USD — mirrors the app-wide PRLPriceManager
     private var priceSub: AnyCancellable?
     @Published var usdCny: Double?   // 1 USD = ? CNY
     @Published var loading = false
 
-    private static let watchesKey = "pool.watches"
+    nonisolated static let watchesKey = "pool.watches"
+    /// Stored watches this build can't read — a pool added in a newer version, say — kept
+    /// VERBATIM and written back on every save. Dropping them would push the trimmed list to
+    /// iCloud and delete those watches from the newer devices as well.
+    private var foreignWatches: [Data] = []
+    /// Pools that are gone for good: their stored watches are dropped, not carried forever.
+    nonisolated private static let retiredPools: Set<String> = ["TW-Pool"]
 
     init() {
         loadWatches()
@@ -56,30 +71,57 @@ final class PoolStore: ObservableObject {
             ?? s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Per-element lenient decode: a stored watch whose pool no longer exists
-    /// (e.g. the removed TW-Pool) becomes nil instead of failing — and wiping —
-    /// the entire watches array.
-    private struct MaybeWatch: Decodable {
-        let watch: PoolWatch?
-        init(from decoder: Decoder) { watch = try? PoolWatch(from: decoder) }
+    struct StoredWatches {
+        var known: [PoolWatch] = []
+        /// Elements this build can't decode, as their raw JSON.
+        var foreign: [Data] = []
+        var droppedRetired = false
+    }
+
+    /// Per-element lenient decode: one watch this build can't read costs that watch — and is
+    /// kept aside verbatim — instead of failing (and wiping) the entire array.
+    nonisolated static func decodeStoredWatches(_ data: Data) -> StoredWatches? {
+        guard let arr = (try? JSONSerialization.jsonObject(with: data)) as? [Any] else { return nil }
+        var out = StoredWatches()
+        for el in arr where JSONSerialization.isValidJSONObject(el) {
+            guard let raw = try? JSONSerialization.data(withJSONObject: el) else { continue }
+            if let w = try? JSONDecoder().decode(PoolWatch.self, from: raw) {
+                out.known.append(w)
+            } else if let pool = (el as? [String: Any])?["pool"] as? String, retiredPools.contains(pool) {
+                out.droppedRetired = true
+            } else {
+                out.foreign.append(raw)
+            }
+        }
+        return out
+    }
+
+    /// The watches this build can read, straight from storage (for the monitor's device sync
+    /// and income, which don't own a PoolStore).
+    nonisolated static func storedWatches() -> [PoolWatch] {
+        UserDefaults.standard.data(forKey: watchesKey).flatMap(decodeStoredWatches)?.known ?? []
     }
 
     private func loadWatches() {
         let d = UserDefaults.standard
-        if let data = d.data(forKey: Self.watchesKey),
-           let raw = try? JSONDecoder().decode([MaybeWatch].self, from: data) {
-            let ws = raw.compactMap(\.watch)
+        if let data = d.data(forKey: Self.watchesKey), let stored = Self.decodeStoredWatches(data) {
+            var foreign = stored.foreign
             // Auto-heal any corrupted (whitespace-containing) addresses on load, per the
             // pool's own rules — an F2Pool watch stores a read-only page URL, not an address.
-            let cleaned = ws.compactMap { w -> PoolWatch? in
-                var w = w
-                guard let a = normalizeWatchAddress(w.pool, w.address) else { return nil }
-                w.address = a
-                return w
+            // One that can't be healed is set aside with the unreadable ones, not deleted.
+            var cleaned: [PoolWatch] = []
+            for var w in stored.known {
+                if let a = normalizeWatchAddress(w.pool, w.address) {
+                    w.address = a
+                    cleaned.append(w)
+                } else if let raw = try? JSONEncoder().encode(w) {
+                    foreign.append(raw)
+                }
             }
             watches = cleaned
-            // Persist when something was healed OR a dead-pool watch was dropped.
-            if cleaned != ws || ws.count != raw.count { saveWatches() }
+            foreignWatches = foreign
+            // Persist when something was healed OR a retired-pool watch was dropped.
+            if cleaned != stored.known || stored.droppedRetired { saveWatches() }
         } else if let legacy = d.string(forKey: "pool.address"),
                   !legacy.trimmingCharacters(in: .whitespaces).isEmpty {
             // Migrate the old single-address setup → an AlphaPool watch.
@@ -92,9 +134,12 @@ final class PoolStore: ObservableObject {
     }
 
     private func saveWatches() {
-        if let data = try? JSONEncoder().encode(watches) {
-            UserDefaults.standard.set(data, forKey: Self.watchesKey)
+        guard var data = try? JSONEncoder().encode(watches) else { return }
+        if !foreignWatches.isEmpty, var arr = (try? JSONSerialization.jsonObject(with: data)) as? [Any] {
+            arr += foreignWatches.compactMap { try? JSONSerialization.jsonObject(with: $0) }
+            if let merged = try? JSONSerialization.data(withJSONObject: arr) { data = merged }
         }
+        UserDefaults.standard.set(data, forKey: Self.watchesKey)
         CloudSync.push(Self.watchesKey)   // mirror to iCloud (no-op if not provisioned)
     }
 
@@ -111,12 +156,17 @@ final class PoolStore: ObservableObject {
         let trimmed = alias.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { w.alias = trimmed }
         watches.append(w); saveWatches()
-        Task { if let d = await fetchWatchData(w) { watchData[w.id] = d } }
+        Task {
+            async let income: Void = fetchOnchainIncome(force: false)
+            adopt(await fetchWatchData(w), for: w)
+            await income
+        }
     }
 
     func removeWatch(_ id: UUID) {
         watches.removeAll { $0.id == id }
         watchData[id] = nil
+        pruneOnchain()
         saveWatches()
     }
 
@@ -159,13 +209,14 @@ final class PoolStore: ObservableObject {
         if on {
             let w = watches[i]
             Task {
-                if let d = await fetchWatchData(w) { watchData[w.id] = d }
-                await fetchOnchainIncome([w])
+                async let income: Void = fetchOnchainIncome(force: false)
+                adopt(await fetchWatchData(w), for: w)
+                await income
                 pushWidgetSnapshot()
             }
         } else {
             watchData[id] = nil
-            onchain24h[id] = nil; onchain7d[id] = nil; onchainTotal[id] = nil
+            pruneOnchain()
             pushWidgetSnapshot()   // drop it from the widget now, not at the next refresh
         }
     }
@@ -183,7 +234,7 @@ final class PoolStore: ObservableObject {
     /// switches pools (the watch keeps its id, so its card position and ordering
     /// survive). No-op on an invalid address or if the new (pool, address) would
     /// duplicate a DIFFERENT watch. When the pool or address actually changes, the
-    /// stale cached stats/on-chain figures are cleared and a fresh fetch kicks off.
+    /// stale cached stats are cleared and a fresh fetch kicks off.
     func updateWatch(_ id: UUID, pool: PoolKind, address: String, alias: String = "") {
         guard let i = watches.firstIndex(where: { $0.id == id }) else { return }
         guard let a = normalizeWatchAddress(pool, address),
@@ -196,36 +247,58 @@ final class PoolStore: ObservableObject {
         saveWatches()
         guard changed else { return }   // alias-only edit: keep the cached data
         watchData[id] = nil
-        onchain24h[id] = nil; onchain7d[id] = nil; onchainTotal[id] = nil
+        pruneOnchain()
         let w = watches[i]
         Task {
-            if let d = await fetchWatchData(w) { watchData[w.id] = d }
-            await fetchOnchainIncome([w])
+            async let income: Void = fetchOnchainIncome(force: false)
+            adopt(await fetchWatchData(w), for: w)
+            await income
         }
+    }
+
+    /// Adopt a fetch result only if the watch still points where the fetch went. A refresh
+    /// that was already in flight when the user switched a watch from AlphaPool to Kryptex
+    /// (same id) would otherwise land the OLD pool's numbers on the new card. nil = a
+    /// cancelled fetch: the card keeps its current state.
+    private func adopt(_ d: WatchData?, for w: PoolWatch) {
+        guard let d, watches.contains(where: { $0.sameTarget(as: w) }) else { return }
+        watchData[w.id] = d
     }
 
     // MARK: refresh
 
-    func refresh() async {
+    private var refreshTask: Task<Void, Never>?
+
+    /// Pull-to-refresh, the toolbar button, the 60s loop and an iCloud-triggered reload can all
+    /// land at once; they share ONE refresh instead of racing (the first to finish used to
+    /// clear `loading` under the others). `force` also bypasses the on-chain cache.
+    func refresh(force: Bool = false) async {
+        if let running = refreshTask { await running.value; return }
+        let t = Task { await performRefresh(force: force) }
+        refreshTask = t
+        await withTaskCancellationHandler { await t.value } onCancel: { t.cancel() }
+        refreshTask = nil
+    }
+
+    private func performRefresh(force: Bool) async {
         loading = true
         async let pu: Void = PRLPriceManager.shared.refreshIfStale()
-        async let uc = Self.fetchUsdCny()
+        // The chain lookups run ALONGSIDE the pool fetches: one slow pool no longer holds up
+        // 链上到账 for every card.
+        async let income: Void = fetchOnchainIncome(force: force)
 
         let current = watches.filter(\.isEnabled)   // a paused watch costs no network
-        await withTaskGroup(of: (UUID, WatchData?).self) { group in
-            for w in current { group.addTask { (w.id, await fetchWatchData(w)) } }
-            // Skip a watch the user removed mid-refresh (dead UUID → orphan entry), and
-            // skip nil (a cancelled fetch) so navigating away mid-refresh can't overwrite
-            // a card with 失败 — the card keeps its current state until the next refresh.
-            for await (id, d) in group {
-                guard let d, watches.contains(where: { $0.id == id }) else { continue }
-                watchData[id] = d
-            }
+        await withTaskGroup(of: (PoolWatch, WatchData?).self) { group in
+            for w in current { group.addTask { (w, await fetchWatchData(w)) } }
+            // Skip a watch the user removed or re-pointed mid-refresh, and skip nil (a
+            // cancelled fetch) so navigating away can't overwrite a card with 失败.
+            for await (w, d) in group { adopt(d, for: w) }
         }
-        await fetchOnchainIncome(current)
 
+        await income
         await pu   // prlUsd follows PRLPriceManager via priceSub
-        if let c = await uc { usdCny = c }
+        // The app-wide daily rate table — no separate exchange-rate request of our own.
+        if let c = CurrencyManager.shared.rate("CNY") { usdCny = c }
         loading = false
 
         pushWidgetSnapshot()
@@ -236,81 +309,64 @@ final class PoolStore: ObservableObject {
     private func pushWidgetSnapshot() {
         WidgetBridge.updatePrice(prlUsd: prlUsd, usdCny: usdCny)
         let pools = watches.filter(\.isEnabled).map { w -> WidgetPool in
-            let d = watchData[w.id]
-            // REAL-TIME (瞬时) hashrate = Σ per-worker live rate; fall back to the 24h
-            // estimate only for pools whose workers don't report a live value.
-            let liveRaw = d?.workers.reduce(0) { $0 + $1.instant } ?? 0
-            let raw = liveRaw > 0 ? liveRaw : (d?.hr24hRaw ?? 0)
+            // The SAME live total the widget computes on its own refresh (PoolMinerStats.liveRate).
+            let s = watchData[w.id]?.stats
             return WidgetPool(label: w.displayName,
                               kind: w.pool.rawValue,
                               address: w.address,
-                              hashrate: raw > 0 ? formatHashrate(raw) : "—",
-                              hashrateRaw: raw,
-                              online: d?.workers.filter { $0.online }.count ?? 0,
-                              total: d?.workers.count ?? 0)
+                              hashrate: s?.liveRateText ?? "—",
+                              hashrateRaw: s?.liveRate ?? 0,
+                              online: s?.onlineCount ?? 0,
+                              total: s?.workers.count ?? 0)
         }
         WidgetBridge.updatePools(pools)
     }
 
-    // MARK: fiat prices
+    // MARK: per-address on-chain income (see ChainIncome)
 
-    private static func fetchUsdCny() async -> Double? {
-        var req = URLRequest(url: URL(string: "https://open.er-api.com/v6/latest/USD")!)
-        req.timeoutInterval = 15
-        guard let (data, resp) = try? await URLSession.shared.data(for: req),
-              (resp as? HTTPURLResponse)?.statusCode == 200,
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let rates = obj["rates"] as? [String: Any] else { return nil }
-        return (rates["CNY"] as? NSNumber)?.doubleValue
+    /// The address a watch's payouts land on — nil for F2Pool, whose read-only page link
+    /// never reveals the payout address.
+    private static func chainAddress(_ w: PoolWatch) -> String? {
+        guard w.pool.isAddressBased else { return nil }
+        let a = cleanAddr(w.address).lowercased()
+        return PRLAddress.isValid(a, network: .mainnet) ? a : nil
     }
 
-    // MARK: per-watch on-chain income (Blockbook balancehistory)
+    /// Every enabled watch's payout address — the user's own mining addresses, between which a
+    /// transfer is not income.
+    private var ownAddresses: [String] {
+        Array(Set(watches.filter(\.isEnabled).compactMap(Self.chainAddress)))
+    }
 
-    /// Net PRL received by `addr` over `hours` (received − sent-to-self), i.e. the
-    /// actual money that landed on this pool's收款地址.
-    nonisolated private static func bbReceived(_ addr: String, hours: Double) async -> Double? {
-        let now = Int(Date().timeIntervalSince1970)
-        let from = now - Int(hours * 3600)
-        guard var comps = URLComponents(string: "https://blockbook.pearlresearch.ai/api/v2/balancehistory/\(addr)") else { return nil }
-        comps.queryItems = [
-            .init(name: "from", value: String(from)),
-            .init(name: "to", value: String(now + 60)),
-            .init(name: "groupBy", value: "86400"),
-        ]
-        guard let url = comps.url else { return nil }
-        var req = URLRequest(url: url)
-        req.timeoutInterval = 20; req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.cachePolicy = .reloadIgnoringLocalCacheData   // refresh = re-query on-chain, not a cached body
-        guard let (d, r) = try? await URLSession.shared.data(for: req),
-              (r as? HTTPURLResponse)?.statusCode == 200,
-              let arr = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]] else { return nil }
-        var sat = 0.0
-        for b in arr {
-            let rec = Double((b["received"] as? String) ?? "0") ?? 0
-            let ss  = Double((b["sentToSelf"] as? String) ?? "0") ?? 0
-            if rec - ss > 0 { sat += (rec - ss) }
+    private func fetchOnchainIncome(force: Bool) async {
+        let own = ownAddresses
+        guard !own.isEmpty else { return }
+        async let recent = ChainIncome.shared.recent(own, force: force)
+        async let life = ChainIncome.shared.lifetime(own, force: force)
+        let (r, l) = await (recent, life)
+        for a in own {
+            var f = onchain[a] ?? OnchainIncome()
+            if let x = r[a] { f.h24 = x.h24; f.d7 = x.d7 }
+            if let t = l[a] { f.total = t }
+            f.failed = r[a] == nil || l[a] == nil
+            onchain[a] = f
         }
-        return sat / 1e8
+        pruneOnchain()
     }
 
-    private func fetchOnchainIncome(_ ws: [PoolWatch]) async {
-        await withTaskGroup(of: (UUID, Double?, Double?, Double?).self) { group in
-            for w in ws {
-                let a = Self.cleanAddr(w.address).lowercased()
-                guard PRLAddress.isValid(a, network: .mainnet) else { continue }
-                group.addTask {
-                    async let h24  = Self.bbReceived(a, hours: 24)
-                    async let d7   = Self.bbReceived(a, hours: 24 * 7)
-                    async let life = Self.bbReceived(a, hours: 24 * 365 * 5)   // ≈ lifetime
-                    return (w.id, await h24, await d7, await life)
-                }
-            }
-            for await (id, r24, r7, rlife) in group {
-                guard watches.contains(where: { $0.id == id }) else { continue }   // watch removed mid-refresh
-                if let r24  { onchain24h[id] = r24 }
-                if let r7   { onchain7d[id] = r7 }
-                if let rlife { onchainTotal[id] = rlife }
-            }
-        }
+    /// Drop figures for addresses no enabled watch points at any more.
+    private func pruneOnchain() {
+        let own = Set(ownAddresses)
+        for a in onchain.keys where !own.contains(a) { onchain[a] = nil }
     }
+
+    /// 24h hashrate of EVERY enabled watch paying into `address`. The 每 P·天 row divides the
+    /// address's whole on-chain income by this: dividing it by one card's hashrate over-stated
+    /// the yield whenever the address is mined on more than one pool.
+    func addressHashrate24h(_ address: String) -> Double {
+        watches.filter { $0.isEnabled && Self.chainAddress($0) == address }
+            .reduce(0) { $0 + (watchData[$1.id]?.hr24hRaw ?? 0) }
+    }
+
+    func chainAddress(for w: PoolWatch) -> String? { Self.chainAddress(w) }
 }

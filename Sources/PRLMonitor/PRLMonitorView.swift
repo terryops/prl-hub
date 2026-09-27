@@ -10,6 +10,7 @@ import SwiftUI
 struct PRLMonitorView: View {
     @StateObject private var store = PRLStore()
     @EnvironmentObject private var currency: CurrencyManager
+    @Environment(\.scenePhase) private var scenePhase
     // DEBUG-only: a launch env var can pin the opening section, so a screenshot /
     // verification run lands on it without driving the pill strip (see RootView.SHOT_TAB).
     @State private var section: Section = {
@@ -81,7 +82,17 @@ struct PRLMonitorView: View {
                 }
             }
         }
-        .onAppear { store.refresh(); store.syncFx() }
+        .onAppear { store.refresh(force: false); store.syncFx() }
+        // 「自动」: every 60s, but only while this tab is on screen (SwiftUI cancels the task
+        // when it disappears) and the app is in the foreground — toggling either restarts it.
+        .task(id: store.autoRefresh && scenePhase != .background) {
+            guard store.autoRefresh, scenePhase != .background else { return }
+            while true {
+                try? await Task.sleep(for: .seconds(60))
+                if Task.isCancelled { return }
+                store.refresh(force: false)
+            }
+        }
         // Keep the local-currency rate in step with the global secondary currency
         // and the daily rate refresh (no-op while the user pinned a manual rate).
         .onChange(of: currency.secondaryPref) { _, _ in store.syncFx() }
