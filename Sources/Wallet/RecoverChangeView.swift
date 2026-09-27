@@ -12,7 +12,7 @@ struct RecoverChangeView: View {
     @State private var result: String?
     @State private var done = false
 
-    private func amount(_ d: Decimal) -> String { d.formatted(.number.precision(.fractionLength(0...8))) }
+    private func amount(_ d: Decimal) -> String { d.formatted(.number.precision(.fractionLength(0...8)).locale(LocBundleHolder.shared.locale)) }
     private func short(_ a: String) -> String { a.count > 18 ? "\(a.prefix(11))…\(a.suffix(6))" : a }
     private var destination: String {
         toMyWallet ? (store.address ?? "") : customDestination.trimmingCharacters(in: .whitespacesAndNewlines)

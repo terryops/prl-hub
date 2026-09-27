@@ -62,7 +62,7 @@ struct DashboardView: View {
     /// present immediately on launch).
     private var unitPriceText: String? {
         guard let usd = price.usd, usd > 0, usd.isFinite else { return nil }
-        return "$" + usd.formatted(.number.precision(.fractionLength(2)))
+        return "$" + usd.formatted(.number.precision(.fractionLength(2)).locale(LocBundleHolder.shared.locale))
     }
 
     /// Split the balance for display: a big grouped "1,234.56" head (integer + the
@@ -157,7 +157,7 @@ struct DashboardView: View {
                         }
                         .monospacedDigit()
                         .lineLimit(1).minimumScaleFactor(0.5)
-                        .accessibilityLabel(store.backendReady ? Loc("余额 %@ PRL", store.balance.total.formatted()) : Loc("同步余额…"))
+                        .accessibilityLabel(store.backendReady ? Loc("余额 %@ PRL", store.balance.total.formatted(.number.locale(LocBundleHolder.shared.locale))) : Loc("同步余额…"))
                         // Tuck the balance up under the chip row: with only a right-aligned chip
                         // above it, the full row gap made the number read as sitting low.
                         .padding(.top, -6)
@@ -183,7 +183,7 @@ struct DashboardView: View {
                 // Backend unreachable: the figures above are the last good snapshot — say so
                 // rather than let them pass for live.
                 if let problem = store.syncError {
-                    Label(store.lastSyncedAt.map { Loc("%@，显示的是 %@ 的数据", problem, $0.formatted(date: .omitted, time: .shortened)) }
+                    Label(store.lastSyncedAt.map { Loc("%@，显示的是 %@ 的数据", problem, $0.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(LocBundleHolder.shared.locale))) }
                           ?? Loc("%@，稍后自动重试", problem),
                           systemImage: "exclamationmark.icloud")
                         .font(.caption).foregroundStyle(.orange)
@@ -340,7 +340,7 @@ struct DashboardView: View {
                 .foregroundStyle(received ? .green : .orange)
                 .frame(width: 16, height: 16)
                 .background((received ? Color.green : Color.orange).opacity(0.14), in: Circle())
-            Text((received ? "+" : "-") + tx.amount.formatted(.number.precision(.fractionLength(0...8))) + " PRL")
+            Text((received ? "+" : "-") + tx.amount.formatted(.number.precision(.fractionLength(0...8)).locale(LocBundleHolder.shared.locale)) + " PRL")
                 .font(.caption.monospacedDigit().weight(.semibold))
                 .foregroundStyle(received ? .green : .primary).lineLimit(1).minimumScaleFactor(0.6)
             // 未满 100 确认时显示确认数（满 100 视为稳定，不再显示）
@@ -488,7 +488,7 @@ struct SendView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Pearl.Space.lg) {
-                Text(Loc("可用余额 %@ PRL", store.balance.available.formatted(.number.precision(.fractionLength(0...8)))))
+                Text(Loc("可用余额 %@ PRL", store.balance.available.formatted(.number.precision(.fractionLength(0...8)).locale(LocBundleHolder.shared.locale))))
                     .font(.callout).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.sm)
@@ -719,7 +719,7 @@ private struct ActivityRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(tx.direction == .received ? Loc("收到") : Loc("发出")).font(.body)
                     // 紧凑单行日期（去掉年份，省出宽度，避免与右侧金额互挤换行）。
-                    Text(tx.time.formatted(.dateTime.month().day().hour().minute()))
+                    Text(tx.time.formatted(.dateTime.month().day().hour().minute().locale(LocBundleHolder.shared.locale)))
                         .font(.caption).foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -728,7 +728,7 @@ private struct ActivityRow: View {
                     // 数字与单位拆开：单位 PRL 弱化为小灰字，整体单行、必要时等比缩小而不换行。
                     HStack(alignment: .firstTextBaseline, spacing: 3) {
                         Text((tx.direction == .received ? "+" : "-")
-                             + tx.amount.formatted(.number.precision(.fractionLength(0...8))))
+                             + tx.amount.formatted(.number.precision(.fractionLength(0...8)).locale(LocBundleHolder.shared.locale)))
                             .font(.callout.monospacedDigit().bold())
                             .foregroundStyle(tx.direction == .received ? .green : .primary)
                         Text(verbatim: "PRL").font(.caption2).foregroundStyle(.secondary)

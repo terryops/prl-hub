@@ -545,9 +545,14 @@ final class WalletStore: ObservableObject {
     func unlock() async {
         guard let id = activeWalletID else { phase = .noWallet; return }
         lastError = nil
-        guard await authenticate(reason: Loc("解锁钱包")) else {
-            if lastError == nil { lastError = Loc("认证未通过") }
-            return
+        // With no device passcode there is nothing to authenticate against: the lock is
+        // then only a privacy screen, and failing closed would shut the owner out of
+        // their own wallet for good. Sends stay gated by authenticate() regardless.
+        if Self.deviceHasPasscode {
+            guard await authenticate(reason: Loc("解锁钱包")) else {
+                if lastError == nil { lastError = Loc("认证未通过") }
+                return
+            }
         }
         guard phase == .locked, id == activeWalletID else { return }
         guard let m = Keychain.get(account: mnemonicAccount(for: id)) else {
@@ -583,6 +588,14 @@ final class WalletStore: ObservableObject {
             return false
         }
         return (try? await ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason)) ?? false
+    }
+
+    /// False only when the device has no passcode at all (biometry lockout etc. still
+    /// count as "has one" — deviceOwnerAuthentication falls back to the passcode).
+    private static var deviceHasPasscode: Bool {
+        var err: NSError?
+        if LAContext().canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) { return true }
+        return err?.code != LAError.Code.passcodeNotSet.rawValue
     }
 
     // MARK: chain loading
@@ -793,11 +806,8 @@ final class WalletStore: ObservableObject {
                                       xpub: xpub,
                                       network: network.rawValue,
                                       recentTx: Array(recent),
-                                      labelBalance: Loc("余额"),
-                                      labelRecentTx: Loc("最近交易"),
-                                      labelNoTx: Loc("暂无交易记录"),
                                       languageCode: LocBundleHolder.shared.languageCode)
-            WidgetBridge.updatePrice(prlUsd: PRLPriceManager.shared.usd, usdCny: nil)
+            WidgetBridge.updatePrice(prlUsd: PRLPriceManager.shared.usd)
         }
     }
 

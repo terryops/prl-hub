@@ -112,7 +112,7 @@ struct DonateView: View {
                     }
 
                     VStack(spacing: Pearl.Space.xxs) {
-                        Text(Loc("可用余额 %@ PRL", store.balance.available.formatted(.number.precision(.fractionLength(0...8)))))
+                        Text(Loc("可用余额 %@ PRL", store.balance.available.formatted(.number.precision(.fractionLength(0...8)).locale(LocBundleHolder.shared.locale))))
                         Text(Loc("开发者地址 %@", shortAddr(Donation.address)))
                             .font(.caption.monospaced())
                     }

@@ -35,7 +35,6 @@ enum WidgetBridge {
     /// copy of the string tables — and kept only so existing call sites compile.
     static func updateWallet(name: String, balancePRL: Double, changePRL: Double,
                              xpub: String?, network: String, recentTx: [WidgetTx],
-                             labelBalance: String = "", labelRecentTx: String = "", labelNoTx: String = "",
                              languageCode: String? = nil) {
         var s = WidgetStore.load()
         let before = s
@@ -101,9 +100,9 @@ enum WidgetBridge {
 
     /// A fresh PRL price (only overwrites with a good value, never 0/unknown).
     /// `prlUsdAt` is when it was fetched; pass it only for a genuinely fresh value —
-    /// the widgets reuse a recent one instead of fetching their own. `usdCny` is
-    /// ignored: the secondary currency now comes from `updateFiat`.
-    static func updatePrice(prlUsd: Double?, usdCny: Double? = nil, prlUsdAt: Date? = nil) {
+    /// the widgets reuse a recent one instead of fetching their own. The secondary
+    /// currency comes from `updateFiat`.
+    static func updatePrice(prlUsd: Double?, prlUsdAt: Date? = nil) {
         var s = WidgetStore.load()
         var changed = false
         if let v = prlUsd, v > 0, v != s.prlUsd { s.prlUsd = v; changed = true }

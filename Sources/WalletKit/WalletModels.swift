@@ -8,8 +8,6 @@ enum WalletNetwork: String, CaseIterable, Identifiable, Codable {
     var label: String { self == .mainnet ? "Mainnet" : "Testnet" }
     var addressPrefix: String { self == .mainnet ? "prl1" : "tprl1" }
     var addressHRP: String { self == .mainnet ? "prl" : "tprl" }
-    /// oyster JSON-RPC port (matches the desktop wallet's network-config.ts).
-    var rpcPort: Int { 8335 }
 }
 
 // MARK: - Wallet list
