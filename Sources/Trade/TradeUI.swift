@@ -44,6 +44,7 @@ struct TradeStatusLines: View {
 struct UntrustedIPCard: View {
     let issue: SafeTradeIPIssue
     @State private var copied = false
+    @State private var showingGuide = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Pearl.Space.sm) {
@@ -75,9 +76,12 @@ struct UntrustedIPCard: View {
             Text(Loc("同一个网络下，手机可能时而用 IPv4、时而用 IPv6 连接，IPv6 地址也会定期变化；换网络后 IP 也会变。开着代理或 VPN 时，这里显示的是代理的出口 IP。"))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            Button(Loc("在哪里设置 Trusted IPs")) { showingGuide = true }
+                .buttonStyle(.borderless).font(.caption.weight(.semibold)).tint(Pearl.accent)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
+        .sheet(isPresented: $showingGuide) { SafeTradeKeyGuide() }
     }
 }
 

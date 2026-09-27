@@ -10,6 +10,7 @@ struct TradeView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var orderToCancel: STOrder?
+    @State private var showingKeyGuide = TradeView.shotKeyGuide  // 如何获取 API 密钥
     @State private var withdrawing: WithdrawCurrency? = TradeView.shotWithdraw
     @State private var sideColumnWidth: CGFloat = 20   // measured width of the 买/卖 column
 
@@ -25,6 +26,15 @@ struct TradeView: View {
         }
         #endif
         return nil
+    }
+
+    /// DEBUG-only: SHOT_KEY_GUIDE=1 opens 如何获取 API 密钥 on launch (with SHOT_TAB=1).
+    private static var shotKeyGuide: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["SHOT_KEY_GUIDE"] == "1"
+        #else
+        return false
+        #endif
     }
 
     /// 现价 poll interval: every 5 s in front; every 30 s while visible but not
@@ -69,6 +79,7 @@ struct TradeView: View {
             .navigationTitle(Loc("交易 · SafeTrade"))
             .navigationDestination(isPresented: $openAlerts) { PriceAlertsView() }
             .sheet(item: $withdrawing) { WithdrawView(trade: store, currency: $0.id).environmentObject(contacts) }
+            .sheet(isPresented: $showingKeyGuide) { SafeTradeKeyGuide() }
             .sheet(isPresented: $upsell.showing, onDismiss: {
                 if ProStore.shared.isPro { openAlerts = true }
             }) { ProUpsellSheet() }
@@ -175,6 +186,8 @@ struct TradeView: View {
                     .labelStyle(.titleOnly).font(.subheadline.weight(.semibold))
                 Text(Loc("前往「设置 → 交易（SafeTrade）」填入 API Key / Secret 后即可下单。"))
                     .font(.caption).foregroundStyle(.secondary)
+                Button(Loc("如何获取 API 密钥")) { showingKeyGuide = true }
+                    .buttonStyle(.borderless).font(.caption.weight(.semibold)).tint(Pearl.accent)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
