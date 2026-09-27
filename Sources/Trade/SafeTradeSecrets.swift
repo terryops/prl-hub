@@ -11,8 +11,7 @@ import os
 /// exchange API keys. Nothing is hardcoded, so this file holds no secret.
 ///
 /// One pair for everything: SafeTrade binds every key to a Trusted IPs list whether
-/// or not it may withdraw, so a second key wouldn't dodge the IP check (requests go
-/// out over IPv4 instead — see SafeTradeIPv4).
+/// or not it may withdraw, so a second key wouldn't dodge the IP check.
 enum SafeTradeSecrets {
     // Keychain accounts (synchronizable → iCloud Keychain).
     private static let aKey = "safetrade.apikey"

@@ -119,7 +119,7 @@ struct SafeTradeSettingsSection: View {
         case .ok:
             flash(Loc("已保存并通过验证（会经 iCloud 同步到其他设备）"))
         case .rejected(.untrustedIP):
-            flash(Loc("已保存，但当前网络的 IP 不在这把密钥的 Trusted IPs 里。到交易页查看 SafeTrade 看到的 IPv4 地址，把它加进白名单。"),
+            flash(Loc("已保存，但当前网络的 IP 不在这把密钥的 Trusted IPs 里。到交易页查看 SafeTrade 看到的 IP（可能是 IPv6 地址），把它加进白名单。"),
                   warning: true, sticky: true)
         case .rejected(.clock):
             flash(Loc("已保存，但验证未通过：本机时间和 SafeTrade 相差太多，请打开「自动设置时间」。"), warning: true, sticky: true)

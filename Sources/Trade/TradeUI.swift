@@ -37,10 +37,10 @@ struct TradeStatusLines: View {
 }
 
 /// "Your IP isn't on this key's Trusted IPs": shows the address SafeTrade actually
-/// sees (from Cloudflare's trace, over the same IPv4 path as the API calls) with a
-/// copy button, and what to do — add it to the key's list, again after a network
-/// change. An IPv6 address there means no IPv4 path (or a proxy using IPv6), which an
-/// IPv4 whitelist can't match.
+/// sees (from Cloudflare's trace, on the same session as the API calls) with a copy
+/// button, and what to do — add it to the key's list, again after a network change.
+/// The phone reaches SafeTrade over IPv4 or IPv6 as the network allows, so an IPv6
+/// address there usually means the list only holds the IPv4 one.
 struct UntrustedIPCard: View {
     let issue: SafeTradeIPIssue
     @State private var copied = false
@@ -67,18 +67,14 @@ struct UntrustedIPCard: View {
                     Text(Loc("正在查询…")).font(.caption).foregroundStyle(.secondary)
                 }
             }
-            if issue.isIPv6 {
-                Text(Loc("这是 IPv6 地址：当前网络没有 IPv4，或者代理 / VPN 用 IPv6 连接了 SafeTrade。白名单只认 IPv4，所以匹配不上——换一个有 IPv4 的网络，或关掉代理 / VPN 再试。"))
-                    .font(.caption)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                Text(Loc("App 固定用 IPv4 连接 SafeTrade：把上面这个 IP 加进这把密钥的 Trusted IPs 即可。"))
-                    .font(.caption)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(Loc("换网络（Wi-Fi 和蜂窝互切、换一个 Wi-Fi）后 IP 会变，需要再加一次；蜂窝网络的 IP 经常变。开着代理或 VPN 时，这里显示的是代理的出口 IP。"))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Text(issue.isIPv6
+                 ? Loc("这是 IPv6 地址：白名单里如果只有 IPv4，可能需要把这个 IPv6 地址也加进 Trusted IPs。")
+                 : Loc("把上面这个 IP 加进这把密钥的 Trusted IPs 即可。"))
+                .font(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(Loc("同一个网络下，手机可能时而用 IPv4、时而用 IPv6 连接，IPv6 地址也会定期变化；换网络后 IP 也会变。开着代理或 VPN 时，这里显示的是代理的出口 IP。"))
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)

@@ -385,8 +385,7 @@ struct SafeTradeClient {
         case explicit(key: String, secret: String)
     }
 
-    /// Our own ephemeral session — only the fallback now (requests normally go over
-    /// IPv4, see SafeTradeIPv4). URLSession.shared wrote the signed account calls
+    /// Our own ephemeral session. URLSession.shared wrote the signed account calls
     /// (balances, orders, withdrawals, address book) into the on-disk Cache.db — the
     /// request headers with the API key included. Nothing here may be cached. The
     /// first use also scrubs what older builds left in the shared cache.
@@ -455,9 +454,8 @@ struct SafeTradeClient {
                 let headers = await signedHeaders(apiKey: credentials.key, apiSecret: credentials.secret)
                 headers.forEach { req.setValue($1, forHTTPHeaderField: $0) }
             }
-            // IPv4 only (falls back to the session on a network without IPv4): the
-            // key's Trusted IPs list can then hold this network's one address.
-            let (data, http) = try await SafeTradeIPv4.data(for: req, fallback: Self.session)
+            let (data, resp) = try await Self.session.data(for: req)
+            guard let http = resp as? HTTPURLResponse else { throw URLError(.badServerResponse) }
             if let date = http.value(forHTTPHeaderField: "Date") { await Self.nonceGenerator.observe(serverDate: date) }
             let code = http.statusCode
             if (200..<300).contains(code) { return data }
@@ -500,9 +498,8 @@ struct SafeTradeClient {
 
     /// The public IP SafeTrade's edge sees for this device — what a Trusted IPs list
     /// must contain. Cloudflare answers `/cdn-cgi/trace` itself, so it works even
-    /// while the API is refusing the key. Same IPv4 path as the API calls, so it is
-    /// the address they arrive from (IPv6 only on a network without IPv4, or when a
-    /// proxy / VPN reaches SafeTrade over IPv6).
+    /// while the API is refusing the key. Same session (and so normally the same
+    /// connection, same IPv4 / IPv6 address) as the API calls.
     func publicIP() async throws -> String {
         let data = try await send("/cdn-cgi/trace")
         guard let ip = SafeTradeTrace.ip(in: String(data: data, encoding: .utf8) ?? "") else {

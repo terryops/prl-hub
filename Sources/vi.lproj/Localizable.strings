@@ -857,10 +857,6 @@
 "确认超时，请重新发送" = "Hết thời gian xác nhận, vui lòng gửi lại.";
 "网络异常，无法确认转账是否已发出（%@）。请先查看交易记录，切勿重复发送。" = "Lỗi mạng — không xác định được giao dịch đã gửi đi chưa (%@). Hãy xem lịch sử giao dịch trước, đừng gửi lại.";
 "解锁钱包" = "Mở khóa ví";
-"App 固定用 IPv4 连接 SafeTrade：把上面这个 IP 加进这把密钥的 Trusted IPs 即可。" = "Ứng dụng luôn kết nối SafeTrade qua IPv4: thêm IP ở trên vào Trusted IPs của key này.";
-"换网络（Wi-Fi 和蜂窝互切、换一个 Wi-Fi）后 IP 会变，需要再加一次；蜂窝网络的 IP 经常变。开着代理或 VPN 时，这里显示的是代理的出口 IP。" = "IP sẽ thay đổi khi bạn đổi mạng (Wi-Fi ↔ di động, hoặc sang Wi-Fi khác) và cần thêm lại; IP mạng di động thay đổi thường xuyên. Khi bật proxy hoặc VPN, đây là IP đầu ra của proxy.";
-"这是 IPv6 地址：当前网络没有 IPv4，或者代理 / VPN 用 IPv6 连接了 SafeTrade。白名单只认 IPv4，所以匹配不上——换一个有 IPv4 的网络，或关掉代理 / VPN 再试。" = "Đây là địa chỉ IPv6: mạng này không có IPv4, hoặc proxy / VPN đã kết nối SafeTrade qua IPv6. Danh sách cho phép chỉ khớp IPv4 nên không khớp được — hãy chuyển sang mạng có IPv4, hoặc tắt proxy / VPN rồi thử lại.";
-"已保存，但当前网络的 IP 不在这把密钥的 Trusted IPs 里。到交易页查看 SafeTrade 看到的 IPv4 地址，把它加进白名单。" = "Đã lưu, nhưng IP của mạng này không có trong Trusted IPs của key. Mở tab Giao dịch để xem địa chỉ IPv4 mà SafeTrade thấy và thêm vào danh sách cho phép.";
 "API 密钥需在 SafeTrade 开启 Enable Withdraw；它的 Trusted IPs 白名单对所有请求都生效，不只是提现。" = "API key cần bật Enable Withdraw trên SafeTrade; danh sách cho phép Trusted IPs của nó áp dụng cho mọi yêu cầu, không chỉ rút tiền.";
 
 /* 买卖深度图 (Pro) */
@@ -883,3 +879,7 @@
 "累计数量" = "Tổng khối lượng";
 "累计金额" = "Tổng giá trị";
 "买卖深度图：看清各价位的挂单和买卖力量" = "Biểu đồ độ sâu: lệnh ở từng mức giá và tương quan mua – bán";
+"这是 IPv6 地址：白名单里如果只有 IPv4，可能需要把这个 IPv6 地址也加进 Trusted IPs。" = "Đây là địa chỉ IPv6: nếu danh sách chỉ có IPv4, có thể bạn cần thêm cả địa chỉ IPv6 này vào Trusted IPs.";
+"把上面这个 IP 加进这把密钥的 Trusted IPs 即可。" = "Thêm IP ở trên vào Trusted IPs của key này.";
+"同一个网络下，手机可能时而用 IPv4、时而用 IPv6 连接，IPv6 地址也会定期变化；换网络后 IP 也会变。开着代理或 VPN 时，这里显示的是代理的出口 IP。" = "Trên cùng một mạng, điện thoại có thể lúc dùng IPv4, lúc dùng IPv6, và địa chỉ IPv6 thay đổi định kỳ; đổi mạng thì IP cũng đổi. Khi bật proxy hoặc VPN, đây là IP đầu ra của proxy.";
+"已保存，但当前网络的 IP 不在这把密钥的 Trusted IPs 里。到交易页查看 SafeTrade 看到的 IP（可能是 IPv6 地址），把它加进白名单。" = "Đã lưu, nhưng IP của mạng này không có trong Trusted IPs của key. Mở tab Giao dịch để xem IP mà SafeTrade thấy (có thể là địa chỉ IPv6) và thêm vào danh sách cho phép.";

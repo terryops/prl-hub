@@ -69,7 +69,7 @@ final class SafeTradeStore: ObservableObject {
     /// it without wiping an order error).
     @Published private(set) var accountError: String?
     @Published var lastOrder: String?
-    /// SafeTrade refused the trading key for this network's IP — see UntrustedIPCard.
+    /// SafeTrade refused the API key for this network's IP — see UntrustedIPCard.
     @Published private(set) var ipIssue: SafeTradeIPIssue?
     @Published private(set) var unverifiedOrder: PendingOrderCheck?
     @Published private(set) var verifyingOrder = false
