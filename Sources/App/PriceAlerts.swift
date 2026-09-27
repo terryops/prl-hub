@@ -86,6 +86,12 @@ struct AlertQuote: Equatable {
     var change5m: Double?
     var change1h: Double?
     var change24h: Double?
+    /// When the worker stored this price (its cron writes one per minute).
+    var at: Date?
+
+    /// Fresh enough to show as the current price: the worker keeps answering with
+    /// its last stored row even if its cron has stopped, so check the age.
+    var isFresh: Bool { at.map { Date().timeIntervalSince($0) < 300 } ?? false }
 
     static func fetch() async -> AlertQuote? {
         var req = URLRequest(url: PriceAlertStore.endpoint.appendingPathComponent("price"))
@@ -95,7 +101,8 @@ struct AlertQuote: Equatable {
               let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let usd = o["usd"] as? Double else { return nil }
         return AlertQuote(usd: usd, source: o["source"] as? String, change5m: o["change5m"] as? Double,
-                          change1h: o["change1h"] as? Double, change24h: o["change24h"] as? Double)
+                          change1h: o["change1h"] as? Double, change24h: o["change24h"] as? Double,
+                          at: (o["ts"] as? Double).map { Date(timeIntervalSince1970: $0) })
     }
 }
 
