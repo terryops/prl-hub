@@ -243,14 +243,18 @@ struct TradeView: View {
     /// Both exchange balances in ONE card, side by side — two half-empty cards with
     /// a coloured dot each read as filler; one quiet row reads as a ledger line.
     private var balancesRow: some View {
+        let canWithdraw = store.hasCredentials && !SafeTradeStore.shotDemo
+        // Both columns reserve the locked line or neither, so they line up.
+        let footer = (usdt?.lockedValue ?? 0) > 0 || (prl?.lockedValue ?? 0) > 0
         // "余额" once, as the card's title; each column is then just the coin.
-        VStack(alignment: .leading, spacing: Pearl.Space.xs) {
+        return VStack(alignment: .leading, spacing: Pearl.Space.sm) {
             Text(Loc("余额")).font(.caption).foregroundStyle(.secondary)
             HStack(alignment: .top, spacing: 0) {
-                balanceColumn("USDT", usdt, withdraw: store.hasCredentials && !SafeTradeStore.shotDemo)
-                Divider().frame(height: 44).padding(.horizontal, Pearl.Space.md)
-                balanceColumn("PRL", prl, withdraw: store.hasCredentials && !SafeTradeStore.shotDemo)
+                balanceColumn("USDT", usdt, withdraw: canWithdraw, footer: footer)
+                Divider().padding(.horizontal, Pearl.Space.lg)
+                balanceColumn("PRL", prl, withdraw: canWithdraw, footer: footer)
             }
+            .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
@@ -454,29 +458,41 @@ struct TradeView: View {
         }
     }
 
-    @ViewBuilder private func balanceColumn(_ name: String, _ b: STBalance?, withdraw: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            // One line always; 提现 keeps its full width.
+    @ViewBuilder private func balanceColumn(_ name: String, _ b: STBalance?, withdraw: Bool, footer: Bool) -> some View {
+        let locked = b?.lockedValue ?? 0
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 5) {
                 CoinBadge(symbol: name)
                 Text(verbatim: name).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     .lineLimit(1)
-                if withdraw {
-                    Spacer(minLength: 4)
-                    Button(Loc("提现")) { withdrawing = WithdrawCurrency(id: name.lowercased()) }
-                        .buttonStyle(.borderless).font(.caption.weight(.semibold)).tint(Pearl.accent)
-                        .fixedSize()
-                        .layoutPriority(1)
-                }
             }
             Text(b.map { String(format: "%.4f", $0.balanceValue) } ?? "—")
                 .font(.system(.title3, design: .rounded).weight(.semibold).monospacedDigit())
                 .lineLimit(1).minimumScaleFactor(0.6)
-            // Always reserve the locked-amount line so both columns keep one height.
-            Text(Loc("锁定 %@", String(format: "%.4f", b?.lockedValue ?? 0)))
-                .font(.caption2).foregroundStyle(.secondary)
-                .opacity((b?.lockedValue ?? 0) > 0 ? 1 : 0)
-                .accessibilityHidden((b?.lockedValue ?? 0) <= 0)
+            // Locked amount on its own line (reserved in both columns when either has
+            // one, so they line up), then 提现 as a soft full-width button — off the
+            // coin line, where it crowded the name and the divider.
+            if footer {
+                Text(Loc("锁定 %@", String(format: "%.4f", locked)))
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .opacity(locked > 0 ? 1 : 0)
+                    .accessibilityHidden(locked <= 0)
+            }
+            if withdraw {
+                Button { withdrawing = WithdrawCurrency(id: name.lowercased()) } label: {
+                    Text(Loc("提现"))
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background(Pearl.accent.opacity(0.12), in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Pearl.accent)
+                .padding(.top, 2)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
