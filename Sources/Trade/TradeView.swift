@@ -368,48 +368,54 @@ struct TradeView: View {
         }
     }
 
-    /// One of the two soft capsules under a balance (充值 / 提现).
-    private func fundsButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .lineLimit(1).minimumScaleFactor(0.8)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .background(Pearl.accent.opacity(0.12), in: Capsule())
-                .contentShape(Capsule())
+    /// One balance. With keys set, the whole column is a menu: tap it for 充值 / 提现
+    /// (the card stays a quiet ledger line instead of carrying four buttons).
+    @ViewBuilder private func balanceColumn(_ name: String, _ b: STBalance?, funds: Bool, footer: Bool) -> some View {
+        if funds {
+            let id = name.lowercased()
+            Menu {
+                Button { depositing = WithdrawCurrency(id: id) } label: {
+                    Label(Loc("充值"), systemImage: "arrow.down.circle")
+                }
+                Button { withdrawing = WithdrawCurrency(id: id) } label: {
+                    Label(Loc("提现"), systemImage: "arrow.up.circle")
+                }
+            } label: {
+                balanceFigures(name, b, footer: footer, tappable: true)
+                    .contentShape(Rectangle())
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+        } else {
+            balanceFigures(name, b, footer: footer, tappable: false)
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(Pearl.accent)
     }
 
-    @ViewBuilder private func balanceColumn(_ name: String, _ b: STBalance?, funds: Bool, footer: Bool) -> some View {
+    private func balanceFigures(_ name: String, _ b: STBalance?, footer: Bool, tappable: Bool) -> some View {
         let locked = b?.lockedValue ?? 0
-        VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 5) {
                 CoinBadge(symbol: name)
                 Text(verbatim: name).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     .lineLimit(1)
+                // The hint that the balance opens 充值 / 提现.
+                if tappable {
+                    Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+                }
             }
             Text(b.map { String(format: "%.4f", $0.balanceValue) } ?? "—")
                 .font(.system(.title3, design: .rounded).weight(.semibold).monospacedDigit())
+                .foregroundStyle(.primary)
                 .lineLimit(1).minimumScaleFactor(0.6)
-            // Locked amount on its own line (reserved in both columns when either has
-            // one, so they line up), then 充值 / 提现 as two soft buttons side by side —
-            // off the coin line, where they would crowd the name and the divider.
+            // Locked amount on its own line, reserved in both columns when either has
+            // one, so they line up.
             if footer {
                 Text(Loc("锁定 %@", String(format: "%.4f", locked)))
                     .font(.caption2).foregroundStyle(.secondary)
                     .lineLimit(1).minimumScaleFactor(0.8)
                     .opacity(locked > 0 ? 1 : 0)
                     .accessibilityHidden(locked <= 0)
-            }
-            if funds {
-                HStack(spacing: 6) {
-                    fundsButton(Loc("充值")) { depositing = WithdrawCurrency(id: name.lowercased()) }
-                    fundsButton(Loc("提现")) { withdrawing = WithdrawCurrency(id: name.lowercased()) }
-                }
-                .padding(.top, 2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
