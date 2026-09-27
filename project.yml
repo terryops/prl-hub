@@ -22,13 +22,20 @@ settings:
     CODE_SIGN_STYLE: Automatic
     GENERATE_INFOPLIST_FILE: YES
     MARKETING_VERSION: "1.16"
-    CURRENT_PROJECT_VERSION: "125"
+    CURRENT_PROJECT_VERSION: "127"
     ENABLE_USER_SCRIPT_SANDBOXING: NO
+    # Full data-race checking (still the Swift 5 language mode): every concurrency
+    # diagnostic surfaces as a warning now, so the move to Swift 6 is a flag flip.
+    SWIFT_STRICT_CONCURRENCY: complete
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 schemes:
   PRLHub_iOS:
     build:
       targets: { PRLHub_iOS: all }
+    # Unit tests (pure logic: amounts, addresses, tx parsing, pool units, signing).
+    #   xcodebuild test -scheme PRLHub_iOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+    test:
+      targets: [PRLHubTests]
     # Local StoreKit testing for the Pearl Hub Pro IAP (no App Store Connect needed).
     run: { config: Debug, storeKitConfiguration: StoreKit/Pearl.storekit }
     archive: { config: Release }
@@ -193,4 +200,23 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.prl.wizard.uitests
         TEST_TARGET_NAME: PRLHub_iOS
         GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+  # Unit tests, hosted in the iOS app so `@testable import Pearl` reaches internal
+  # types. Kept to pure logic — no network, no Keychain, no OysterMobile calls.
+  PRLHubTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    supportedDestinations: [iOS]
+    sources:
+      - path: Tests
+    dependencies:
+      - target: PRLHub_iOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.prl.wizard.tests
+        GENERATE_INFOPLIST_FILE: YES
+        # The host's PRODUCT_NAME is "Pearl", not the target name XcodeGen assumes.
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Pearl.app/Pearl"
+        BUNDLE_LOADER: "$(TEST_HOST)"
         TARGETED_DEVICE_FAMILY: "1,2"
