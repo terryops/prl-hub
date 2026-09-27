@@ -93,6 +93,6 @@ final class PRLPriceManager: ObservableObject {
         lastPersisted = now
         UserDefaults.standard.set(p, forKey: Self.cacheKey)
         UserDefaults.standard.set(now.timeIntervalSince1970, forKey: Self.atKey)
-        WidgetBridge.updatePrice(prlUsd: p, usdCny: nil, prlUsdAt: now)
+        WidgetBridge.updatePrice(prlUsd: p, prlUsdAt: now)
     }
 }

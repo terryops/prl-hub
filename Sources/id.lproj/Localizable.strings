@@ -45,16 +45,12 @@
 "PRL 币价" = "Harga PRL";
 "PRL 币价 $" = "Harga PRL $";
 "PRL 挖矿监控" = "Pool PRL";
-"PRL/算力·天" = "PRL/Hashrate·hari";
 "PRL/P·天" = "PRL/P·hari";
 "单位日产 PRL/P" = "Hasil Harian/Unit PRL/P";
-"Pearl 官网" = "Situs Web Pearl";
 "Pearl 网络" = "Jaringan Pearl";
-"RPC 端口" = "Port RPC";
 "SafeTrade 实时" = "SafeTrade Langsung";
 "SafeTrade 请求地址无效" = "URL permintaan SafeTrade tidak valid";
 "USDT 余额不足" = "Saldo USDT tidak cukup";
-"WhatToMine 无响应" = "WhatToMine tidak merespons";
 "← 选一张显卡" = "← Pilih GPU";
 "↑ 已按难度月增 %@%% 衰减；在【参数】可调" = "↑ Diturunkan sesuai pertumbuhan kesulitan %@%%/bulan; dapat diatur di Parameter";
 "≈ $%@ / 天    ·    月 ≈ ¥%@" = "≈ $%@/hari    ·    bulan ≈ ¥%@";
@@ -71,7 +67,6 @@
 "主货币" = "Mata Uang Utama";
 "主题" = "Tema";
 "买" = "Beli";
-"买 %@   卖 %@" = "Beli %@   Jual %@";
 "买入" = "Beli";
 "买入 PRL" = "Beli PRL";
 "交易" = "Trading";
@@ -88,7 +83,6 @@
 "价格 %@ USDT" = "Harga %@ USDT";
 "价格 (USDT)" = "Harga (USDT)";
 "估算" = "Estimasi";
-"估算·预算" = "Estimasi · Anggaran";
 "低" = "Rendah";
 "余额 %@ PRL" = "Saldo %@ PRL";
 "约合 %@" = "Kira-kira %@";
@@ -107,13 +101,11 @@
 "全部" = "Semua";
 "关于" = "Tentang";
 "应用" = "Aplikasi";
-"内存机·不划算" = "Terbatas memori · Tidak layak";
 "内置 PRL 挖矿监控" = "Monitor Pool PRL Bawaan";
 "写下来并妥善保管后再继续。" = "Catat dan simpan dengan aman sebelum melanjutkan.";
 "出块奖励" = "Hadiah Blok";
 "出币" = "Koin Dihasilkan";
 "分区" = "Bagian";
-"切勿截图或发给任何人。" = "Jangan pernah tangkap layar atau bagikan ke siapa pun.";
 "创建失败" = "Pembuatan Gagal";
 "创建新钱包" = "Buat Dompet Baru";
 "创建钱包" = "Buat Dompet";
@@ -150,7 +142,6 @@
 "取消" = "Batal";
 "可提+待确认" = "Dapat ditarik + Tertunda";
 "可用余额 %@ PRL" = "Saldo Tersedia %@ PRL";
-"各 Pearl 矿池的公开算力与费率（无需地址）" = "Hashrate dan biaya publik tiap pool Pearl (tanpa alamat)";
 "各显卡租金不同 → 在【显卡对比】选中某卡后于详情逐卡设置" = "Harga sewa berbeda per GPU → pilih kartu di Banding GPU, lalu atur tiap kartu di detailnya";
 "同步中…" = "Menyinkron…";
 "同步余额…" = "Menyinkron saldo…";
@@ -172,7 +163,6 @@
 "外观" = "Tampilan";
 "失败 · 沿用本地" = "Gagal · Memakai data lokal";
 "如：交易所 / 朋友" = "mis. Bursa / Teman";
-"字段解析失败" = "Gagal mengurai bidang";
 "安全" = "Keamanan";
 "安全垫" = "Margin Aman";
 "安全存储" = "Penyimpanan Aman";
@@ -184,20 +174,14 @@
 "1h 算力" = "Hashrate 1j";
 "瞬时" = "Saat ini";
 "算力口径" = "Rentang hashrate";
-"实时难度 %@M · 近7天 %@ · 近3天 %@ · 近24h %@　（仅供参考，月增长请在【参数】手动设）" = "Kesulitan langsung %@M · 7h %@ · 3h %@ · 24j %@ (hanya referensi; atur pertumbuhan bulanan secara manual di Parameter)";
 "实时难度：当前 %@M · 近7天 %@ · 近3天 %@ · 近24h %@" = "Kesulitan langsung: kini %@M · 7h %@ · 3h %@ · 24j %@";
 "实测" = "Terukur";
-"实测·密度王" = "Terukur · Raja Densitas";
-"实测·性价比★" = "Terukur · Nilai Terbaik★";
-"实测·重测250" = "Terukur · Uji Ulang 250";
 "已下单 #%@ · %@ %@ @ %@ · %@" = "Order dipasang #%@ · %@ %@ @ %@ · %@";
-"已保存（会经 iCloud 同步到其他设备）" = "Tersimpan (akan tersinkron ke perangkat lain via iCloud)";
 "已保存并通过验证（会经 iCloud 同步到其他设备）" = "Tersimpan dan terverifikasi (akan tersinkron ke perangkat lain via iCloud)";
 "已保存，但验证未通过：API Key/Secret 可能不正确，或当前 IP 未加入白名单。请在 SafeTrade 后台核对密钥，并为此网络的 IP 开通访问权限。" = "Tersimpan, tetapi verifikasi gagal: API Key/Secret mungkin salah, atau IP ini belum masuk daftar putih. Periksa kunci di akun SafeTrade Anda dan izinkan IP jaringan ini.";
 "已保存，但交易所返回错误（HTTP %@）。请稍后在交易页重试。" = "Tersimpan, tetapi bursa mengembalikan kesalahan (HTTP %@). Coba lagi nanti dari tab Trading.";
 "已保存，但暂时无法连接 SafeTrade（网络问题）。请检查网络后在交易页确认。" = "Tersimpan, tetapi belum bisa menjangkau SafeTrade sekarang (masalah jaringan). Periksa koneksi Anda lalu konfirmasi dari tab Trading.";
 "已复制" = "Tersalin";
-"已广播 ✓ txid: %@" = "Disiarkan ✓ txid: %@";
 "已更新 " = "Diperbarui ";
 "已清除" = "Dibersihkan";
 "已计入自身算力稀释：你占全网 %@%% · 单卡出币 ×%@" = "Termasuk dilusi hashrate sendiri: Anda memegang %@%% jaringan · hasil per-GPU ×%@";
@@ -207,7 +191,6 @@
 "币价 $" = "Harga $";
 "市价" = "Harga Pasar";
 "平均" = "Rata-rata";
-"建议离线手抄；剪贴板可能被其他 App 读取。" = "Kami sarankan mencatatnya secara luring; papan klip mungkin dibaca aplikasi lain.";
 "开" = "Nyala";
 "当前 Key" = "Key Saat Ini";
 "当前 Secret" = "Secret Saat Ini";
@@ -229,7 +212,6 @@
 "手动" = "Manual";
 "扣抽水" = "Biaya Pool Dipotong";
 "扣抽水·未扣电费" = "Setelah biaya pool, sebelum listrik";
-"把这个地址发给对方即可收到 PRL。" = "Kirim alamat ini ke orang lain untuk menerima PRL.";
 "把这个地址发给对方即可收到 PRL。点按「换一个地址」可生成新地址，更好地保护隐私。" = "Kirim alamat ini ke orang lain untuk menerima PRL. Ketuk \"Ganti Alamat\" untuk membuat alamat baru demi privasi yang lebih baik.";
 "换一个收款地址" = "Ganti ke alamat penerima lain";
 "收款地址 · %@ · 第 %@ 个" = "Alamat Penerima · %@ · #%@";
@@ -253,14 +235,12 @@
 "收款地址 %@" = "Alamat Penerima %@";
 "收款地址 · %@" = "Alamat Penerima · %@";
 "收款地址格式不正确" = "Format alamat penerima tidak valid";
-"收款地址第 %@ 个，点按换一个地址" = "Alamat Penerima #%@, ketuk untuk ganti alamat";
 "改别名" = "Ubah Alias";
 "数据中心" = "Pusat Data";
 "数量 (PRL)" = "Jumlah (PRL)";
 "新增联系人" = "Tambah Kontak";
 "新设备" = "Perangkat Baru";
 "方向" = "Arah";
-"无FP8·降级" = "Tanpa FP8 · Diturunkan";
 "无法写入钥匙串（Keychain）" = "Tidak dapat menulis ke Keychain";
 "日产" = "Hasil Harian";
 "日产 PRL" = "Hasil PRL Harian";
@@ -301,7 +281,6 @@
 "步骤 %@ / 3" = "Langkah %@ / 3";
 "每天的情况 · 我的全部设备" = "Cuplikan harian · Semua perangkat saya";
 "毛收入" = "Pendapatan Kotor";
-"汇率 → CNY" = "Kurs → CNY";
 "汇率以美元为基准，每天自动更新一次；离线时使用最近一次缓存。" = "Kurs berbasis USD dan diperbarui otomatis sekali sehari; cache terakhir dipakai saat luring.";
 "汇率更新于" = "Kurs diperbarui";
 "没有可用的 UTXO（余额不足或未确认）" = "Tidak ada UTXO yang dapat dipakai (saldo tidak cukup atau belum terkonfirmasi)";
@@ -317,8 +296,6 @@
 "清除密钥" = "Hapus Kunci";
 "点「添加」，选择矿池并填入你的 Pearl 收款地址。可添加多个地址 / 多个矿池。" = "Ketuk \"Tambah\", pilih pool penambangan dan masukkan alamat penerima Pearl Anda. Anda dapat menambah beberapa alamat / pool.";
 "点击修改名称" = "Ketuk untuk ganti nama";
-"点按换地址 · 长按复制" = "Ketuk untuk ganti alamat · Tahan untuk menyalin";
-"点按继续换 · 长按可回主地址" = "Ketuk untuk terus mengganti · Tahan untuk alamat utama";
 "点按解锁继续" = "Ketuk untuk membuka kunci dan lanjut";
 "版本" = "Versi";
 "现价 %@" = "Harga %@";
@@ -344,7 +321,6 @@
 "矿池服务繁忙，请稍后重试" = "Layanan pool sedang sibuk, coba lagi nanti";
 "矿池算力" = "Hashrate Pool";
 "硬件 ¥%@" = "Perangkat keras ¥%@";
-"确定要移除此设备上的钱包吗？" = "Hapus dompet dari perangkat ini?";
 "确认下单" = "Konfirmasi Order";
 "确认买入" = "Konfirmasi Beli";
 "确认你已正确记录" = "Konfirmasi Anda telah mencatatnya dengan benar";
@@ -365,7 +341,6 @@
 "移除钱包（需助记词恢复）" = "Hapus Dompet (perlu Frasa Pemulihan untuk memulihkan)";
 "窗口" = "Jendela";
 "立即刷新汇率" = "Segarkan Kurs Sekarang";
-"笔记本·散热差" = "Laptop · pendinginan buruk";
 "第 %@ 个词" = "Kata %@";
 "第 %@ 个词，%@" = "Kata %1$@, %2$@";
 "等待现价后才能市价买入" = "Tunggu harga langsung sebelum beli di pasar";
@@ -387,7 +362,6 @@
 "联网取价（关闭 = 手动覆盖币价/算力/难度）" = "Harga langsung (mati = timpa Harga / Hashrate / Kesulitan secara manual)";
 "联网后显示出币趋势" = "Tren hasil koin tampil saat daring";
 "联网后显示算力趋势" = "Tren hashrate tampil saat daring";
-"能效王 72W" = "Raja Efisiensi 72W";
 "自动" = "Otomatis";
 "自托管 · 私钥与签名留在本机（钥匙串 / 安全隔区）" = "Swakelola · kunci dan penandatanganan tetap di perangkat (Keychain / Secure Enclave)";
 "自有" = "Milik sendiri";
@@ -408,11 +382,9 @@
 "设备" = "Perangkat";
 "设置" = "Pengaturan";
 "该地址未在 %@ 挖矿" = "Tidak ada worker untuk alamat ini di %@";
-"该矿池暂未公开统计" = "Pool ini belum memiliki statistik publik";
 "语言" = "Bahasa";
 "请按顺序离线抄写" = "Catat secara berurutan, luring";
 "货币" = "Mata Uang";
-"费率 %@%%" = "Biaya %@%%";
 "超过可用余额（需预留至少 %@ PRL 手续费）" = "Melebihi saldo tersedia (sisakan minimal %@ PRL untuk biaya)";
 "超过机柜预算 %@W，需降功耗或减卡" = "Melebihi anggaran rak %@W; turunkan daya atau kurangi GPU";
 "跟随系统" = "Ikuti Sistem";
@@ -456,7 +428,6 @@
 "验证助记词" = "Verifikasi Frasa Pemulihan";
 "验证并显示" = "Verifikasi dan Tampilkan";
 "高" = "Tinggi";
-"高 %@   低 %@" = "Tinggi %@   Rendah %@";
 "（市价，约 %@ USDT）" = "(Harga pasar, ~%@ USDT)";
 "，累计 %@ PRL" = ", total %@ PRL";
 "，近 7 天 %@ PRL" = ", %@ PRL dalam 7 hari terakhir";
@@ -530,19 +501,14 @@
 "手续费" = "Biaya";
 "24H出块" = "Blok 24j";
 "1H出块" = "Blok 1j";
-"24H收益/PH" = "Hasil/PH";
 "总算力" = "Hashrate";
 
 /* Backfill: strings used in code but missing from every translation table (showed raw Chinese to non-CN users) */
-"24H收益/PH = 该池24h出块奖励 ÷ 矿池算力（PRL per PH·天）；绿色 = 最高。" = "Hasil/PH 24j = hadiah blok 24j pool ÷ hashrate pool (PRL per PH·hari); hijau = tertinggi.";
 "HeroMiners：矿池 0%，需 SRBMiner（矿工端抽水约 3%）。" = "HeroMiners: biaya pool 0%, biaya perangkat lunak ~3%.";
-"PearlHash 未公开按池出块数据，故出块/收益显示「—」。" = "PearlHash tidak mempublikasikan data blok per-pool, jadi blok/hasil menampilkan \"—\".";
-"「~」= 该池未公开 24h 总数，由近几小时出块按 24h 折算。" = "\"~\" = pool tidak mempublikasikan total 24j; diekstrapolasi ke 24j dari blok beberapa jam terakhir.";
 "交易在本机签名（私钥不离开设备），合并到一笔扫回，剩余不再搁浅。" = "Ditandatangani di perangkat (kunci privat tidak keluar), digabung jadi satu sapuan, tak ada sisa tertahan.";
 "交易已广播，待网络确认后即并入「钱包」余额与最近交易。" = "Transaksi disiarkan; setelah dikonfirmasi akan masuk ke saldo \"Dompet\" dan transaksi terbaru.";
 "仅供参考，月增长可在【参数】手动设" = "Hanya referensi; pertumbuhan bulanan dapat diatur manual di Parameter";
 "可找回 %@ PRL" = "Dapat dipulihkan %@ PRL";
-"各 Pearl 矿池对比：费率 · 出块 · 每 PH 收益 · 算力（无需地址）" = "Banding pool Pearl: biaya · blok · hasil per PH · hashrate (tanpa alamat)";
 "实时难度 %@M · 近7天 %@ · 近3天 %@ · 近24h %@　（%@）" = "Kesulitan %@M · 7h %@ · 3h %@ · 24j %@　(%@)";
 "实测效率" = "Efisiensi terukur";
 "实测每 P·天" = "Terukur per P·hari";
@@ -625,7 +591,6 @@
 "已暂停，不再获取数据" = "Dijeda — tidak ada data yang diambil.";
 
 // Trade tab polish (2026-09-11)
-"%@ 余额" = "Saldo %@";
 "%@ 笔挂单" = "%@ order terbuka";
 "已成交" = "Terisi";
 "已撤销" = "Dibatalkan";
@@ -671,21 +636,16 @@
 
 /* 价格提醒 (PriceAlertsView / PriceAlerts.swift) */
 "1 小时" = "1 jam";
-"1 小时内涨跌超过 %@" = "Bergerak lebih dari %@ dalam 1 jam";
 "24 小时" = "24 jam";
-"24 小时内涨跌超过 %@" = "Bergerak lebih dari %@ dalam 24 jam";
 "上次提醒：%@" = "Peringatan terakhir: %@";
 "价格提醒" = "Peringatan Harga";
-"价格涨到 %@" = "Harga naik ke %@";
 "价格涨到 %@ 时通知你" = "Anda akan diberi tahu saat harga naik ke %@.";
-"价格跌到 %@" = "Harga turun ke %@";
 "价格跌到 %@ 时通知你" = "Anda akan diberi tahu saat harga turun ke %@.";
 "到价提醒" = "Harga Target";
 "发送测试通知" = "Kirim Notifikasi Uji";
 "启用" = "Aktif";
 "尚未获得推送权限" = "Notifikasi belum diaktifkan di perangkat ini.";
 "已发送，几秒内应收到一条通知。" = "Terkirim — notifikasi akan tiba dalam beberapa detik.";
-"已同步到提醒服务器。" = "Tersinkron dengan server peringatan.";
 "当前价格" = "Harga Saat Ini";
 "我的提醒" = "Peringatan Saya";
 "打开系统设置" = "Buka Pengaturan";
@@ -694,8 +654,6 @@
 "时间范围" = "Rentang Waktu";
 "服务器只保存本机的推送令牌和提醒条件，不涉及钱包地址或余额。" = "Server hanya menyimpan token push perangkat ini dan kondisi peringatan — tidak pernah alamat dompet atau saldo Anda.";
 "服务器暂时不可用，稍后自动重试" = "Server peringatan sedang tidak tersedia. Akan dicoba lagi secara otomatis.";
-"服务器每分钟检查一次价格（CoinEx、BigONE 与 WhatToMine 行情的中位数），可能与 App 内显示的 SafeTrade 价格略有差异。" = "Server memeriksa harga setiap menit (median CoinEx, BigONE, dan WhatToMine), sehingga bisa sedikit berbeda dari harga SafeTrade di aplikasi.";
-"正在同步到提醒服务器…" = "Menyinkronkan dengan server peringatan…";
 "正在向系统申请推送令牌…" = "Meminta token push dari sistem…";
 "涨或跌超过这个幅度都会通知你。" = "Anda akan diberi tahu saat harga naik atau turun melebihi besaran ini.";
 "涨跌幅提醒" = "Pergerakan Harga";
@@ -715,8 +673,6 @@
 "涨跌幅" = "Perubahan";
 "高级版" = "Pro";
 "Pearl Hub 高级版" = "Pearl Hub Pro";
-"到价、涨跌幅提醒，最多 20 条" = "Peringatan harga target dan pergerakan harga, hingga 20";
-"服务器 7×24 小时每分钟检查价格" = "Server memeriksa harga setiap menit, 24/7";
 "没打开 App 也能收到通知" = "Tetap mendapat notifikasi meski aplikasi ditutup";
 "一次购买，iPhone、iPad 和 Mac 通用" = "Sekali beli — berlaku di iPhone, iPad, dan Mac";
 "以 %@ 解锁" = "Buka dengan %@";
@@ -725,7 +681,6 @@
 "一次性购买，不是订阅。" = "Pembelian sekali, bukan langganan.";
 "锁定竖屏" = "Kunci Potret";
 "5 分钟" = "5 menit";
-"5 分钟内涨跌超过 %@" = "Bergerak lebih dari %@ dalam 5 menit";
 "开盘价" = "Buka";
 "收盘价" = "Tutup";
 "%d 条提醒生效中" = "%d peringatan aktif";
@@ -856,3 +811,5 @@
 "任何时间触发都会立即推送。" = "Peringatan dikirim begitu terpicu, kapan pun.";
 "只在 %@–%@ 推送。其他时间触发的提醒，会在下一次 %@ 一到就推送给你。" = "Hanya dikirim antara %1$@ dan %2$@. Peringatan yang terpicu di luar jam itu dikirim begitu pukul %3$@ tiba.";
 "免打扰时段内触发，将于 %@ 推送" = "Terpicu saat jam tenang · dikirim pukul %@";
+"钱包余额与挖矿监控" = "Saldo dompet dan pemantauan pool";
+"日期、星期与 PRL 实时币价" = "Tanggal, hari, dan harga PRL terkini";

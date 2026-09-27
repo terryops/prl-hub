@@ -45,16 +45,12 @@
 "PRL 币价" = "Giá PRL";
 "PRL 币价 $" = "Giá PRL $";
 "PRL 挖矿监控" = "Pool PRL";
-"PRL/算力·天" = "PRL/hashrate·ngày";
 "PRL/P·天" = "PRL/P·ngày";
 "单位日产 PRL/P" = "Sản lượng PRL/P mỗi ngày";
-"Pearl 官网" = "Trang chủ Pearl";
 "Pearl 网络" = "Mạng Pearl";
-"RPC 端口" = "Cổng RPC";
 "SafeTrade 实时" = "SafeTrade thời gian thực";
 "SafeTrade 请求地址无效" = "Địa chỉ yêu cầu SafeTrade không hợp lệ";
 "USDT 余额不足" = "Số dư USDT không đủ";
-"WhatToMine 无响应" = "WhatToMine không phản hồi";
 "← 选一张显卡" = "← Chọn một GPU";
 "↑ 已按难度月增 %@%% 衰减；在【参数】可调" = "↑ Đã suy giảm theo độ khó tăng %@%%/tháng; chỉnh trong [Tham số]";
 "≈ $%@ / 天    ·    月 ≈ ¥%@" = "≈ $%@ / ngày    ·    tháng ≈ ¥%@";
@@ -71,7 +67,6 @@
 "主货币" = "Tiền tệ chính";
 "主题" = "Giao diện";
 "买" = "Mua";
-"买 %@   卖 %@" = "Mua %@   Bán %@";
 "买入" = "Mua vào";
 "买入 PRL" = "Mua PRL";
 "交易" = "Giao dịch";
@@ -88,7 +83,6 @@
 "价格 %@ USDT" = "Giá %@ USDT";
 "价格 (USDT)" = "Giá (USDT)";
 "估算" = "Ước tính";
-"估算·预算" = "Ước tính · Dự toán";
 "低" = "Thấp";
 "余额 %@ PRL" = "Số dư %@ PRL";
 "约合 %@" = "Khoảng %@";
@@ -107,13 +101,11 @@
 "全部" = "Tất cả";
 "关于" = "Giới thiệu";
 "应用" = "Ứng dụng";
-"内存机·不划算" = "Máy RAM · không lời";
 "内置 PRL 挖矿监控" = "Tích hợp giám sát pool PRL";
 "写下来并妥善保管后再继续。" = "Hãy ghi lại và cất giữ an toàn trước khi tiếp tục.";
 "出块奖励" = "Thưởng khối";
 "出币" = "Sản lượng";
 "分区" = "Phân vùng";
-"切勿截图或发给任何人。" = "Tuyệt đối không chụp màn hình hay gửi cho bất kỳ ai.";
 "创建失败" = "Tạo thất bại";
 "创建新钱包" = "Tạo ví mới";
 "创建钱包" = "Tạo ví";
@@ -150,7 +142,6 @@
 "取消" = "Hủy";
 "可提+待确认" = "Khả dụng + chờ xác nhận";
 "可用余额 %@ PRL" = "Số dư khả dụng %@ PRL";
-"各 Pearl 矿池的公开算力与费率（无需地址）" = "Hashrate và phí công khai của các pool Pearl (không cần địa chỉ)";
 "各显卡租金不同 → 在【显卡对比】选中某卡后于详情逐卡设置" = "Tiền thuê mỗi card khác nhau → chọn card trong [So sánh GPU] rồi cài đặt từng card trong chi tiết";
 "同步中…" = "Đang đồng bộ…";
 "同步余额…" = "Đang đồng bộ số dư…";
@@ -172,7 +163,6 @@
 "外观" = "Giao diện";
 "失败 · 沿用本地" = "Thất bại · Dùng dữ liệu cục bộ";
 "如：交易所 / 朋友" = "Ví dụ: Sàn / Bạn bè";
-"字段解析失败" = "Phân tích trường thất bại";
 "安全" = "Bảo mật";
 "安全垫" = "Đệm an toàn";
 "安全存储" = "Lưu trữ an toàn";
@@ -184,20 +174,14 @@
 "1h 算力" = "Hashrate 1h";
 "瞬时" = "Tức thời";
 "算力口径" = "Khoảng hashrate";
-"实时难度 %@M · 近7天 %@ · 近3天 %@ · 近24h %@　（仅供参考，月增长请在【参数】手动设）" = "Độ khó thời gian thực %@M · 7 ngày %@ · 3 ngày %@ · 24h %@　(chỉ tham khảo, tăng trưởng tháng hãy đặt thủ công trong [Tham số])";
 "实时难度：当前 %@M · 近7天 %@ · 近3天 %@ · 近24h %@" = "Độ khó thời gian thực: hiện tại %@M · 7 ngày %@ · 3 ngày %@ · 24h %@";
 "实测" = "Đo thực tế";
-"实测·密度王" = "Đo thực tế · Vua mật độ";
-"实测·性价比★" = "Đo thực tế · Đáng tiền★";
-"实测·重测250" = "Đo thực tế · Đo lại 250";
 "已下单 #%@ · %@ %@ @ %@ · %@" = "Đã đặt lệnh #%@ · %@ %@ @ %@ · %@";
-"已保存（会经 iCloud 同步到其他设备）" = "Đã lưu (sẽ đồng bộ qua iCloud sang thiết bị khác)";
 "已保存并通过验证（会经 iCloud 同步到其他设备）" = "Đã lưu và xác minh (sẽ đồng bộ qua iCloud sang thiết bị khác)";
 "已保存，但验证未通过：API Key/Secret 可能不正确，或当前 IP 未加入白名单。请在 SafeTrade 后台核对密钥，并为此网络的 IP 开通访问权限。" = "Đã lưu, nhưng xác minh thất bại: API Key/Secret có thể không đúng, hoặc IP hiện tại chưa nằm trong danh sách trắng. Hãy kiểm tra khóa trong tài khoản SafeTrade và cấp quyền cho IP của mạng này.";
 "已保存，但交易所返回错误（HTTP %@）。请稍后在交易页重试。" = "Đã lưu, nhưng sàn trả về lỗi (HTTP %@). Vui lòng thử lại sau ở tab Giao dịch.";
 "已保存，但暂时无法连接 SafeTrade（网络问题）。请检查网络后在交易页确认。" = "Đã lưu, nhưng tạm thời không kết nối được SafeTrade (sự cố mạng). Hãy kiểm tra mạng rồi xác nhận ở tab Giao dịch.";
 "已复制" = "Đã sao chép";
-"已广播 ✓ txid: %@" = "Đã phát ✓ txid: %@";
 "已更新 " = "Đã cập nhật ";
 "已清除" = "Đã xóa";
 "已计入自身算力稀释：你占全网 %@%% · 单卡出币 ×%@" = "Đã tính pha loãng hashrate của bạn: bạn chiếm %@%% mạng · mỗi card đào ×%@";
@@ -207,7 +191,6 @@
 "币价 $" = "Giá $";
 "市价" = "Giá thị trường";
 "平均" = "Trung bình";
-"建议离线手抄；剪贴板可能被其他 App 读取。" = "Nên chép tay ngoại tuyến; clipboard có thể bị App khác đọc.";
 "开" = "Bật";
 "当前 Key" = "Key hiện tại";
 "当前 Secret" = "Secret hiện tại";
@@ -229,7 +212,6 @@
 "手动" = "Thủ công";
 "扣抽水" = "Đã trừ phí pool";
 "扣抽水·未扣电费" = "Đã trừ phí pool · chưa trừ tiền điện";
-"把这个地址发给对方即可收到 PRL。" = "Gửi địa chỉ này cho người kia là có thể nhận PRL.";
 "把这个地址发给对方即可收到 PRL。点按「换一个地址」可生成新地址，更好地保护隐私。" = "Gửi địa chỉ này cho người kia là có thể nhận PRL. Nhấn \"Đổi địa chỉ khác\" để tạo địa chỉ mới, bảo vệ quyền riêng tư tốt hơn.";
 "换一个收款地址" = "Đổi sang địa chỉ nhận khác";
 "收款地址 · %@ · 第 %@ 个" = "Địa chỉ nhận · %@ · #%@";
@@ -253,14 +235,12 @@
 "收款地址 %@" = "Địa chỉ nhận %@";
 "收款地址 · %@" = "Địa chỉ nhận · %@";
 "收款地址格式不正确" = "Định dạng địa chỉ nhận không đúng";
-"收款地址第 %@ 个，点按换一个地址" = "Địa chỉ nhận thứ %@, chạm để đổi địa chỉ khác";
 "改别名" = "Đổi biệt danh";
 "数据中心" = "Trung tâm dữ liệu";
 "数量 (PRL)" = "Số lượng (PRL)";
 "新增联系人" = "Thêm liên hệ";
 "新设备" = "Thiết bị mới";
 "方向" = "Hướng";
-"无FP8·降级" = "Không FP8 · hạ cấp";
 "无法写入钥匙串（Keychain）" = "Không thể ghi vào Keychain";
 "日产" = "Sản lượng/ngày";
 "日产 PRL" = "PRL/ngày";
@@ -301,7 +281,6 @@
 "步骤 %@ / 3" = "Bước %@ / 3";
 "每天的情况 · 我的全部设备" = "Tình hình mỗi ngày · Toàn bộ thiết bị của tôi";
 "毛收入" = "Thu nhập gộp";
-"汇率 → CNY" = "Tỷ giá → CNY";
 "汇率以美元为基准，每天自动更新一次；离线时使用最近一次缓存。" = "Tỷ giá lấy USD làm chuẩn, tự động cập nhật một lần mỗi ngày; khi offline dùng bản lưu gần nhất.";
 "汇率更新于" = "Tỷ giá cập nhật lúc";
 "没有可用的 UTXO（余额不足或未确认）" = "Không có UTXO khả dụng (số dư không đủ hoặc chưa xác nhận)";
@@ -317,8 +296,6 @@
 "清除密钥" = "Xóa khóa";
 "点「添加」，选择矿池并填入你的 Pearl 收款地址。可添加多个地址 / 多个矿池。" = "Nhấn \"Thêm\", chọn pool và điền địa chỉ nhận Pearl của bạn. Có thể thêm nhiều địa chỉ / nhiều pool.";
 "点击修改名称" = "Nhấn để sửa tên";
-"点按换地址 · 长按复制" = "Nhấn để đổi địa chỉ · Giữ để sao chép";
-"点按继续换 · 长按可回主地址" = "Nhấn để đổi tiếp · Giữ để về địa chỉ chính";
 "点按解锁继续" = "Nhấn để mở khóa và tiếp tục";
 "版本" = "Phiên bản";
 "现价 %@" = "Giá hiện tại %@";
@@ -344,7 +321,6 @@
 "矿池服务繁忙，请稍后重试" = "Pool đang bận, vui lòng thử lại sau";
 "矿池算力" = "Hashrate pool";
 "硬件 ¥%@" = "Phần cứng ¥%@";
-"确定要移除此设备上的钱包吗？" = "Bạn có chắc muốn xóa ví trên thiết bị này?";
 "确认下单" = "Xác nhận đặt lệnh";
 "确认买入" = "Xác nhận mua";
 "确认你已正确记录" = "Xác nhận bạn đã ghi lại chính xác";
@@ -365,7 +341,6 @@
 "移除钱包（需助记词恢复）" = "Xóa ví (cần cụm từ khôi phục để khôi phục)";
 "窗口" = "Cửa sổ";
 "立即刷新汇率" = "Làm mới tỷ giá ngay";
-"笔记本·散热差" = "Laptop · tản nhiệt kém";
 "第 %@ 个词" = "Từ thứ %@";
 "第 %@ 个词，%@" = "Từ thứ %1$@, %2$@";
 "等待现价后才能市价买入" = "Chờ có giá hiện tại mới mua theo giá thị trường";
@@ -387,7 +362,6 @@
 "联网取价（关闭 = 手动覆盖币价/算力/难度）" = "Lấy giá trực tuyến (tắt = ghi đè thủ công giá/hashrate/độ khó)";
 "联网后显示出币趋势" = "Hiển thị xu hướng sản lượng coin khi online";
 "联网后显示算力趋势" = "Hiển thị xu hướng hashrate khi online";
-"能效王 72W" = "Vua hiệu năng 72W";
 "自动" = "Tự động";
 "自托管 · 私钥与签名留在本机（钥匙串 / 安全隔区）" = "Tự lưu trữ · khóa riêng và chữ ký nằm trên máy (Keychain / Secure Enclave)";
 "自有" = "Sở hữu";
@@ -408,11 +382,9 @@
 "设备" = "Thiết bị";
 "设置" = "Cài đặt";
 "该地址未在 %@ 挖矿" = "Không tìm thấy worker cho địa chỉ này tại %@";
-"该矿池暂未公开统计" = "Pool này chưa công khai thống kê";
 "语言" = "Ngôn ngữ";
 "请按顺序离线抄写" = "Hãy chép tay theo đúng thứ tự khi ngoại tuyến";
 "货币" = "Tiền tệ";
-"费率 %@%%" = "Phí pool %@%%";
 "超过可用余额（需预留至少 %@ PRL 手续费）" = "Vượt số dư khả dụng (cần chừa ít nhất %@ PRL phí giao dịch)";
 "超过机柜预算 %@W，需降功耗或减卡" = "Vượt ngân sách tủ rack %@W, cần giảm công suất hoặc bớt card";
 "跟随系统" = "Theo hệ thống";
@@ -456,7 +428,6 @@
 "验证助记词" = "Xác minh cụm từ khôi phục";
 "验证并显示" = "Xác thực và hiển thị";
 "高" = "Cao";
-"高 %@   低 %@" = "Cao %@   Thấp %@";
 "（市价，约 %@ USDT）" = "(Giá thị trường, khoảng %@ USDT)";
 "，累计 %@ PRL" = ", tích lũy %@ PRL";
 "，近 7 天 %@ PRL" = ", 7 ngày qua %@ PRL";
@@ -484,7 +455,6 @@
 "当前汇率" = "Tỷ giá hiện tại";
 
 /* SafeTrade → iCloud Keychain refactor */
-"API 密钥存于 iCloud 钥匙串（端到端加密，仅你可见），在各设备间同步；助记词不同步，仅存于本机钥匙串。" = "Khóa API được lưu trong iCloud Keychain (mã hóa đầu-cuối, chỉ bạn thấy) và đồng bộ giữa các thiết bị; cụm từ khôi phục không đồng bộ và chỉ nằm trong Keychain của thiết bị này.";
 "请先为本设备设置锁屏密码或生物识别，再进行此操作。" = "Vui lòng đặt mật mã khóa màn hình hoặc sinh trắc học trên thiết bị này trước khi thực hiện.";
 
 /* 2026-06-06 session */
@@ -531,19 +501,14 @@
 "手续费" = "Phí";
 "24H出块" = "Khối 24h";
 "1H出块" = "Khối 1h";
-"24H收益/PH" = "Lợi/PH";
 "总算力" = "Hashrate";
 
 /* Backfill: strings used in code but missing from every translation table (showed raw Chinese to non-CN users) */
-"24H收益/PH = 该池24h出块奖励 ÷ 矿池算力（PRL per PH·天）；绿色 = 最高。" = "Lợi/PH 24h = phần thưởng khối 24h của pool ÷ hashrate pool (PRL mỗi PH·ngày); xanh = cao nhất.";
 "HeroMiners：矿池 0%，需 SRBMiner（矿工端抽水约 3%）。" = "HeroMiners: phí pool 0%, phí phần mềm ~3%.";
-"PearlHash 未公开按池出块数据，故出块/收益显示「—」。" = "PearlHash không công bố dữ liệu khối theo pool, nên khối/lợi nhuận hiển thị \"—\".";
-"「~」= 该池未公开 24h 总数，由近几小时出块按 24h 折算。" = "\"~\" = pool không công bố tổng 24h; quy đổi sang 24h từ khối vài giờ gần đây.";
 "交易在本机签名（私钥不离开设备），合并到一笔扫回，剩余不再搁浅。" = "Ký trên thiết bị (khóa riêng không rời thiết bị), gộp thành một giao dịch quét, không còn dư mắc kẹt.";
 "交易已广播，待网络确认后即并入「钱包」余额与最近交易。" = "Đã phát giao dịch; sau khi mạng xác nhận sẽ gộp vào số dư \"Ví\" và giao dịch gần đây.";
 "仅供参考，月增长可在【参数】手动设" = "Chỉ để tham khảo; có thể đặt tăng trưởng tháng thủ công trong Tham số";
 "可找回 %@ PRL" = "Có thể thu hồi %@ PRL";
-"各 Pearl 矿池对比：费率 · 出块 · 每 PH 收益 · 算力（无需地址）" = "So sánh các pool Pearl: phí · khối · lợi nhuận mỗi PH · hashrate (không cần địa chỉ)";
 "实时难度 %@M · 近7天 %@ · 近3天 %@ · 近24h %@　（%@）" = "Độ khó %@M · 7n %@ · 3n %@ · 24h %@　(%@)";
 "实测效率" = "Hiệu suất đo được";
 "实测每 P·天" = "Đo được mỗi P·ngày";
@@ -626,7 +591,6 @@
 "已暂停，不再获取数据" = "Đã tạm dừng — không lấy dữ liệu.";
 
 // Trade tab polish (2026-09-11)
-"%@ 余额" = "Số dư %@";
 "%@ 笔挂单" = "%@ lệnh mở";
 "已成交" = "Đã khớp";
 "已撤销" = "Đã hủy";
@@ -672,21 +636,16 @@
 
 /* 价格提醒 (PriceAlertsView / PriceAlerts.swift) */
 "1 小时" = "1 giờ";
-"1 小时内涨跌超过 %@" = "Biến động hơn %@ trong 1 giờ";
 "24 小时" = "24 giờ";
-"24 小时内涨跌超过 %@" = "Biến động hơn %@ trong 24 giờ";
 "上次提醒：%@" = "Lần báo gần nhất: %@";
 "价格提醒" = "Cảnh báo giá";
-"价格涨到 %@" = "Giá tăng lên %@";
 "价格涨到 %@ 时通知你" = "Bạn sẽ được thông báo khi giá tăng lên %@.";
-"价格跌到 %@" = "Giá giảm xuống %@";
 "价格跌到 %@ 时通知你" = "Bạn sẽ được thông báo khi giá giảm xuống %@.";
 "到价提醒" = "Giá mục tiêu";
 "发送测试通知" = "Gửi thông báo thử";
 "启用" = "Bật";
 "尚未获得推送权限" = "Thiết bị này chưa được cấp quyền thông báo.";
 "已发送，几秒内应收到一条通知。" = "Đã gửi — bạn sẽ nhận được thông báo trong vài giây.";
-"已同步到提醒服务器。" = "Đã đồng bộ với máy chủ cảnh báo.";
 "当前价格" = "Giá hiện tại";
 "我的提醒" = "Cảnh báo của tôi";
 "打开系统设置" = "Mở Cài đặt";
@@ -695,8 +654,6 @@
 "时间范围" = "Khoảng thời gian";
 "服务器只保存本机的推送令牌和提醒条件，不涉及钱包地址或余额。" = "Máy chủ chỉ lưu mã thông báo đẩy của thiết bị này và các điều kiện cảnh báo — không lưu địa chỉ ví hay số dư.";
 "服务器暂时不可用，稍后自动重试" = "Máy chủ cảnh báo tạm thời không khả dụng. Sẽ tự động thử lại.";
-"服务器每分钟检查一次价格（CoinEx、BigONE 与 WhatToMine 行情的中位数），可能与 App 内显示的 SafeTrade 价格略有差异。" = "Máy chủ kiểm tra giá mỗi phút (trung vị của CoinEx, BigONE và WhatToMine), nên có thể hơi khác giá SafeTrade hiển thị trong ứng dụng.";
-"正在同步到提醒服务器…" = "Đang đồng bộ với máy chủ cảnh báo…";
 "正在向系统申请推送令牌…" = "Đang yêu cầu mã thông báo đẩy từ hệ thống…";
 "涨或跌超过这个幅度都会通知你。" = "Bạn sẽ được thông báo khi giá tăng hoặc giảm vượt mức này.";
 "涨跌幅提醒" = "Biến động giá";
@@ -716,8 +673,6 @@
 "涨跌幅" = "Mức biến động";
 "高级版" = "Pro";
 "Pearl Hub 高级版" = "Pearl Hub Pro";
-"到价、涨跌幅提醒，最多 20 条" = "Cảnh báo giá mục tiêu và biến động giá, tối đa 20";
-"服务器 7×24 小时每分钟检查价格" = "Máy chủ kiểm tra giá mỗi phút, 24/7";
 "没打开 App 也能收到通知" = "Nhận thông báo ngay cả khi ứng dụng đang đóng";
 "一次购买，iPhone、iPad 和 Mac 通用" = "Mua một lần — dùng trên iPhone, iPad và Mac";
 "以 %@ 解锁" = "Mở khóa với giá %@";
@@ -726,7 +681,6 @@
 "一次性购买，不是订阅。" = "Mua một lần, không phải gói đăng ký.";
 "锁定竖屏" = "Khóa hướng dọc";
 "5 分钟" = "5 phút";
-"5 分钟内涨跌超过 %@" = "Biến động hơn %@ trong 5 phút";
 "开盘价" = "Mở";
 "收盘价" = "Đóng";
 "%d 条提醒生效中" = "%d cảnh báo đang bật";
@@ -857,3 +811,5 @@
 "任何时间触发都会立即推送。" = "Cảnh báo được gửi ngay khi kích hoạt, bất kể giờ nào.";
 "只在 %@–%@ 推送。其他时间触发的提醒，会在下一次 %@ 一到就推送给你。" = "Chỉ gửi từ %1$@ đến %2$@. Cảnh báo kích hoạt ngoài khung giờ này sẽ được gửi ngay khi tới %3$@.";
 "免打扰时段内触发，将于 %@ 推送" = "Kích hoạt trong giờ yên lặng · sẽ gửi lúc %@";
+"钱包余额与挖矿监控" = "Số dư ví và theo dõi pool";
+"日期、星期与 PRL 实时币价" = "Ngày, thứ và giá PRL hiện tại";

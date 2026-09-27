@@ -45,6 +45,10 @@ struct WidgetSnapshot: Codable {
     var changePRL: Double = 0
     var hasWallet: Bool = false
     var recentTx: [WidgetTx] = []
+    /// When the app last published the wallet figures (even unchanged ones). A widget
+    /// reload within a couple of minutes of that reuses them instead of re-fetching,
+    /// and a slow self-fetch never overwrites figures the app wrote while it ran.
+    var walletAt: Date?
 
     // Fiat
     var prlUsd: Double = 0                  // 1 PRL → USD   (0 = unknown)
@@ -52,24 +56,30 @@ struct WidgetSnapshot: Codable {
     /// before this field existed still decode. Lets a widget reuse the app's
     /// just-fetched price instead of fetching its own, slightly different one.
     var prlUsdAt: Date?
-    var usdCny: Double = 0                  // 1 USD → CNY   (0 = unknown)
+    /// The user's secondary currency (设置 → 货币) with the app's cached rate; nil when
+    /// they show USD only (or the rate hasn't loaded yet).
+    var fiat: WidgetFiat?
 
     // Mining (every watch)
     var pools: [WidgetPool] = []
+    /// When the app last published the pool figures — same role as `walletAt`.
+    var poolsAt: Date?
 
-    // App-localized labels (written via Loc(), so the widget matches the in-app
-    // language without bundling its own strings). Chinese defaults for first run.
-    var labelBalance: String = "余额"
-    var labelRecentTx: String = "最近交易"
-    var labelNoTx: String = "暂无交易记录"
-    // The app's chosen UI language as an .lproj code ("en", "zh-Hant", …); nil = follow
-    // the system. The widget can't call Loc() (no strings bundled), but it CAN point
-    // its date/relative-time formatters at this locale so "5 分钟前" vs "5 min. ago"
-    // matches the in-app language instead of the device language. Optional so a
-    // snapshot written before this field existed still decodes.
+    // The app's resolved UI language as an .lproj code ("en", "zh-Hant", …). The
+    // widget looks its labels up in that table and points its date / relative-time
+    // formatters at it, so it follows the app rather than the device language.
+    // Optional so a snapshot written before this field existed still decodes.
     var languageCode: String? = nil
 
     var updatedAt: Date = .distantPast
+}
+
+/// Secondary fiat for the widget's "≈ $33.08 · ¥224.53" line.
+struct WidgetFiat: Codable, Equatable {
+    var code: String         // ISO 4217, e.g. "CNY"
+    var symbol: String       // e.g. "¥", "NT$"
+    var decimals: Int
+    var rate: Double         // 1 USD → this currency
 }
 
 // MARK: - Shared App Group store
@@ -81,7 +91,9 @@ enum WidgetStore {
     // bump so a stale v2 snapshot is ignored rather than briefly showing the old key set.
     private static let key = "widget.snapshot.v3"
 
-    static var defaults: UserDefaults? { UserDefaults(suiteName: appGroup) }
+    // One instance per process instead of a new one on every access (UserDefaults
+    // is thread-safe, just not marked Sendable).
+    nonisolated(unsafe) static let defaults = UserDefaults(suiteName: appGroup)
 
     static func load() -> WidgetSnapshot {
         guard let data = defaults?.data(forKey: key),

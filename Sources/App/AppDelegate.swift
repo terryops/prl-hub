@@ -27,7 +27,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = push
-        Task { @MainActor in PriceAlertStore.shared.launch() }
+        Task { @MainActor in
+            // Start StoreKit's Transaction.updates listener at launch, not whenever
+            // something first happens to touch ProStore.
+            _ = ProStore.shared
+            PriceAlertStore.shared.launch()
+        }
         return true
     }
 
@@ -52,7 +57,7 @@ enum OrientationLock {
 
     static var isOn: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
 
-    static var mask: UIInterfaceOrientationMask {
+    @MainActor static var mask: UIInterfaceOrientationMask {
         guard UIDevice.current.userInterfaceIdiom == .phone else { return .all }
         return isOn ? .portrait : .allButUpsideDown
     }
@@ -80,7 +85,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = push
-        Task { @MainActor in PriceAlertStore.shared.launch() }
+        Task { @MainActor in
+            _ = ProStore.shared   // start StoreKit's Transaction.updates listener at launch
+            PriceAlertStore.shared.launch()
+        }
     }
 
     func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {

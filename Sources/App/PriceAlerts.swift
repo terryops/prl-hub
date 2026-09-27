@@ -43,10 +43,10 @@ struct PushWindow: Codable, Equatable {
         start < end ? (m >= start && m < end) : (m >= start || m < end)
     }
 
-    /// "08:00" in the user's clock style.
+    /// "08:00" in the user's clock style, in the in-app language ("8:00 AM" / "上午8:00").
     static func timeText(_ minutes: Int) -> String {
         let d = Calendar.current.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: Date()) ?? Date()
-        return d.formatted(date: .omitted, time: .shortened)
+        return d.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(LocBundleHolder.shared.locale))
     }
 }
 
@@ -65,6 +65,25 @@ struct PriceAlertRule: Codable, Identifiable, Equatable {
     /// Fired during quiet hours; the push waits for the next window start
     /// (from the worker's reply). Optional so older saved rules still decode.
     var deferred: Bool?
+
+    /// This rule as edited to `edited`'s condition, keeping its id. A changed
+    /// condition is a new alert: switched on, fired state cleared (the worker resets
+    /// it too) — an edited one-shot alert that had fired used to stay off. An
+    /// unchanged condition keeps its on/off and fired state.
+    func applyingEdit(_ edited: PriceAlertRule) -> PriceAlertRule {
+        var r = edited
+        r.id = id
+        if kind == edited.kind && value == edited.value && window == edited.window {
+            r.enabled = enabled
+            r.lastFired = lastFired
+            r.deferred = deferred
+        } else {
+            r.enabled = true
+            r.lastFired = nil
+            r.deferred = nil
+        }
+        return r
+    }
 
     /// Wire format the worker expects (lastFired is server-owned). `seen_fired`
     /// echoes the server's own last_fired: the worker only lets a fired rule be
@@ -110,7 +129,7 @@ struct AlertQuote: Equatable {
 final class PriceAlertStore: ObservableObject {
     static let shared = PriceAlertStore()
 
-    static let endpoint = URL(string: "https://prl.tools.video/v1")!
+    nonisolated static let endpoint = URL(string: "https://prl.tools.video/v1")!
 
     enum SyncState: Equatable { case idle, syncing, synced(Date), failed(String) }
 
@@ -134,6 +153,7 @@ final class PriceAlertStore: ObservableObject {
     private var localVersion = 0
     private var languageSub: AnyCancellable?
     private var proSub: AnyCancellable?
+    private var jwsSub: AnyCancellable?
 
     init() {
         if let d = UserDefaults.standard.data(forKey: Self.rulesKey),
@@ -149,6 +169,10 @@ final class PriceAlertStore: ObservableObject {
         // (re)gaining it re-registers — local rules are kept either way.
         proSub = ProStore.shared.$isPro.dropFirst().removeDuplicates()
             .sink { [weak self] _ in self?.proChanged() }
+        // The signed purchase arrived after registering (StoreKit answered late, or a
+        // purchase on another device): hand it to the worker.
+        jwsSub = ProStore.shared.$jws.dropFirst().removeDuplicates()
+            .sink { [weak self] jws in if jws != nil { self?.jwsChanged() } }
     }
 
     // MARK: rules
@@ -193,6 +217,11 @@ final class PriceAlertStore: ObservableObject {
     private func proChanged() {
         guard !rules.isEmpty else { return }
         if ProStore.shared.isPro { Task { await ensureRegistered() } } else { scheduleSync() }
+    }
+
+    private func jwsChanged() {
+        guard !rules.isEmpty, ProStore.shared.isPro, token != nil else { return }
+        scheduleSync()
     }
 
     private func persist() {
@@ -277,7 +306,7 @@ final class PriceAlertStore: ObservableObject {
         syncState = .syncing
         let sent = localVersion
         let tz = TimeZone.current.identifier
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "window": window.map { ["start": $0.start, "end": $0.end, "tz": tz] as [String: Any] } ?? NSNull(),
             "oneshot": true,
             "env": Self.apnsEnvironment,
@@ -285,6 +314,8 @@ final class PriceAlertStore: ObservableObject {
             "lang": Self.pushLanguage,
             "rules": ProStore.shared.isPro ? rules.map(\.payload) : [],
         ]
+        // The signed Pro purchase, so the worker can check the entitlement itself.
+        if ProStore.shared.isPro, let jws = ProStore.shared.jws { body["pro_jws"] = jws }
         var req = URLRequest(url: Self.endpoint.appendingPathComponent("devices/\(token)"))
         req.httpMethod = "PUT"
         req.timeoutInterval = 15
@@ -324,11 +355,13 @@ final class PriceAlertStore: ObservableObject {
     private func adoptServerState(_ data: Data) {
         guard let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let list = o["rules"] as? [[String: Any]] else { return }
+        var listed: Set<String> = []
         var fired: [String: Date] = [:]
         var enabled: [String: Bool] = [:]
         var deferred: [String: Bool] = [:]
         for r in list {
             guard let id = r["id"] as? String else { continue }
+            listed.insert(id)
             if let t = r["last_fired"] as? Double { fired[id] = Date(timeIntervalSince1970: t) }
             if let e = r["enabled"] as? Bool { enabled[id] = e }
             if let q = r["deferred"] as? Bool { deferred[id] = q }
@@ -336,8 +369,10 @@ final class PriceAlertStore: ObservableObject {
         var changed = false
         for i in rules.indices {
             let id = rules[i].id
+            // Rules the server doesn't list (Pro lapsed, not synced yet) keep their local
+            // state — including when they last fired.
+            guard listed.contains(id) else { continue }
             if rules[i].lastFired != fired[id] { rules[i].lastFired = fired[id]; changed = true }
-            // Rules the server doesn't list (Pro lapsed, not synced yet) keep their local state.
             if let e = enabled[id], rules[i].enabled != e { rules[i].enabled = e; changed = true }
             if let q = deferred[id], rules[i].deferred != q { rules[i].deferred = q; changed = true }
         }

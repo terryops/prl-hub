@@ -10,14 +10,14 @@ struct SettingsView: View {
     @State private var keyMsg: String?          // transient "已保存" / "已清除"
     @State private var keyMsgIsWarning = false   // green check vs. orange warning
     @State private var verifyingKey = false      // a save+verify request is in flight
-    @State private var confirmingReset = false
-    @State private var resetError: String?
     @State private var credTick = 0             // bump to re-read SafeTradeSecrets after an iCloud pull
-    @State private var headerProgress: CGFloat = 0   // 0 = expanded vertical logo, 1 = inline (scroll-driven)
+    // Scroll-driven header morph. An @Observable held in @State: only the two views that
+    // read `progress` (the logo row and the nav title) re-render per scroll frame, not
+    // this whole Form.
+    @State private var header = SettingsHeaderScroll()
     @FocusState private var focusedField: Field?
     private enum Field { case market, apiKey, apiSecret }
 
-    @EnvironmentObject private var wallet: WalletStore
     @EnvironmentObject private var loc: LocalizationManager
     @EnvironmentObject private var currency: CurrencyManager
     @ObservedObject private var alerts = PriceAlertStore.shared
@@ -31,83 +31,25 @@ struct SettingsView: View {
         return "\(v) (\(b))"
     }
 
-    /// Brand header that morphs from a large vertical block to a small inline row as
-    /// `headerProgress` goes 0 → 1 with scroll (see `MorphStack`).
-    @ViewBuilder private var collapsingLogoRow: some View {
-        let p = headerProgress
-        let sp = min(1, p / 0.5)            // size finishes collapsing by progress 0.5
-        let mark = lerp(96, 26, sp)
-        MorphStack(progress: p, spacing: lerp(8, 7, sp)) {
-            Image("AppLogoMark")
-                .resizable().interpolation(.high).scaledToFit()
-                .frame(width: mark, height: mark)
-                .shadow(color: Pearl.indigo.opacity(0.30), radius: mark * 0.12, y: mark * 0.05)
-            PearlLogo.wordmark
-                .font(.system(size: lerp(30, 17, sp), weight: .bold, design: .rounded))
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, lerp(Pearl.Space.xs, 2, p))
-    }
-
-    /// Nav-bar inline logo — identical in mark size / font / spacing to the content
-    /// header's fully-collapsed endpoint (mark 26, wordmark 17, spacing 7). Both are
-    /// centered blocks of equal width, so their mascots land at the same x → the two
-    /// stay horizontally aligned through the hand-off.
-    private var inlineLogo: some View {
-        HStack(spacing: 7) {
-            Image("AppLogoMark").resizable().interpolation(.high).scaledToFit()
-                .frame(width: 26, height: 26)
-                .shadow(color: Pearl.indigo.opacity(0.30), radius: 26 * 0.12, y: 26 * 0.05)
-            PearlLogo.wordmark
-                .font(.system(size: 17, weight: .bold, design: .rounded)).lineLimit(1)
-        }
-    }
-
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    collapsingLogoRow
+                    CollapsingLogoRow(header: header)
                         .listRowBackground(Color.clear)
                         #if os(iOS)
                         // KVO the enclosing scroll view → continuous collapse progress.
-                        .background(ScrollOffsetReader { y in
+                        .background(ScrollOffsetReader { [header] y in
                             let p = min(max(y / 110, 0), 1)
-                            if abs(p - headerProgress) > 0.0005 { headerProgress = p }
+                            if abs(p - header.progress) > 0.0005 { header.progress = p }
                         })
                         #endif
                 }
                 .listRowInsets(EdgeInsets())
 
-                if wallet.phase == .unlocked {
-                    Section(Loc("钱包")) {
-                        NavigationLink {
-                            ManageWalletsView(store: wallet)
-                        } label: {
-                            LabeledContent {
-                                Text("\(wallet.wallets.count)")
-                            } label: {
-                                Label(Loc("管理钱包"), systemImage: "wallet.pass")
-                            }
-                        }
-                        NavigationLink {
-                            ContactsView()
-                        } label: { Label(Loc("地址簿"), systemImage: "person.crop.circle") }
-                        NavigationLink {
-                            RevealSeedView(store: wallet)
-                        } label: { Label(Loc("查看助记词"), systemImage: "key.horizontal") }
-                        NavigationLink {
-                            RecoverChangeView(store: wallet)
-                        } label: { Label(Loc("找回搁浅的找零"), systemImage: "arrow.uturn.down.circle") }
-                        Button { wallet.lock() } label: {
-                            Label(Loc("锁定钱包"), systemImage: "lock").foregroundStyle(.primary)
-                        }
-                        Button(role: .destructive) { confirmingReset = true } label: {
-                            Label(Loc("移除钱包（需助记词恢复）"), systemImage: "trash")
-                        }
-                    }
-                }
+                // Wallet-dependent rows live in their own views, so a WalletStore publish
+                // (every chain poll) re-renders them rather than the whole Form.
+                WalletSettingsSection()
 
                 Section(Loc("通知")) {
                     NavigationLink {
@@ -116,11 +58,7 @@ struct SettingsView: View {
                         LabeledContent {
                             let on = alerts.rules.filter(\.enabled).count
                             if !pro.isPro {
-                                Text(Loc("高级版"))
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(Pearl.accent)
-                                    .padding(.horizontal, 7).padding(.vertical, 2)
-                                    .background(Pearl.accent.opacity(0.12), in: Capsule())
+                                PearlBadge(text: Loc("高级版"), tint: Pearl.accent)
                             } else if on > 0 {
                                 Text("\(on)")
                             }
@@ -134,11 +72,7 @@ struct SettingsView: View {
                         } label: {
                             LabeledContent {
                                 if !pro.isPro {
-                                    Text(Loc("高级版"))
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(Pearl.accent)
-                                        .padding(.horizontal, 7).padding(.vertical, 2)
-                                        .background(Pearl.accent.opacity(0.12), in: Capsule())
+                                    PearlBadge(text: Loc("高级版"), tint: Pearl.accent)
                                 } else if live.running {
                                     Text(Loc("盯盘中")).foregroundStyle(.green)
                                 }
@@ -149,15 +83,7 @@ struct SettingsView: View {
                     }
                 }
 
-                Section(Loc("网络")) {
-                    Picker(Loc("Pearl 网络"), selection: Binding(
-                        get: { wallet.network },
-                        set: { wallet.changeNetwork($0) })) {
-                        ForEach(WalletNetwork.allCases) { Text($0.label).tag($0) }
-                    }
-                    LabeledContent(Loc("RPC 端口"), value: "\(wallet.network.rpcPort)")
-                    LabeledContent(Loc("索引服务"), value: "blockbook.pearlresearch.ai")
-                }
+                NetworkSettingsSection()
 
                 Section(Loc("外观")) {
                     Picker(Loc("主题"), selection: $appearance) {
@@ -201,7 +127,8 @@ struct SettingsView: View {
                     }
                     if let at = currency.lastUpdated {
                         LabeledContent(Loc("汇率更新于"),
-                                       value: at.formatted(date: .abbreviated, time: .shortened))
+                                       value: at.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened)
+                                                            .locale(LocBundleHolder.shared.locale)))
                     }
                     Button(Loc("立即刷新汇率")) { Task { await currency.refresh() } }
                     Label(Loc("汇率以美元为基准，每天自动更新一次；离线时使用最近一次缓存。"),
@@ -321,12 +248,7 @@ struct SettingsView: View {
                 // fully-collapsed size, so the two icons stay horizontally aligned, and
                 // it only fades in once the big header has scrolled away.
                 ToolbarItem(placement: .principal) {
-                    ZStack {
-                        Text(Loc("设置")).font(.headline)
-                            .opacity(1 - fade(headerProgress, 0.85, 0.95))
-                        inlineLogo
-                            .opacity(fade(headerProgress, 0.90, 1.0))
-                    }
+                    SettingsNavTitle(header: header)
                 }
             }
             #endif
@@ -344,23 +266,6 @@ struct SettingsView: View {
             #endif
             // Re-read SafeTradeSecrets when iCloud pulls keys in (the @State bump re-renders the body).
             .onReceive(NotificationCenter.default.publisher(for: .cloudSyncDidUpdate)) { _ in credTick += 1 }
-            // .alert (not .confirmationDialog) — centered on every platform; a
-            // confirmationDialog mis-anchors as a popover over the nav bar on iPad/Mac.
-            .alert(Loc("确定要移除钱包「%@」吗？", wallet.walletName), isPresented: $confirmingReset) {
-                Button(Loc("移除钱包"), role: .destructive) {
-                    let ok = withAnimation { wallet.reset() }
-                    if !ok { resetError = wallet.lastError ?? Loc("移除失败"); wallet.lastError = nil }
-                }
-                Button(Loc("取消"), role: .cancel) {}
-            } message: {
-                Text(Loc("助记词将从本机删除且无法恢复。请确认你已安全备份助记词，否则资产将永久丢失。"))
-            }
-            .alert(Loc("移除失败"), isPresented: Binding(
-                get: { resetError != nil }, set: { if !$0 { resetError = nil } })) {
-                Button(Loc("知道了"), role: .cancel) { resetError = nil }
-            } message: {
-                Text(resetError ?? "")
-            }
         }
     }
 
@@ -404,6 +309,129 @@ struct SettingsView: View {
         withAnimation { keyMsg = msg; keyMsgIsWarning = warning }
         let seconds = sticky ? 10 : 3
         Task { try? await Task.sleep(for: .seconds(seconds)); withAnimation { keyMsg = nil } }
+    }
+}
+
+/// Scroll progress of the settings header: 0 = expanded vertical logo, 1 = inline.
+@Observable
+final class SettingsHeaderScroll {
+    var progress: CGFloat = 0
+}
+
+/// Brand header that morphs from a large vertical block to a small inline row as
+/// `progress` goes 0 → 1 with scroll (see `MorphStack`).
+private struct CollapsingLogoRow: View {
+    let header: SettingsHeaderScroll
+
+    var body: some View {
+        let p = header.progress
+        let sp = min(1, p / 0.5)            // size finishes collapsing by progress 0.5
+        let mark = lerp(96, 26, sp)
+        MorphStack(progress: p, spacing: lerp(8, 7, sp)) {
+            Image("AppLogoMark")
+                .resizable().interpolation(.high).scaledToFit()
+                .frame(width: mark, height: mark)
+                .shadow(color: Pearl.indigo.opacity(0.30), radius: mark * 0.12, y: mark * 0.05)
+            PearlLogo.wordmark
+                .font(.system(size: lerp(30, 17, sp), weight: .bold, design: .rounded))
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, lerp(Pearl.Space.xs, 2, p))
+    }
+}
+
+/// "设置" ↔ inline logo in the nav bar. The inline logo is identical in mark size /
+/// font / spacing to the content header's fully-collapsed endpoint (mark 26, wordmark
+/// 17, spacing 7), so the two stay horizontally aligned through the hand-off, and it
+/// only fades in once the big header has scrolled away.
+private struct SettingsNavTitle: View {
+    let header: SettingsHeaderScroll
+
+    var body: some View {
+        ZStack {
+            Text(Loc("设置")).font(.headline)
+                .opacity(1 - fade(header.progress, 0.85, 0.95))
+            HStack(spacing: 7) {
+                Image("AppLogoMark").resizable().interpolation(.high).scaledToFit()
+                    .frame(width: 26, height: 26)
+                    .shadow(color: Pearl.indigo.opacity(0.30), radius: 26 * 0.12, y: 26 * 0.05)
+                PearlLogo.wordmark
+                    .font(.system(size: 17, weight: .bold, design: .rounded)).lineLimit(1)
+            }
+            .opacity(fade(header.progress, 0.90, 1.0))
+        }
+    }
+}
+
+/// 设置 → 钱包 (only while unlocked) plus the remove-wallet confirmation.
+private struct WalletSettingsSection: View {
+    @EnvironmentObject private var wallet: WalletStore
+    @State private var confirmingReset = false
+    @State private var resetError: String?
+
+    var body: some View {
+        if wallet.phase == .unlocked {
+            Section(Loc("钱包")) {
+                NavigationLink {
+                    ManageWalletsView(store: wallet)
+                } label: {
+                    LabeledContent {
+                        Text("\(wallet.wallets.count)")
+                    } label: {
+                        Label(Loc("管理钱包"), systemImage: "wallet.pass")
+                    }
+                }
+                NavigationLink {
+                    ContactsView()
+                } label: { Label(Loc("地址簿"), systemImage: "person.crop.circle") }
+                NavigationLink {
+                    RevealSeedView(store: wallet)
+                } label: { Label(Loc("查看助记词"), systemImage: "key.horizontal") }
+                NavigationLink {
+                    RecoverChangeView(store: wallet)
+                } label: { Label(Loc("找回搁浅的找零"), systemImage: "arrow.uturn.down.circle") }
+                Button { wallet.lock() } label: {
+                    Label(Loc("锁定钱包"), systemImage: "lock").foregroundStyle(.primary)
+                }
+                Button(role: .destructive) { confirmingReset = true } label: {
+                    Label(Loc("移除钱包（需助记词恢复）"), systemImage: "trash")
+                }
+            }
+            // .alert (not .confirmationDialog) — centered on every platform; a
+            // confirmationDialog mis-anchors as a popover over the nav bar on iPad/Mac.
+            .alert(Loc("确定要移除钱包「%@」吗？", wallet.walletName), isPresented: $confirmingReset) {
+                Button(Loc("移除钱包"), role: .destructive) {
+                    let ok = withAnimation { wallet.reset() }
+                    if !ok { resetError = wallet.lastError ?? Loc("移除失败"); wallet.lastError = nil }
+                }
+                Button(Loc("取消"), role: .cancel) {}
+            } message: {
+                Text(Loc("助记词将从本机删除且无法恢复。请确认你已安全备份助记词，否则资产将永久丢失。"))
+            }
+            .alert(Loc("移除失败"), isPresented: Binding(
+                get: { resetError != nil }, set: { if !$0 { resetError = nil } })) {
+                Button(Loc("知道了"), role: .cancel) { resetError = nil }
+            } message: {
+                Text(resetError ?? "")
+            }
+        }
+    }
+}
+
+/// 设置 → 网络.
+private struct NetworkSettingsSection: View {
+    @EnvironmentObject private var wallet: WalletStore
+
+    var body: some View {
+        Section(Loc("网络")) {
+            Picker(Loc("Pearl 网络"), selection: Binding(
+                get: { wallet.network },
+                set: { wallet.changeNetwork($0) })) {
+                ForEach(WalletNetwork.allCases) { Text($0.label).tag($0) }
+            }
+            LabeledContent(Loc("索引服务"), value: "blockbook.pearlresearch.ai")
+        }
     }
 }
 
@@ -484,161 +512,51 @@ private struct ScrollOffsetReader: UIViewRepresentable {
 
     func updateUIView(_ uiView: UIView, context: Context) {
         context.coordinator.onChange = onChange
-        if context.coordinator.observation == nil {
+        if !context.coordinator.isAttached {
             DispatchQueue.main.async { context.coordinator.attach(from: uiView) }
         }
     }
 
     static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
-        coordinator.observation?.invalidate()
+        coordinator.detach()
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    final class Coordinator: NSObject {
+    /// Observes `contentOffset` with string-keyed KVO: a Swift key path to that
+    /// main-actor property can't be formed from the (nonisolated) KVO callback.
+    @MainActor final class Coordinator: NSObject {
         var onChange: (CGFloat) -> Void = { _ in }
-        var observation: NSKeyValueObservation?
+        private weak var scrollView: UIScrollView?
+        var isAttached: Bool { scrollView != nil }
 
         func attach(from view: UIView) {
-            guard observation == nil else { return }
+            guard scrollView == nil else { return }
             var v: UIView? = view.superview
             while let cur = v {
                 if let sv = cur as? UIScrollView {
-                    observation = sv.observe(\.contentOffset, options: [.initial, .new]) { [weak self] sv, _ in
-                        self?.onChange(sv.contentOffset.y + sv.adjustedContentInset.top)
-                    }
+                    scrollView = sv
+                    sv.addObserver(self, forKeyPath: "contentOffset", options: [.initial, .new], context: nil)
                     return
                 }
                 v = cur.superview
             }
         }
+
+        func detach() {
+            scrollView?.removeObserver(self, forKeyPath: "contentOffset")
+            scrollView = nil
+        }
+
+        // UIKit changes contentOffset — and so sends this — on the main thread only.
+        nonisolated override func observeValue(forKeyPath keyPath: String?, of object: Any?,
+                                               change: [NSKeyValueChangeKey: Any]?,
+                                               context: UnsafeMutableRawPointer?) {
+            MainActor.assumeIsolated {
+                guard let sv = scrollView else { return }
+                onChange(sv.contentOffset.y + sv.adjustedContentInset.top)
+            }
+        }
     }
 }
 #endif
-
-/// Recovers "stranded change": funds the wallet sent to its own change addresses
-/// that the xpub balance scan doesn't cover, so they vanish from the in-app balance.
-/// Rediscovers them on-chain, proves ownership by trial-signing, and sweeps them
-/// back to a destination you choose (your own address by default).
-struct RecoverChangeView: View {
-    @ObservedObject var store: WalletStore
-    @State private var toMyWallet = true
-    @State private var customDestination = ""
-    @State private var working = false
-    @State private var result: String?
-    @State private var done = false
-
-    private func amount(_ d: Decimal) -> String { d.formatted(.number.precision(.fractionLength(0...8))) }
-    private func short(_ a: String) -> String { a.count > 18 ? "\(a.prefix(11))…\(a.suffix(6))" : a }
-    private var destination: String {
-        toMyWallet ? (store.address ?? "") : customDestination.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-    private var destValid: Bool { PRLAddress.isValid(destination, network: store.network) }
-
-    var body: some View {
-        Form {
-            Section {
-                Text(Loc("转账产生的“找零”会退回到钱包自动生成的找零地址。这些余额已计入你的总额、也能正常花费；如需把它们归集到一个地址，可在这里一键扫回。"))
-                    .font(.callout).foregroundStyle(.secondary)
-            }
-
-            if done {
-                // Recovery succeeded: `recoverable` is now empty and `recoveryScanned` was
-                // reset, which would otherwise flip the view to "没有发现搁浅的找零 🎉" and hide
-                // the broadcast txid. Pin the success + txid here instead.
-                Section {
-                    if let result {
-                        Text(result).font(.callout).foregroundStyle(.green).textSelection(.enabled)
-                    } else {
-                        Label(Loc("找回成功 ✓"), systemImage: "checkmark.seal.fill").foregroundStyle(.green)
-                    }
-                    Text(Loc("交易已广播，待网络确认后即并入「钱包」余额与最近交易。"))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            } else if store.recoveryScanning {
-                Section {
-                    HStack(spacing: 10) {
-                        ProgressView().controlSize(.small)
-                        Text(Loc("正在扫描搁浅的找零…"))
-                    }
-                }
-            } else if store.recoverable.isEmpty {
-                Section {
-                    Label(Loc("没有发现搁浅的找零 🎉"), systemImage: "checkmark.seal")
-                }
-                Section {
-                    Button(Loc("重新扫描")) { Task { await store.scanRecoverableChange() } }
-                }
-            } else {
-                Section(Loc("可找回 %@ PRL", amount(store.recoverableTotal))) {
-                    ForEach(store.recoverable) { s in
-                        HStack {
-                            Text(short(s.address)).font(.footnote.monospaced())
-                            Spacer()
-                            Text(amount(s.valuePRL) + " PRL").foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                Section(Loc("找回到")) {
-                    Toggle(Loc("我的主地址"), isOn: $toMyWallet)
-                    if toMyWallet {
-                        if let a = store.address {
-                            Text(short(a)).font(.caption.monospaced()).foregroundStyle(.secondary)
-                        }
-                    } else {
-                        TextField("\(store.network.addressPrefix)…", text: $customDestination)
-                            .font(.body.monospaced())
-                            #if os(iOS)
-                            .textInputAutocapitalization(.never).autocorrectionDisabled()
-                            #endif
-                        if !customDestination.isEmpty && !destValid {
-                            Text(Loc("地址格式不正确（需为 %@ 开头的 Taproot 地址）", store.network.addressPrefix))
-                                .font(.caption).foregroundStyle(.red)
-                        }
-                    }
-                }
-
-                Section {
-                    Button {
-                        Task {
-                            working = true; result = nil
-                            let r = await store.recoverChange(to: destination)
-                            working = false
-                            done = r.ok
-                            result = r.ok ? Loc("已找回，交易已广播 ✓\n%@", r.message) : r.message
-                        }
-                    } label: {
-                        HStack(spacing: 8) {
-                            if working { ProgressView().controlSize(.small) }
-                            Text(working ? Loc("签名并广播…") : Loc("找回 %@ PRL", amount(store.recoverableTotal)))
-                                .fontWeight(.semibold)
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(working || done || !destValid)
-                    .listRowBackground(Color.clear)
-                } footer: {
-                    Text(Loc("交易在本机签名（私钥不离开设备），合并到一笔扫回，剩余不再搁浅。"))
-                }
-
-                if let result {
-                    Section {
-                        Text(result)
-                            .font(.callout)
-                            .foregroundStyle(done ? .green : .red)
-                            .textSelection(.enabled)
-                    }
-                }
-            }
-        }
-        // Same chrome as the main settings Form — without .grouped, macOS renders
-        // a bare left-aligned text stack instead of inset card sections.
-        .formStyle(.grouped)
-        .pearlListBackground()
-        .navigationTitle(Loc("找回搁浅的找零"))
-        .task { if !done && !store.recoveryScanned { await store.scanRecoverableChange() } }
-    }
-}

@@ -92,6 +92,8 @@ final class CurrencyManager: ObservableObject {
     private static let atKey    = "currency.ratesAt"
     private static let maxAge: TimeInterval = 24 * 3600   // refresh at most once a day
 
+    private var languageSub: AnyCancellable?
+
     init() {
         secondaryPref = UserDefaults.standard.string(forKey: Self.prefKey) ?? Fiat.auto
         if let data = UserDefaults.standard.data(forKey: Self.ratesKey),
@@ -100,6 +102,10 @@ final class CurrencyManager: ObservableObject {
         }
         let at = UserDefaults.standard.double(forKey: Self.atKey)
         if at > 0 { lastUpdated = Date(timeIntervalSince1970: at) }
+        // "Follow the language" resolves to a different currency after a switch.
+        languageSub = LocalizationManager.shared.$language.dropFirst().removeDuplicates()
+            .sink { [weak self] _ in Task { @MainActor in self?.publishToWidget() } }
+        publishToWidget()
     }
 
     // MARK: preference
@@ -109,12 +115,26 @@ final class CurrencyManager: ObservableObject {
         secondaryPref = pref
         UserDefaults.standard.set(pref, forKey: Self.prefKey)
         CloudSync.push(Self.prefKey)
+        publishToWidget()
     }
 
     /// Re-read the preference after an incoming iCloud change.
     func reloadFromDefaults() {
         let pref = UserDefaults.standard.string(forKey: Self.prefKey) ?? Fiat.auto
-        if pref != secondaryPref { secondaryPref = pref }
+        if pref != secondaryPref { secondaryPref = pref; publishToWidget() }
+    }
+
+    /// The secondary currency with its cached rate, as the widget draws it; nil when
+    /// the user shows USD only or the rate hasn't loaded yet.
+    var widgetFiat: WidgetFiat? {
+        guard let s = secondary, let r = rate(s.code), r > 0 else { return nil }
+        return WidgetFiat(code: s.code, symbol: s.symbol, decimals: s.decimals, rate: r)
+    }
+
+    /// Hand the widget the same secondary currency the app shows, so it never needs
+    /// an exchange-rate fetch of its own (no-op when unchanged).
+    private func publishToWidget() {
+        WidgetBridge.updateFiat(widgetFiat)
     }
 
     /// The resolved secondary currency for the active language, or nil when the
@@ -154,6 +174,7 @@ final class CurrencyManager: ObservableObject {
             UserDefaults.standard.set(data, forKey: Self.ratesKey)
         }
         UserDefaults.standard.set(now.timeIntervalSince1970, forKey: Self.atKey)
+        publishToWidget()
     }
 
     private static func fetchRates() async -> [String: Double]? {

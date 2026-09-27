@@ -1,7 +1,8 @@
 import SwiftUI
 import Combine
 #if canImport(ActivityKit) && os(iOS)
-import ActivityKit
+// Activity isn't marked Sendable; every use here stays on the main actor.
+@preconcurrency import ActivityKit
 #endif
 
 // ============================================================
@@ -55,13 +56,37 @@ final class PriceLiveActivity: ObservableObject {
     private var proSub: AnyCancellable?
     private var changeTask: Task<Void, Never>?
     private var last = PriceActivityAttributes.ContentState(usd: 0, change1h: nil, change24h: nil, at: 0)
-    /// Activity push token (hex) registered with the worker.
+    /// Activity push token (hex) registered with the worker. Persisted (with the
+    /// activity's id and start time) so a relaunch can re-send it with the right
+    /// start, or withdraw it once its activity is gone.
     private var registeredToken: String?
+    /// The last registration attempt never got an OK; retried on foreground.
+    private var registrationPending = false
+    private var registerTask: Task<Void, Never>?
+
+    private static let tokenKey = "live.token"
+    private static let activityKey = "live.activityID"
+    private static let startedKey = "live.startedAt"
 
     init() {
-        // Re-attach to an activity that survived an app relaunch.
-        if let existing = Activity<PriceActivityAttributes>.activities.first(where: { $0.activityState == .active }) {
-            attach(existing)
+        let d = UserDefaults.standard
+        registeredToken = d.string(forKey: Self.tokenKey)
+        // Re-attach to an activity that survived an app relaunch — a stale one too
+        // (no update for 15 min, e.g. the phone was offline): it's still on screen and
+        // the worker still pushes to it. Left unattached, the toggle read "off" and
+        // turning it on started a second activity. Extra copies are ended.
+        let alive = Activity<PriceActivityAttributes>.activities
+            .filter { $0.activityState == .active || $0.activityState == .stale }
+        if let keep = alive.first(where: { $0.id == d.string(forKey: Self.activityKey) }) ?? alive.first {
+            for extra in alive where extra.id != keep.id {
+                Task { await extra.end(nil, dismissalPolicy: .immediate) }
+            }
+            if keep.id != d.string(forKey: Self.activityKey) { d.removeObject(forKey: Self.startedKey) }
+            d.set(keep.id, forKey: Self.activityKey)
+            attach(keep)
+        } else if let orphan = registeredToken {
+            // Its activity ended while the app wasn't running: stop the worker pushing.
+            unregister(token: orphan)
         }
         // Pro lapsed (refund): take the activity down.
         proSub = ProStore.shared.$isPro.removeDuplicates().sink { [weak self] isPro in
@@ -91,6 +116,8 @@ final class PriceLiveActivity: ObservableObject {
             let a = try Activity.request(attributes: attrs,
                                          content: .init(state: state, staleDate: Date().addingTimeInterval(15 * 60)),
                                          pushType: .token)
+            UserDefaults.standard.set(a.id, forKey: Self.activityKey)
+            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.startedKey)
             last = state
             attach(a)
         } catch {
@@ -104,6 +131,12 @@ final class PriceLiveActivity: ObservableObject {
         detach()
     }
 
+    /// Foreground hook: retry a token registration that never got through.
+    func foreground() {
+        guard activity != nil, registrationPending, let token = registeredToken else { return }
+        scheduleRegister(token: token)
+    }
+
     private func attach(_ a: Activity<PriceActivityAttributes>) {
         activity = a
         running = true
@@ -111,12 +144,12 @@ final class PriceLiveActivity: ObservableObject {
         watchers = [
             Task { [weak self] in
                 for await data in a.pushTokenUpdates {
-                    await self?.register(token: data.map { String(format: "%02x", $0) }.joined())
+                    self?.scheduleRegister(token: data.map { String(format: "%02x", $0) }.joined())
                 }
             },
             Task { [weak self] in
                 for await state in a.activityStateUpdates where state == .ended || state == .dismissed {
-                    await self?.detach()
+                    self?.detach()
                 }
             },
         ]
@@ -135,10 +168,13 @@ final class PriceLiveActivity: ObservableObject {
     private func detach() {
         watchers.forEach { $0.cancel() }; watchers = []
         changeTask?.cancel(); changeTask = nil
+        registerTask?.cancel(); registerTask = nil
         priceSub = nil
         activity = nil
         running = false
         if let t = registeredToken { unregister(token: t) }
+        UserDefaults.standard.removeObject(forKey: Self.activityKey)
+        UserDefaults.standard.removeObject(forKey: Self.startedKey)
     }
 
     private func push(usd: Double? = nil, change1h: Double?? = nil, change24h: Double?? = nil) async {
@@ -155,22 +191,49 @@ final class PriceLiveActivity: ObservableObject {
 
     // MARK: worker
 
-    private func register(token: String) async {
+    /// (Re)register `token`, retrying a few times with backoff; a rotated token
+    /// supersedes the one still retrying.
+    private func scheduleRegister(token: String) {
         if let old = registeredToken, old != token { unregister(token: old) }
         registeredToken = token
+        UserDefaults.standard.set(token, forKey: Self.tokenKey)
+        registrationPending = true
+        registerTask?.cancel()
+        registerTask = Task { [weak self] in
+            for attempt in 0..<4 {
+                guard let self, !Task.isCancelled else { return }
+                if await self.putLive(token: token) { self.registrationPending = false; return }
+                try? await Task.sleep(for: .seconds(5 << attempt))   // 5, 10, 20, 40 s
+            }
+        }
+    }
+
+    /// PUT the token to the worker. `started_at` lets it stop pushing once iOS has
+    /// ended the activity (8 h) even when the token rotated; `pro_jws` lets it verify
+    /// the Pro purchase itself.
+    private func putLive(token: String) async -> Bool {
+        var body: [String: Any] = [
+            "env": PriceAlertStore.apnsEnvironment,
+            "topic": Bundle.main.bundleIdentifier ?? "com.prl.wizard",
+        ]
+        let started = UserDefaults.standard.double(forKey: Self.startedKey)
+        if started > 0 { body["started_at"] = Int(started) }
+        if let jws = ProStore.shared.jws { body["pro_jws"] = jws }
         var req = URLRequest(url: PriceAlertStore.endpoint.appendingPathComponent("live/\(token)"))
         req.httpMethod = "PUT"
         req.timeoutInterval = 15
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try? JSONSerialization.data(withJSONObject: [
-            "env": PriceAlertStore.apnsEnvironment,
-            "topic": Bundle.main.bundleIdentifier ?? "com.prl.wizard",
-        ])
-        _ = try? await URLSession.shared.data(for: req)
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        guard let (_, resp) = try? await URLSession.shared.data(for: req) else { return false }
+        return (resp as? HTTPURLResponse)?.statusCode == 200
     }
 
     private func unregister(token: String) {
-        if registeredToken == token { registeredToken = nil }
+        if registeredToken == token {
+            registeredToken = nil
+            registrationPending = false
+            UserDefaults.standard.removeObject(forKey: Self.tokenKey)
+        }
         var req = URLRequest(url: PriceAlertStore.endpoint.appendingPathComponent("live/\(token)"))
         req.httpMethod = "DELETE"
         URLSession.shared.dataTask(with: req).resume()
@@ -178,5 +241,6 @@ final class PriceLiveActivity: ObservableObject {
     #else
     func start() async {}
     func stop() async {}
+    func foreground() {}
     #endif
 }

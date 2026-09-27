@@ -84,7 +84,8 @@ targets:
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: "NO"
         # Required or iOS terminates the app the first time Face ID is invoked
         # (查看助记词 / 确认转账) — without it biometric auth crashes, not prompts.
-        INFOPLIST_KEY_NSFaceIDUsageDescription: "验证身份以查看助记词或确认转账"
+        # English base; each language's copy is in Sources/<lang>.lproj/InfoPlist.strings.
+        INFOPLIST_KEY_NSFaceIDUsageDescription: "Pearl Hub uses Face ID to confirm it's you before showing your recovery phrase or sending funds."
         # 锁屏盯盘 (Pro): the live-price Live Activity. Frequent updates lets the
         # worker push a new price every minute without running out of budget.
         INFOPLIST_KEY_NSSupportsLiveActivities: YES
@@ -148,6 +149,10 @@ targets:
       - path: Widgets
         excludes: ["**/.DS_Store", "Info.plist", "PRLHubWidgets.entitlements", "PRLHubWidgetsMac.entitlements"]
       - path: Sources/WidgetShared
+      # The app's string tables: widget labels, gallery name/description and the
+      # Lock Screen date localize from the same copy the app uses.
+      - path: Sources
+        includes: ["*.lproj/Localizable.strings"]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.prl.wizard.widgets
@@ -175,6 +180,10 @@ targets:
       - path: Widgets
         excludes: ["**/.DS_Store", "Info.plist", "PRLHubWidgets.entitlements", "PRLHubWidgetsMac.entitlements"]
       - path: Sources/WidgetShared
+      # The app's string tables: widget labels, gallery name/description and the
+      # Lock Screen date localize from the same copy the app uses.
+      - path: Sources
+        includes: ["*.lproj/Localizable.strings"]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.prl.wizard.widgets

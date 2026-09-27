@@ -20,6 +20,7 @@ struct PearlLockWidget: Widget {
             LockWidgetView(entry: entry)
                 .containerBackground(for: .widget) { Color.clear }
         }
+        // Resolved against the extension's own copy of the app's string tables.
         .configurationDisplayName("PRL 币价")
         .description("日期、星期与 PRL 实时币价")
         .supportedFamilies([.accessoryRectangular, .accessoryInline])
@@ -39,6 +40,8 @@ struct LockProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<LockEntry>) -> Void) {
+        // Called once, from any thread; not marked Sendable, so hand it over explicitly.
+        nonisolated(unsafe) let completion = completion
         Task {
             let usd = await WidgetFetch.sharedPrlUsd(WidgetStore.load())
             var snap = WidgetStore.load()
@@ -72,13 +75,8 @@ struct LockWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: LockEntry
 
-    /// Follow the in-app language like the home widget's freshness stamp does. With no
-    /// override, use the device's first preferred language — NOT Locale.current, which in
-    /// this unlocalized extension resolves to its development region (en).
-    private var locale: Locale {
-        if let code = entry.snap.languageCode, !code.isEmpty { return Locale(identifier: code) }
-        return Locale(identifier: Locale.preferredLanguages.first ?? "en")
-    }
+    /// Follow the in-app language like the home widget does.
+    private var locale: Locale { widgetLocale(entry.snap.languageCode) }
 
     /// "9月19日周六" / "Sat, Sep 19". Chinese drops the space the locale format puts before
     /// the weekday, matching the system's own lock-screen date; other languages keep their

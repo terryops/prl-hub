@@ -22,15 +22,22 @@ final class ProStore: ObservableObject {
     static let productID = "com.prl.wizard.pro"
 
     @Published private(set) var isPro: Bool
+    /// The Pro transaction's signed JWS (StoreKit's `jwsRepresentation`), sent with
+    /// the price-alert and 锁屏盯盘 registrations so the worker can verify the purchase
+    /// itself. Cached like `isPro`, so a launch-time registration has it before
+    /// StoreKit answers; nil when not Pro.
+    @Published private(set) var jws: String?
     @Published private(set) var product: Product?
     @Published private(set) var busy = false
     @Published var message: String?
 
     private static let cacheKey = "pro.unlocked"
+    private static let jwsKey = "pro.jws"
     private var updates: Task<Void, Never>?
 
     init() {
         isPro = UserDefaults.standard.bool(forKey: Self.cacheKey)
+        jws = isPro ? UserDefaults.standard.string(forKey: Self.jwsKey) : nil
         #if DEBUG
         // Screenshot / UI-test seam, compiled out of release.
         if ProcessInfo.processInfo.environment["SHOT_PRO"] == "1" { isPro = true; return }
@@ -53,10 +60,14 @@ final class ProStore: ObservableObject {
     /// Re-derive `isPro` from StoreKit's verified entitlements.
     func refresh() async {
         var owned = false
+        var signed: String?
         for await result in Transaction.currentEntitlements {
-            if case .verified(let t) = result, t.productID == Self.productID, t.revocationDate == nil { owned = true }
+            if case .verified(let t) = result, t.productID == Self.productID, t.revocationDate == nil {
+                owned = true
+                signed = result.jwsRepresentation
+            }
         }
-        set(owned)
+        set(owned, jws: signed)
     }
 
     func purchase() async {
@@ -66,11 +77,13 @@ final class ProStore: ObservableObject {
         defer { busy = false }
         do {
             switch try await product.purchase() {
-            case .success(.verified(let t)):
+            case .success(let result):
+                guard case .verified(let t) = result else {
+                    message = Loc("购买未能通过验证，请稍后再试")
+                    break
+                }
                 await t.finish()
-                set(true)
-            case .success(.unverified):
-                message = Loc("购买未能通过验证，请稍后再试")
+                set(true, jws: result.jwsRepresentation)
             case .pending:
                 message = Loc("购买待确认（例如等待家长批准），完成后会自动解锁")
             case .userCancelled:
@@ -91,7 +104,12 @@ final class ProStore: ObservableObject {
         message = isPro ? nil : Loc("没有找到可恢复的购买")
     }
 
-    private func set(_ owned: Bool) {
+    private func set(_ owned: Bool, jws signed: String?) {
+        let newJWS = owned ? signed ?? jws : nil
+        if newJWS != jws {
+            jws = newJWS
+            UserDefaults.standard.set(newJWS, forKey: Self.jwsKey)
+        }
         guard owned != isPro || UserDefaults.standard.object(forKey: Self.cacheKey) == nil else { return }
         isPro = owned
         UserDefaults.standard.set(owned, forKey: Self.cacheKey)

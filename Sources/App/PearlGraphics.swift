@@ -6,7 +6,7 @@ import Foundation
 // ------------------------------------------------------------
 // A library of resolution-independent vector graphics (the native
 // equivalent of SVG): the pearlescent brand mark, glow orbs, an
-// aurora hero banner, decorative shapes (sparkles, waves, hexagons)
+// aurora hero banner, a decorative sparkle shape
 // and illustrated empty states. All pure SwiftUI — scale crisply
 // at any size and adapt to light/dark.
 // ============================================================
@@ -205,48 +205,10 @@ struct SparkleShape: Shape {
     }
 }
 
-/// A filled sine wave (area under the curve) — for soft card footers/headers.
-struct WaveShape: Shape {
-    var amplitude: CGFloat = 14
-    var wavelength: CGFloat = 200
-    var phase: CGFloat = 0
-    func path(in rect: CGRect) -> Path {
-        var p = Path()
-        let midY = rect.midY
-        p.move(to: CGPoint(x: 0, y: midY))
-        var x: CGFloat = 0
-        while x <= rect.width {
-            let y = midY + sin((x / wavelength) * 2 * .pi + phase) * amplitude
-            p.addLine(to: CGPoint(x: x, y: y))
-            x += 2
-        }
-        p.addLine(to: CGPoint(x: rect.width, y: rect.height))
-        p.addLine(to: CGPoint(x: 0, y: rect.height))
-        p.closeSubpath()
-        return p
-    }
-}
-
-/// A regular hexagon (flat-top) — the "mining" / compute motif.
-struct HexagonShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var p = Path()
-        let c = CGPoint(x: rect.midX, y: rect.midY)
-        let r = min(rect.width, rect.height) / 2
-        for i in 0..<6 {
-            let a = (Double(i) / 6) * 2 * .pi - .pi / 2
-            let pt = CGPoint(x: c.x + CGFloat(cos(a)) * r, y: c.y + CGFloat(sin(a)) * r)
-            if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
-        }
-        p.closeSubpath()
-        return p
-    }
-}
-
 // MARK: - Aurora hero banner
 
-/// A rounded brand-gradient banner with floating orbs, sparkles and a
-/// bottom wave — a flexible header surface. Drop content inside.
+/// A rounded brand-gradient banner with floating orbs and sparkles —
+/// a flexible header surface. Drop content inside.
 struct PearlHero<Content: View>: View {
     var gradient: LinearGradient = Pearl.brandVivid
     var minHeight: CGFloat = 0

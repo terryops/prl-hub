@@ -126,7 +126,8 @@ func RelTime(_ date: Date, relativeTo now: Date = Date()) -> String {
 /// transaction row on every render).
 private enum RelTimeCache {
     private static let lock = NSLock()
-    private static var byLocale: [String: RelativeDateTimeFormatter] = [:]
+    // Guarded by `lock`.
+    nonisolated(unsafe) private static var byLocale: [String: RelativeDateTimeFormatter] = [:]
     static func formatter(for locale: Locale) -> RelativeDateTimeFormatter {
         lock.lock(); defer { lock.unlock() }
         if let f = byLocale[locale.identifier] { return f }
@@ -148,11 +149,12 @@ extension LocBundleHolder {
         return Locale(identifier: languageCode ?? "")
     }
 
-    /// The active `.lproj` code ("en", "zh-Hant", …), or nil when following the
-    /// system. Published to the widget snapshot so the widget's formatters can
-    /// match the in-app language.
+    /// The active `.lproj` code ("en", "zh-Hant", …): the language picked in the app,
+    /// or — when following the system — the localization the system resolved for it.
+    /// Published to the widget snapshot so the widget's strings and formatters match
+    /// the in-app language.
     var languageCode: String? {
-        if bundle == .main { return nil }
+        if bundle == .main { return Bundle.main.preferredLocalizations.first }
         return bundle.bundleURL.deletingPathExtension().lastPathComponent  // e.g. "ru"
     }
 }
@@ -200,5 +202,7 @@ final class LocalizationManager: ObservableObject {
         } else {
             LocBundleHolder.shared.bundle = .main
         }
+        // The widgets localize themselves from this (with or without a wallet).
+        WidgetBridge.updateLanguage(LocBundleHolder.shared.languageCode ?? "en")
     }
 }

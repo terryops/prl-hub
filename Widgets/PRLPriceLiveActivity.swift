@@ -26,6 +26,7 @@ struct PriceLiveActivity: Widget {
     }
 }
 
+@MainActor
 private func priceActivityConfiguration(watchAware: Bool) -> some WidgetConfiguration {
     ActivityConfiguration(for: PriceActivityAttributes.self) { context in
         Group {

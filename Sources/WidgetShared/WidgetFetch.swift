@@ -50,7 +50,7 @@ enum WidgetFetch {
     /// else a fresh fetch — so the widgets show the same number as the app.
     /// Returns the value and when it was fetched.
     static func sharedPrlUsd(_ snap: WidgetSnapshot) async -> (usd: Double, at: Date)? {
-        if snap.prlUsd > 0, let at = snap.prlUsdAt, Date().timeIntervalSince(at) < 120 { return (snap.prlUsd, at) }
+        if snap.prlUsd > 0, let at = snap.prlUsdAt, Date().timeIntervalSince(at) < WidgetBridge.freshFor { return (snap.prlUsd, at) }
         guard let v = await prlUsd() else { return nil }
         return (v, Date())
     }
@@ -74,14 +74,6 @@ enum WidgetFetch {
         else { return nil }
         let t = (obj["ticker"] as? [String: Any]) ?? obj
         let v = double(t["last"])
-        return v > 0 ? v : nil
-    }
-
-    /// 1 USD in CNY (open exchange-rate API).
-    static func usdCny() async -> Double? {
-        guard let obj = await json("https://open.er-api.com/v6/latest/USD") as? [String: Any],
-              let rates = obj["rates"] as? [String: Any] else { return nil }
-        let v = double(rates["CNY"])
         return v > 0 ? v : nil
     }
 

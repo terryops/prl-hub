@@ -31,7 +31,8 @@ final class ScreenCaptureMonitor: ObservableObject {
     /// Invoked when the user takes a screenshot (iOS only).
     var onScreenshot: () -> Void = {}
 
-    private var tokens: [NSObjectProtocol] = []
+    // Only written in init and read in deinit, when nothing else can reach the object.
+    nonisolated(unsafe) private var tokens: [NSObjectProtocol] = []
 
     init() {
         #if os(iOS)
@@ -120,7 +121,7 @@ struct CaptureProtected<Content: View>: UIViewRepresentable {
     }
     func makeCoordinator() -> Coordinator { Coordinator(content()) }
 
-    final class Coordinator {
+    @MainActor final class Coordinator {
         let host: UIHostingController<Content>
         init(_ content: Content) {
             host = UIHostingController(rootView: content)

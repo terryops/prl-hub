@@ -2,3 +2,5 @@
    treat a leading $ as a build variable and drop the name (falls back to CFBundleName). */
 "CFBundleDisplayName" = "Pearl Hub";
 "CFBundleName" = "Pearl Hub";
+/* Face ID prompt (查看助记词 / 转账 / 提现). */
+"NSFaceIDUsageDescription" = "驗證身分後才能查看助記詞或轉出資產（轉帳、提現）。";

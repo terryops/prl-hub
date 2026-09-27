@@ -34,41 +34,101 @@ let pearlGradient = LinearGradient(
     colors: [.pearlSky, .pearlIndigo, .pearlViolet],
     startPoint: .topLeading, endPoint: .bottomTrailing)
 
+// MARK: - Localization
+
+/// The widget's Loc(): the extension bundles the app's string tables (keyed by the
+/// Simplified-Chinese source text, like the app), so look `key` up in the app's
+/// resolved language from the snapshot → English → the key itself.
+func WLoc(_ key: String, _ languageCode: String?) -> String {
+    let miss = "\u{1}\u{0}miss"
+    for bundle in WidgetStrings.bundles(languageCode) {
+        let v = bundle.localizedString(forKey: key, value: miss, table: "Localizable")
+        if v != miss { return v }
+    }
+    return key
+}
+
+/// Locale for dates and relative times: the app's language, else the device's first
+/// preferred language — NOT Locale.current, which in an extension resolves to the
+/// development region.
+func widgetLocale(_ languageCode: String?) -> Locale {
+    if let code = languageCode, !code.isEmpty { return Locale(identifier: code) }
+    return Locale(identifier: Locale.preferredLanguages.first ?? "en")
+}
+
+private enum WidgetStrings {
+    private static let lock = NSLock()
+    // Guarded by `lock`.
+    nonisolated(unsafe) private static var cache: [String: Bundle] = [:]
+
+    static func bundles(_ languageCode: String?) -> [Bundle] {
+        let code = languageCode ?? Bundle.main.preferredLocalizations.first ?? "en"
+        return [bundle(code), code == "en" ? nil : bundle("en")].compactMap { $0 }
+    }
+
+    private static func bundle(_ code: String) -> Bundle? {
+        lock.lock(); defer { lock.unlock() }
+        if let b = cache[code] { return b }
+        guard let path = Bundle.main.path(forResource: code, ofType: "lproj"), let b = Bundle(path: path) else { return nil }
+        cache[code] = b
+        return b
+    }
+}
+
 // MARK: - Formatting
 
+/// Formatters are built once, not per call: the widget formats every figure on
+/// each of a timeline's 61 entries.
+private enum WidgetFormatters {
+    static let lock = NSLock()
+    // Reconfigured per use, always under `lock`.
+    static let decimal: NumberFormatter = {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.usesGroupingSeparator = true
+        return f
+    }()
+    /// Fixed-point 8-decimal POSIX slice for balanceParts.
+    static let slice8: NumberFormatter = {
+        let f = NumberFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.numberStyle = .decimal
+        f.usesGroupingSeparator = false
+        f.minimumFractionDigits = 8
+        f.maximumFractionDigits = 8
+        f.roundingMode = .down                 // truncate toward zero (balances ≥ 0)
+        return f
+    }()
+
+    static func decimal(_ n: NSNumber, minFrac: Int, maxFrac: Int) -> String? {
+        lock.lock(); defer { lock.unlock() }
+        decimal.minimumFractionDigits = minFrac
+        decimal.maximumFractionDigits = maxFrac
+        return decimal.string(from: n)
+    }
+
+    static func slice(_ v: Double) -> String? {
+        lock.lock(); defer { lock.unlock() }
+        return slice8.string(from: NSNumber(value: v))
+    }
+}
+
 func prlAmountString(_ v: Double, maxFrac: Int = 8) -> String {
-    let f = NumberFormatter()
-    f.numberStyle = .decimal
-    f.usesGroupingSeparator = true
-    f.minimumFractionDigits = 0
-    f.maximumFractionDigits = maxFrac
-    return f.string(from: NSNumber(value: v)) ?? "0"
+    WidgetFormatters.decimal(NSNumber(value: v), minFrac: 0, maxFrac: maxFrac) ?? "0"
 }
 
 /// Split a PRL balance for display: a big grouped "1,234.56" head (integer + the
 /// first 2 decimals, TRUNCATED not rounded so the tail stays exact) and the
 /// remaining fraction digits (3rd–8th, trailing zeros trimmed). PRL has 8 decimals.
 func balanceParts(_ v: Double) -> (head: String, tail: String) {
-    let posix = Locale(identifier: "en_US_POSIX")
-    let slice = NumberFormatter()
-    slice.locale = posix
-    slice.numberStyle = .decimal
-    slice.usesGroupingSeparator = false
-    slice.minimumFractionDigits = 8
-    slice.maximumFractionDigits = 8
-    slice.roundingMode = .down                 // truncate toward zero (balances ≥ 0)
-    let full = slice.string(from: NSNumber(value: v)) ?? "0.00000000"
+    let full = WidgetFormatters.slice(v) ?? "0.00000000"
     let comps = full.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
     let intRaw = comps.first ?? "0"
     let frac = comps.count > 1 ? comps[1] : "00000000"
     let head2 = String(frac.prefix(2))
     var tail = String(frac.dropFirst(2))
     while tail.hasSuffix("0") { tail.removeLast() }
-    let grp = NumberFormatter()
-    grp.numberStyle = .decimal
-    grp.usesGroupingSeparator = true
-    grp.maximumFractionDigits = 0
-    let intGrouped = grp.string(from: NSDecimalNumber(string: intRaw)) ?? intRaw
+    let intGrouped = WidgetFormatters.decimal(NSDecimalNumber(string: intRaw), minFrac: 0, maxFrac: 0) ?? intRaw
     let dec = Locale.current.decimalSeparator ?? "."
     return (intGrouped + dec + head2, tail)
 }
@@ -83,25 +143,21 @@ func balanceText(_ snap: WidgetSnapshot, head: Font, tail: Font) -> Text {
 }
 
 func moneyString(_ symbol: String, _ v: Double, decimals: Int = 2) -> String {
-    let f = NumberFormatter()
-    f.numberStyle = .decimal
-    f.usesGroupingSeparator = true
-    f.minimumFractionDigits = decimals
-    f.maximumFractionDigits = decimals
-    return symbol + (f.string(from: NSNumber(value: v)) ?? "0")
+    symbol + (WidgetFormatters.decimal(NSNumber(value: v), minFrac: decimals, maxFrac: decimals) ?? "0")
 }
 
-/// "≈ $33.08 · ¥224.53" — total holdings value; nil when no price is known yet.
+/// "≈ $33.08 · ¥224.53" — total holdings value in USD plus the secondary currency
+/// picked in the app (none → USD only); nil when no price is known yet.
 func fiatLine(_ snap: WidgetSnapshot) -> String? {
     guard snap.prlUsd > 0 else { return nil }
     let usd = snap.balancePRL * snap.prlUsd
     var line = "≈ " + moneyString("$", usd)
-    if snap.usdCny > 0 { line += " · " + moneyString("¥", usd * snap.usdCny) }
+    if let f = snap.fiat, f.rate > 0 { line += " · " + moneyString(f.symbol, usd * f.rate, decimals: f.decimals) }
     return line
 }
 
 /// Live unit price of one PRL in USD, e.g. "$0.52" — the market quote, distinct
-/// from the holdings value above. USD only (not converted to CNY); nil until known.
+/// from the holdings value above. USD only; nil until known.
 /// Fixed 2 decimals per user preference.
 func priceLine(_ snap: WidgetSnapshot) -> String? {
     guard snap.prlUsd > 0 else { return nil }
@@ -125,7 +181,7 @@ extension WidgetSnapshot {
         s.walletName = "Bikgo Pearl"
         s.balancePRL = 63.61479714
         s.prlUsd = 0.52
-        s.usdCny = 7.10
+        s.fiat = WidgetFiat(code: "CNY", symbol: "¥", decimals: 2, rate: 7.10)
         s.hasWallet = true
         s.recentTx = [
             WidgetTx(received: true,  amount: 12.5,  time: Date().addingTimeInterval(-1800)),

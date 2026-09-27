@@ -14,8 +14,10 @@ struct PearlWidget: Widget {
         StaticConfiguration(kind: kind, provider: PearlProvider()) { entry in
             PearlWidgetView(snap: entry.snap, age: entry.age, fresh: entry.fresh)
                 .containerBackground(pearlGradient, for: .widget)
+                .environment(\.locale, widgetLocale(entry.snap.languageCode))
         }
         .configurationDisplayName("Pearl Hub")
+        // Resolved against the extension's own copy of the app's string tables.
         .description("钱包余额与挖矿监控")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
@@ -41,14 +43,31 @@ func freshnessIsRecent(stamp: Date, asOf now: Date) -> Bool {
 /// `.relative` Text ticking every second. Empty when nothing has ever loaded.
 func freshnessAge(stamp: Date, asOf now: Date, languageCode: String? = nil) -> String {
     guard stamp > .distantPast else { return "" }
-    let fmt = RelativeDateTimeFormatter()
     // Follow the in-app language (published in the snapshot), not the device language,
     // so the stamp reads "5 min. ago" when the app is in English on a Chinese Mac.
-    if let code = languageCode, !code.isEmpty { fmt.locale = Locale(identifier: code) }
-    fmt.unitsStyle = .short
-    fmt.dateTimeStyle = .named             // 0 min → localized "现在"
+    let fmt = FreshnessFormatter.shared(languageCode)
     let mins = max(0, Int(now.timeIntervalSince(stamp) / 60))
     return fmt.localizedString(from: DateComponents(minute: -mins))
+}
+
+/// One relative formatter per language: a timeline builds 61 entries, and each used
+/// to allocate its own.
+private enum FreshnessFormatter {
+    private static let lock = NSLock()
+    // Guarded by `lock`.
+    nonisolated(unsafe) private static var byLanguage: [String: RelativeDateTimeFormatter] = [:]
+
+    static func shared(_ languageCode: String?) -> RelativeDateTimeFormatter {
+        let key = languageCode ?? ""
+        lock.lock(); defer { lock.unlock() }
+        if let f = byLanguage[key] { return f }
+        let f = RelativeDateTimeFormatter()
+        if !key.isEmpty { f.locale = Locale(identifier: key) }
+        f.unitsStyle = .short
+        f.dateTimeStyle = .named             // 0 min → localized "现在"
+        byLanguage[key] = f
+        return f
+    }
 }
 
 struct PearlProvider: TimelineProvider {
@@ -63,21 +82,29 @@ struct PearlProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<PearlEntry>) -> Void) {
+        // WidgetKit calls this completion once, from whatever thread; it isn't marked
+        // Sendable, so hand it to the task explicitly.
+        nonisolated(unsafe) let completion = completion
         Task {
-            var snap = WidgetStore.load()
-            let network = snap.network
-            let xpub = snap.xpub
-            let poolsIn = snap.pools
+            let initial = WidgetStore.load()
+            let network = initial.network
+            let xpub = initial.xpub
+            let poolsIn = initial.pools
+            // What the app published within the last couple of minutes is current (it
+            // reloads this widget right after publishing): reuse it instead of fetching
+            // the same figures again. Only what's older gets a self-fetch.
+            let now = Date()
+            let walletFresh = !WidgetBridge.isStale(initial.walletAt, now: now, maxAge: WidgetBridge.freshFor)
+            let poolsFresh = !WidgetBridge.isStale(initial.poolsAt, now: now, maxAge: WidgetBridge.freshFor)
 
             // Run every independent fetch CONCURRENTLY (mirrors PoolStore.refresh's
-            // async-let pattern). Serially awaiting balance → price → fx → pools could
-            // sum each request's timeout (~50s on a stalled network) and blow past
+            // async-let pattern). Serially awaiting balance → price → pools could sum
+            // each request's timeout (~50s on a stalled network) and blow past
             // WidgetKit's timeline-generation budget; in parallel the wall time is just
             // the single slowest request. (balancePRL returns nil for a nil/empty xpub.)
-            async let balF: Double? = WidgetFetch.balancePRL(xpub: xpub, network: network)
-            async let usdF = WidgetFetch.sharedPrlUsd(snap)
-            async let cnyF: Double? = WidgetFetch.usdCny()
-            async let poolsF: [(Int, WidgetFetch.PoolLive?)] = withTaskGroup(of: (Int, WidgetFetch.PoolLive?).self) { group in
+            async let balF: Double? = walletFresh ? nil : WidgetFetch.balancePRL(xpub: xpub, network: network)
+            async let usdF = WidgetFetch.sharedPrlUsd(initial)
+            async let poolsF: [(Int, WidgetFetch.PoolLive?)] = poolsFresh ? [] : withTaskGroup(of: (Int, WidgetFetch.PoolLive?).self) { group in
                 for (i, p) in poolsIn.enumerated() {
                     group.addTask { (i, await WidgetFetch.poolLive(kind: p.kind, address: p.address)) }
                 }
@@ -85,13 +112,16 @@ struct PearlProvider: TimelineProvider {
                 for await r in group { out.append(r) }
                 return out
             }
-            let (bal, usd, cny, poolResults) = await (balF, usdF, cnyF, poolsF)
+            let (bal, usd, poolResults) = await (balF, usdF, poolsF)
 
             // The fetches above can take many seconds, during which the app may have removed
-            // or switched the wallet (clearWallet) or changed the pool watches. Merge into the
-            // snapshot as it is NOW, and only onto the same wallet / pools the fetch was for —
-            // writing back the copy read at the start would resurrect a removed wallet.
-            snap = WidgetStore.load()
+            // or switched the wallet (clearWallet), changed the pool watches, or simply
+            // published newer figures. Merge into the snapshot as it is NOW, and only where
+            // the app hasn't written since this fetch started — writing back the copy read
+            // at the start would resurrect a removed wallet, and a slow self-fetch (e.g.
+            // blockbook's pre-broadcast balance) must not replace the app's newer value.
+            var snap = WidgetStore.load()
+            let before = snap
 
             // Track whether ANY self-fetch actually succeeded — the freshness timestamp
             // must only advance on success, otherwise a fully-offline refresh keeps the
@@ -101,14 +131,16 @@ struct PearlProvider: TimelineProvider {
             // app-published stranded internal-chain change so the widget can't show LESS
             // than the app's authoritative total. (recentTx still comes from the app's
             // last write — direction/amount need the app's full chain logic.)
-            if let bal, let xpub, snap.xpub == xpub, snap.network == network {
+            if let bal, let xpub, snap.xpub == xpub, snap.network == network, snap.walletAt == initial.walletAt {
                 snap.balancePRL = bal + snap.changePRL; didRefresh = true
             }
-            if let usd { snap.prlUsd = usd.usd; snap.prlUsdAt = usd.at; didRefresh = true }
-            if let cny { snap.usdCny = cny; didRefresh = true }
+            // A price this widget fetched itself (a reused one carries the app's stamp).
+            if let usd, usd.at > (snap.prlUsdAt ?? .distantPast) {
+                snap.prlUsd = usd.usd; snap.prlUsdAt = usd.at; didRefresh = true
+            }
 
             let sameWatches = snap.pools.map { "\($0.kind)|\($0.address)" } == poolsIn.map { "\($0.kind)|\($0.address)" }
-            if sameWatches {
+            if sameWatches, snap.poolsAt == initial.poolsAt {
                 for (i, live) in poolResults {
                     guard let live, snap.pools.indices.contains(i) else { continue }
                     snap.pools[i].hashrate = live.hashrate
@@ -118,8 +150,13 @@ struct PearlProvider: TimelineProvider {
                     didRefresh = true
                 }
             }
-            if didRefresh { snap.updatedAt = Date() }
-            WidgetStore.save(snap)
+            // Figures the app confirmed recently are as current as a fetch would be.
+            var asOf = [snap.updatedAt]
+            if didRefresh { asOf.append(Date()) }
+            if walletFresh, let t = snap.walletAt { asOf.append(t) }
+            if poolsFresh, let t = snap.poolsAt { asOf.append(t) }
+            snap.updatedAt = asOf.max() ?? snap.updatedAt
+            if didRefresh || snap.updatedAt != before.updatedAt { WidgetStore.save(snap) }
 
             // Freshness is the last SUCCESSFUL refresh (not the timeline build time), so the
             // shown age reflects how current the figures really are. When nothing was ever
@@ -261,7 +298,7 @@ private struct MediumCombined: View {
 
                 Link(destination: WidgetDeepLink.wallet.url) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(snap.labelBalance).font(.caption2.weight(.medium)).foregroundStyle(.white.opacity(0.6))
+                    Text(WLoc("余额", snap.languageCode)).font(.caption2.weight(.medium)).foregroundStyle(.white.opacity(0.6))
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         balanceText(snap, head: .system(.title3, design: .rounded).weight(.bold),
                                     tail: .system(.caption2, design: .rounded).weight(.bold))
@@ -319,7 +356,7 @@ private struct LargeCombined: View {
                 Spacer(minLength: 8)
                 Link(destination: WidgetDeepLink.wallet.url) {
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(snap.labelBalance).font(.caption.weight(.medium)).foregroundStyle(.white.opacity(0.6))
+                    Text(WLoc("余额", snap.languageCode)).font(.caption.weight(.medium)).foregroundStyle(.white.opacity(0.6))
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         balanceText(snap, head: .system(.title2, design: .rounded).weight(.bold),
                                     tail: .system(.caption, design: .rounded).weight(.bold))
@@ -337,7 +374,7 @@ private struct LargeCombined: View {
             if !snap.recentTx.isEmpty {
                 Link(destination: WidgetDeepLink.wallet.url) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(snap.labelRecentTx).font(.caption2.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
+                    Text(WLoc("最近交易", snap.languageCode)).font(.caption2.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
                     ForEach(Array(snap.recentTx.prefix(2).enumerated()), id: \.offset) { _, tx in
                         TxRow(tx: tx).font(.caption)
                     }
@@ -377,9 +414,10 @@ private struct PriceBig: View {
     let snap: WidgetSnapshot
     var size: CGFloat
     var body: some View {
-        Text(priceLine(snap) ?? "—")
+        let line = priceLine(snap)
+        Text(line ?? "—")
             .font(.system(size: size, weight: .heavy, design: .rounded))
-            .foregroundStyle(priceLine(snap) == nil ? Color.pearlGold.opacity(0.5) : Color.pearlGold)
+            .foregroundStyle(line == nil ? Color.pearlGold.opacity(0.5) : Color.pearlGold)
             .monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
     }
 }
@@ -447,9 +485,9 @@ private struct TxStrip: View {
     let snap: WidgetSnapshot
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(snap.labelRecentTx).font(.caption2.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
+            Text(WLoc("最近交易", snap.languageCode)).font(.caption2.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
             if snap.recentTx.isEmpty {
-                Text(snap.labelNoTx).font(.caption2).foregroundStyle(.white.opacity(0.6))
+                Text(WLoc("暂无交易记录", snap.languageCode)).font(.caption2).foregroundStyle(.white.opacity(0.6))
             } else {
                 ForEach(Array(snap.recentTx.prefix(2).enumerated()), id: \.offset) { _, tx in
                     TxRow(tx: tx).font(.caption2)

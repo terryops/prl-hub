@@ -45,16 +45,12 @@
 "PRL 币价" = "PRL Price";
 "PRL 币价 $" = "PRL Price $";
 "PRL 挖矿监控" = "PRL Pool Stats";
-"PRL/算力·天" = "PRL/Hashrate·day";
 "PRL/P·天" = "PRL/P·day";
 "单位日产 PRL/P" = "Daily Yield/Unit PRL/P";
-"Pearl 官网" = "Pearl Website";
 "Pearl 网络" = "Pearl Network";
-"RPC 端口" = "RPC Port";
 "SafeTrade 实时" = "SafeTrade Live";
 "SafeTrade 请求地址无效" = "Invalid SafeTrade request URL";
 "USDT 余额不足" = "Insufficient USDT balance";
-"WhatToMine 无响应" = "WhatToMine not responding";
 "← 选一张显卡" = "← Pick a GPU";
 "↑ 已按难度月增 %@%% 衰减；在【参数】可调" = "↑ Decayed by %@%% monthly difficulty growth; adjustable in Parameters";
 "≈ $%@ / 天    ·    月 ≈ ¥%@" = "≈ $%@/day    ·    month ≈ ¥%@";
@@ -71,7 +67,6 @@
 "主货币" = "Primary Currency";
 "主题" = "Theme";
 "买" = "Buy";
-"买 %@   卖 %@" = "Buy %@   Sell %@";
 "买入" = "Buy";
 "买入 PRL" = "Buy PRL";
 "交易" = "Trade";
@@ -88,7 +83,6 @@
 "价格 %@ USDT" = "Price %@ USDT";
 "价格 (USDT)" = "Price (USDT)";
 "估算" = "Estimate";
-"估算·预算" = "Estimate · Budget";
 "低" = "Low";
 "余额 %@ PRL" = "Balance %@ PRL";
 "约合 %@" = "Approx. %@";
@@ -107,13 +101,11 @@
 "全部" = "All";
 "关于" = "About";
 "应用" = "App";
-"内存机·不划算" = "Memory-bound · Not worth it";
 "内置 PRL 挖矿监控" = "Built-in PRL pool monitor";
 "写下来并妥善保管后再继续。" = "Write it down and store it safely before continuing.";
 "出块奖励" = "Block Reward";
 "出币" = "Coins Produced";
 "分区" = "Region";
-"切勿截图或发给任何人。" = "Never screenshot it or share it with anyone.";
 "创建失败" = "Creation Failed";
 "创建新钱包" = "Create New Wallet";
 "创建钱包" = "Create Wallet";
@@ -150,7 +142,6 @@
 "取消" = "Cancel";
 "可提+待确认" = "Withdrawable + Pending";
 "可用余额 %@ PRL" = "Available Balance %@ PRL";
-"各 Pearl 矿池的公开算力与费率（无需地址）" = "Public hashrate and fees for each Pearl pool (no address needed)";
 "各显卡租金不同 → 在【显卡对比】选中某卡后于详情逐卡设置" = "Rental prices vary by GPU → select a card in GPU Compare, then set each one in its details";
 "同步中…" = "Syncing…";
 "同步余额…" = "Syncing balance…";
@@ -172,7 +163,6 @@
 "外观" = "Appearance";
 "失败 · 沿用本地" = "Failed · Using local";
 "如：交易所 / 朋友" = "e.g. Exchange / Friend";
-"字段解析失败" = "Failed to parse field";
 "安全" = "Security";
 "安全垫" = "Safety Margin";
 "安全存储" = "Secure Storage";
@@ -184,20 +174,14 @@
 "1h 算力" = "1h Hashrate";
 "瞬时" = "Now";
 "算力口径" = "Hashrate window";
-"实时难度 %@M · 近7天 %@ · 近3天 %@ · 近24h %@　（仅供参考，月增长请在【参数】手动设）" = "Live difficulty %@M · 7d %@ · 3d %@ · 24h %@ (for reference only; set monthly growth manually in Parameters)";
 "实时难度：当前 %@M · 近7天 %@ · 近3天 %@ · 近24h %@" = "Live difficulty: now %@M · 7d %@ · 3d %@ · 24h %@";
 "实测" = "Tested";
-"实测·密度王" = "Tested · Density King";
-"实测·性价比★" = "Tested · Best Value★";
-"实测·重测250" = "Tested · Retest 250";
 "已下单 #%@ · %@ %@ @ %@ · %@" = "Order placed #%@ · %@ %@ @ %@ · %@";
-"已保存（会经 iCloud 同步到其他设备）" = "Saved (will sync to other devices via iCloud)";
 "已保存并通过验证（会经 iCloud 同步到其他设备）" = "Saved and verified (will sync to other devices via iCloud)";
 "已保存，但验证未通过：API Key/Secret 可能不正确，或当前 IP 未加入白名单。请在 SafeTrade 后台核对密钥，并为此网络的 IP 开通访问权限。" = "Saved, but verification failed: the API Key/Secret may be incorrect, or this IP isn't whitelisted. Check the keys in your SafeTrade account and allow this network's IP.";
 "已保存，但交易所返回错误（HTTP %@）。请稍后在交易页重试。" = "Saved, but the exchange returned an error (HTTP %@). Please retry later from the Trade tab.";
 "已保存，但暂时无法连接 SafeTrade（网络问题）。请检查网络后在交易页确认。" = "Saved, but couldn't reach SafeTrade right now (network issue). Check your connection and confirm from the Trade tab.";
 "已复制" = "Copied";
-"已广播 ✓ txid: %@" = "Broadcast ✓ txid: %@";
 "已更新 " = "Updated ";
 "已清除" = "Cleared";
 "已计入自身算力稀释：你占全网 %@%% · 单卡出币 ×%@" = "Self-dilution included: you hold %@%% of the network · per-GPU yield ×%@";
@@ -207,7 +191,6 @@
 "币价 $" = "Price $";
 "市价" = "Market Price";
 "平均" = "Average";
-"建议离线手抄；剪贴板可能被其他 App 读取。" = "We recommend writing it down offline; the clipboard may be read by other apps.";
 "开" = "On";
 "当前 Key" = "Current Key";
 "当前 Secret" = "Current Secret";
@@ -229,7 +212,6 @@
 "手动" = "Manual";
 "扣抽水" = "Pool Fee Deducted";
 "扣抽水·未扣电费" = "After pool fee, before power";
-"把这个地址发给对方即可收到 PRL。" = "Send this address to others to receive PRL.";
 "把这个地址发给对方即可收到 PRL。点按「换一个地址」可生成新地址，更好地保护隐私。" = "Send this address to others to receive PRL. Tap \"Switch Address\" to generate a new one for better privacy.";
 "换一个收款地址" = "Switch to another receiving address";
 "收款地址 · %@ · 第 %@ 个" = "Receiving Address · %@ · #%@";
@@ -253,14 +235,12 @@
 "收款地址 %@" = "Receiving Address %@";
 "收款地址 · %@" = "Receiving Address · %@";
 "收款地址格式不正确" = "Invalid receiving address format";
-"收款地址第 %@ 个，点按换一个地址" = "Receiving Address #%@, tap to switch address";
 "改别名" = "Edit Alias";
 "数据中心" = "Data Center";
 "数量 (PRL)" = "Amount (PRL)";
 "新增联系人" = "Add Contact";
 "新设备" = "New Device";
 "方向" = "Direction";
-"无FP8·降级" = "No FP8 · Downgraded";
 "无法写入钥匙串（Keychain）" = "Unable to write to Keychain";
 "日产" = "Daily Yield";
 "日产 PRL" = "Daily PRL Yield";
@@ -301,7 +281,6 @@
 "步骤 %@ / 3" = "Step %@ / 3";
 "每天的情况 · 我的全部设备" = "Daily snapshot · All my devices";
 "毛收入" = "Gross Income";
-"汇率 → CNY" = "Exchange Rate → CNY";
 "汇率以美元为基准，每天自动更新一次；离线时使用最近一次缓存。" = "Rates are based on USD and update automatically once a day; the latest cache is used when offline.";
 "汇率更新于" = "Rate updated";
 "没有可用的 UTXO（余额不足或未确认）" = "No usable UTXO (insufficient or unconfirmed balance)";
@@ -317,8 +296,6 @@
 "清除密钥" = "Clear Keys";
 "点「添加」，选择矿池并填入你的 Pearl 收款地址。可添加多个地址 / 多个矿池。" = "Tap \"Add\", choose a mining pool and enter your Pearl receiving address. You can add multiple addresses / pools.";
 "点击修改名称" = "Tap to rename";
-"点按换地址 · 长按复制" = "Tap to switch address · Long-press to copy";
-"点按继续换 · 长按可回主地址" = "Tap to keep switching · Long-press for main address";
 "点按解锁继续" = "Tap to unlock and continue";
 "版本" = "Version";
 "现价 %@" = "Price %@";
@@ -344,7 +321,6 @@
 "矿池服务繁忙，请稍后重试" = "Pool service is busy, please try again later";
 "矿池算力" = "Pool Hashrate";
 "硬件 ¥%@" = "Hardware ¥%@";
-"确定要移除此设备上的钱包吗？" = "Remove the wallet from this device?";
 "确认下单" = "Confirm Order";
 "确认买入" = "Confirm Buy";
 "确认你已正确记录" = "Confirm you've recorded it correctly";
@@ -365,7 +341,6 @@
 "移除钱包（需助记词恢复）" = "Remove Wallet (Recovery Phrase needed to restore)";
 "窗口" = "Window";
 "立即刷新汇率" = "Refresh Rate Now";
-"笔记本·散热差" = "Laptop · poor cooling";
 "第 %@ 个词" = "Word %@";
 "第 %@ 个词，%@" = "Word %1$@, %2$@";
 "等待现价后才能市价买入" = "Wait for live price before market buy";
@@ -387,7 +362,6 @@
 "联网取价（关闭 = 手动覆盖币价/算力/难度）" = "Live pricing (off = manually override Price / Hashrate / Difficulty)";
 "联网后显示出币趋势" = "Coin output trend shown when online";
 "联网后显示算力趋势" = "Hashrate trend shown when online";
-"能效王 72W" = "Efficiency King 72W";
 "自动" = "Auto";
 "自托管 · 私钥与签名留在本机（钥匙串 / 安全隔区）" = "Self-custody · keys and signing stay on device (Keychain / Secure Enclave)";
 "自有" = "Owned";
@@ -408,11 +382,9 @@
 "设备" = "Device";
 "设置" = "Settings";
 "该地址未在 %@ 挖矿" = "No workers found for this address on %@";
-"该矿池暂未公开统计" = "This pool has no public stats yet";
 "语言" = "Language";
 "请按顺序离线抄写" = "Write down in order, offline";
 "货币" = "Currency";
-"费率 %@%%" = "Fee %@%%";
 "超过可用余额（需预留至少 %@ PRL 手续费）" = "Exceeds available balance (reserve at least %@ PRL for fees)";
 "超过机柜预算 %@W，需降功耗或减卡" = "Over rack budget %@W; lower power or remove GPUs";
 "跟随系统" = "Follow System";
@@ -456,7 +428,6 @@
 "验证助记词" = "Verify Recovery Phrase";
 "验证并显示" = "Verify and Show";
 "高" = "High";
-"高 %@   低 %@" = "High %@   Low %@";
 "（市价，约 %@ USDT）" = "(Market price, ~%@ USDT)";
 "，累计 %@ PRL" = ", %@ PRL total";
 "，近 7 天 %@ PRL" = ", %@ PRL in last 7 days";
@@ -484,7 +455,6 @@
 "当前汇率" = "Current Rate";
 
 /* SafeTrade → iCloud Keychain refactor */
-"API 密钥存于 iCloud 钥匙串（端到端加密，仅你可见），在各设备间同步；助记词不同步，仅存于本机钥匙串。" = "API keys are stored in the iCloud Keychain (end-to-end encrypted, visible only to you) and sync across your devices; the recovery phrase does not sync and stays only in this device's Keychain.";
 "请先为本设备设置锁屏密码或生物识别，再进行此操作。" = "Please set a screen-lock passcode or biometrics on this device before doing this.";
 
 /* 2026-06-06 session: send toast / address book / pool→device sync hint / monitor alias */
@@ -531,19 +501,14 @@
 "手续费" = "Fee";
 "24H出块" = "24h Blk";
 "1H出块" = "1h Blk";
-"24H收益/PH" = "24h Yld/PH";
 "总算力" = "Hashrate";
 
 /* Backfill: strings used in code but missing from every translation table (showed raw Chinese to non-CN users) */
-"24H收益/PH = 该池24h出块奖励 ÷ 矿池算力（PRL per PH·天）；绿色 = 最高。" = "24h Yield/PH = pool's 24h block rewards ÷ pool hashrate (PRL per PH·day); green = highest.";
 "HeroMiners：矿池 0%，需 SRBMiner（矿工端抽水约 3%）。" = "HeroMiners: pool fee 0%, software-side fee ~3%.";
-"PearlHash 未公开按池出块数据，故出块/收益显示「—」。" = "PearlHash doesn't publish per-pool block data, so blocks/yield show \"—\".";
-"「~」= 该池未公开 24h 总数，由近几小时出块按 24h 折算。" = "\"~\" = pool doesn't publish a 24h total; extrapolated to 24h from recent hours' blocks.";
 "交易在本机签名（私钥不离开设备），合并到一笔扫回，剩余不再搁浅。" = "Signed on-device (private key never leaves), merged into one sweep so nothing stays stranded.";
 "交易已广播，待网络确认后即并入「钱包」余额与最近交易。" = "Transaction broadcast; once confirmed it joins your Wallet balance and recent transactions.";
 "仅供参考，月增长可在【参数】手动设" = "For reference only; set monthly growth manually in Parameters";
 "可找回 %@ PRL" = "Recoverable %@ PRL";
-"各 Pearl 矿池对比：费率 · 出块 · 每 PH 收益 · 算力（无需地址）" = "Compare Pearl pools: fee · blocks · yield per PH · hashrate (no address needed)";
 "实时难度 %@M · 近7天 %@ · 近3天 %@ · 近24h %@　（%@）" = "Live difficulty %@M · 7d %@ · 3d %@ · 24h %@　(%@)";
 "实测效率" = "Measured efficiency";
 "实测每 P·天" = "Measured per P·day";
@@ -626,7 +591,6 @@
 "已暂停，不再获取数据" = "Paused — no data is being fetched.";
 
 // Trade tab polish (2026-09-11)
-"%@ 余额" = "%@ balance";
 "%@ 笔挂单" = "%@ open";
 "已成交" = "Filled";
 "已撤销" = "Canceled";
@@ -672,21 +636,16 @@
 
 /* 价格提醒 (PriceAlertsView / PriceAlerts.swift) */
 "1 小时" = "1 Hour";
-"1 小时内涨跌超过 %@" = "Moves more than %@ within 1 hour";
 "24 小时" = "24 Hours";
-"24 小时内涨跌超过 %@" = "Moves more than %@ within 24 hours";
 "上次提醒：%@" = "Last alert: %@";
 "价格提醒" = "Price Alerts";
-"价格涨到 %@" = "Price rises to %@";
 "价格涨到 %@ 时通知你" = "You'll be notified when the price rises to %@.";
-"价格跌到 %@" = "Price falls to %@";
 "价格跌到 %@ 时通知你" = "You'll be notified when the price falls to %@.";
 "到价提醒" = "Target Price";
 "发送测试通知" = "Send Test Notification";
 "启用" = "Enabled";
 "尚未获得推送权限" = "Notifications aren't set up on this device yet.";
 "已发送，几秒内应收到一条通知。" = "Sent — a notification should arrive within a few seconds.";
-"已同步到提醒服务器。" = "Synced with the alert server.";
 "当前价格" = "Current Price";
 "我的提醒" = "My Alerts";
 "打开系统设置" = "Open Settings";
@@ -695,8 +654,6 @@
 "时间范围" = "Time Window";
 "服务器只保存本机的推送令牌和提醒条件，不涉及钱包地址或余额。" = "The server only stores this device's push token and alert conditions — never your wallet addresses or balances.";
 "服务器暂时不可用，稍后自动重试" = "The alert server is unavailable. It will retry automatically.";
-"服务器每分钟检查一次价格（CoinEx、BigONE 与 WhatToMine 行情的中位数），可能与 App 内显示的 SafeTrade 价格略有差异。" = "The server checks the price every minute (the median of CoinEx, BigONE and WhatToMine), so it may differ slightly from the SafeTrade price shown in the app.";
-"正在同步到提醒服务器…" = "Syncing with the alert server…";
 "正在向系统申请推送令牌…" = "Requesting a push token from the system…";
 "涨或跌超过这个幅度都会通知你。" = "You'll be notified when the price moves this much in either direction.";
 "涨跌幅提醒" = "Price Move";
@@ -716,8 +673,6 @@
 "涨跌幅" = "Change";
 "高级版" = "Pro";
 "Pearl Hub 高级版" = "Pearl Hub Pro";
-"到价、涨跌幅提醒，最多 20 条" = "Target-price and price-move alerts, up to 20";
-"服务器 7×24 小时每分钟检查价格" = "Our server checks the price every minute, 24/7";
 "没打开 App 也能收到通知" = "Get notified even when the app is closed";
 "一次购买，iPhone、iPad 和 Mac 通用" = "Buy once — works on iPhone, iPad and Mac";
 "以 %@ 解锁" = "Unlock for %@";
@@ -726,7 +681,6 @@
 "一次性购买，不是订阅。" = "One-time purchase, not a subscription.";
 "锁定竖屏" = "Lock Portrait";
 "5 分钟" = "5 Minutes";
-"5 分钟内涨跌超过 %@" = "Moves more than %@ within 5 minutes";
 "开盘价" = "Open";
 "收盘价" = "Close";
 "%d 条提醒生效中" = "%d alerts active";
@@ -857,3 +811,5 @@
 "任何时间触发都会立即推送。" = "Alerts are pushed the moment they fire, at any hour.";
 "只在 %@–%@ 推送。其他时间触发的提醒，会在下一次 %@ 一到就推送给你。" = "Pushes only between %1$@ and %2$@. An alert that fires outside those hours is sent as soon as it's %3$@ again.";
 "免打扰时段内触发，将于 %@ 推送" = "Fired in quiet hours · will push at %@";
+"钱包余额与挖矿监控" = "Wallet balance and pool monitor";
+"日期、星期与 PRL 实时币价" = "Date, weekday and the live PRL price";

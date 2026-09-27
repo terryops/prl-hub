@@ -78,10 +78,9 @@ struct RootView: View {
             // UserDefaults/iCloud-KVS into the (E2E-encrypted) iCloud Keychain,
             // then scrub the plaintext copies. No-ops once migrated.
             SafeTradeSecrets.migrateFromLegacyIfNeeded()
-            // Pass the synced keys so locally-entered values are pushed up BEFORE the
-            // initial pull — otherwise a stale cloud value/tombstone could clobber the
-            // only current local copy on first launch (the protection was dead code).
-            CloudSync.start(preferLocalKeys: CloudSync.syncedKeys)
+            // Seeds only keys the cloud has never seen, then pulls — a value another
+            // device saved while this one was closed wins over the stale local copy.
+            CloudSync.start()
             await currency.refreshIfStale()   // daily-cached USD rate table
         }
         // Re-pull from iCloud on every foreground so keys/config saved on another
@@ -90,6 +89,7 @@ struct RootView: View {
             if phase == .active {
                 CloudSync.refresh()
                 PriceAlertStore.shared.foreground()
+                PriceLiveActivity.shared.foreground()
                 Task { await currency.refreshIfStale() }
             }
         }

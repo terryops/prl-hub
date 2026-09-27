@@ -42,11 +42,13 @@ enum CloudSync {
         // what-if (same reason the live market numbers above aren't synced).
         "prl.selected", "prl.selfDilution", "prl.syncW",
     ]
-    private static let kvs = NSUbiquitousKeyValueStore.default
+    /// The default store is documented thread-safe; read it through a computed
+    /// property rather than caching it in a (non-Sendable) global.
+    private static var kvs: NSUbiquitousKeyValueStore { .default }
     private static let tombstoneSuffix = ".__deleted"
-    private static var started = false
+    @MainActor private static var started = false
 
-    static func start(preferLocalKeys: [String] = []) {
+    @MainActor static func start() {
         guard !started else { return }
         started = true
         NotificationCenter.default.addObserver(
@@ -64,10 +66,10 @@ enum CloudSync {
             pullToLocal(changedKeys(note))
         }
         kvs.synchronize()
-        // Some locally-entered values (notably SafeTrade keys) may predate iCloud
-        // provisioning. Push those before the initial pull so stale cloud values or
-        // tombstones cannot erase the only current local copy on first launch.
-        ensurePushed(preferLocalKeys)
+        // Upload only what the cloud has never seen. Pushing every local value that
+        // merely DIFFERS (the old behaviour) let a device that was closed while
+        // another one edited overwrite that newer edit with its stale copy on launch.
+        seedMissing(syncedKeys)
         // Initial pull so a device that already has iCloud data adopts it.
         pullToLocal(syncedKeys)
     }
@@ -75,29 +77,37 @@ enum CloudSync {
     /// Re-pull the latest from iCloud. Call when the app returns to the
     /// foreground so a value saved on another device shows up here without a
     /// relaunch.
-    static func refresh() {
+    @MainActor static func refresh() {
         guard started else { start(); return }
         kvs.synchronize()
         pullToLocal(syncedKeys)
     }
 
-    /// Upload this device's locally-stored values for `keys` to iCloud, but only
-    /// when a non-empty value exists (never wipes the cloud copy). Self-heals a
-    /// value saved before the iCloud entitlement was provisioned and so never
-    /// actually got uploaded — e.g. SafeTrade API keys saved long ago.
-    static func ensurePushed(_ keys: [String]) {
+    /// Upload this device's value for each of `keys` that the cloud holds nothing
+    /// for — neither a value nor a deletion tombstone. Self-heals a value saved
+    /// before the iCloud entitlement was provisioned (so never uploaded) without
+    /// ever overriding anything another device has written.
+    static func seedMissing(_ keys: [String]) {
         let d = UserDefaults.standard
         var pushedAny = false
         for key in keys where syncedKeys.contains(key) {
-            guard let value = d.object(forKey: key) else { continue }
-            if let s = value as? String, s.isEmpty { continue }
-            if let data = value as? Data, data.isEmpty { continue }
-            if plistEqual(kvs.object(forKey: key), value) { continue }
+            let value = d.object(forKey: key)
+            guard shouldSeed(local: value, cloud: kvs.object(forKey: key),
+                             tombstone: kvs.object(forKey: tombstoneKey(key))), let value else { continue }
             kvs.set(value, forKey: key)
-            kvs.removeObject(forKey: tombstoneKey(key))
             pushedAny = true
         }
         if pushedAny { kvs.synchronize() }
+    }
+
+    /// Seed only a non-empty local value into a cloud slot that is completely
+    /// empty. A cloud value or tombstone always wins: it is at least as new as
+    /// anything this device holds before its first pull.
+    static func shouldSeed(local: Any?, cloud: Any?, tombstone: Any?) -> Bool {
+        guard let local, cloud == nil, tombstone == nil else { return false }
+        if let s = local as? String, s.isEmpty { return false }
+        if let data = local as? Data, data.isEmpty { return false }
+        return true
     }
 
     /// Push a locally-changed key up to iCloud. No-ops when the cloud copy already
