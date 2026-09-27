@@ -55,8 +55,19 @@ enum WidgetFetch {
         return (v, Date())
     }
 
-    /// Spot price of 1 PRL in USD (SafeTrade public ticker).
+    /// Spot price of 1 PRL in USD. First the price-alert worker's (the exact value it
+    /// pushes to the 锁屏盯盘 Live Activity, which iOS shows without waking the app, so
+    /// it can't reach the shared snapshot) — then the widgets and the Lock Screen agree.
+    /// SafeTrade's public ticker if the worker is unreachable.
     static func prlUsd() async -> Double? {
+        if let obj = await json("https://prl.tools.video/v1/price", timeout: 6) as? [String: Any] {
+            let v = double(obj["usd"])
+            if v > 0 { return v }
+        }
+        return await safeTradeUsd()
+    }
+
+    private static func safeTradeUsd() async -> Double? {
         guard let obj = await json("https://safetrade.com/api/v2/peatio/public/markets/prlusdt/tickers") as? [String: Any]
         else { return nil }
         let t = (obj["ticker"] as? [String: Any]) ?? obj

@@ -847,3 +847,13 @@
 "锁屏大卡片；灵动岛只显示小珍珠" = "Thẻ trên màn hình khóa; Dynamic Island chỉ hiện viên ngọc";
 "灵动岛为主" = "Ưu tiên Dynamic Island";
 "灵动岛显示价格；锁屏只占一行" = "Giá trong Dynamic Island; một dòng trên màn hình khóa";
+
+/* 推送时段 (1.16) */
+"推送时段" = "Khung giờ thông báo";
+"全天" = "Cả ngày";
+"自定义时段" = "Tùy chỉnh";
+"从" = "Từ";
+"到" = "Đến";
+"任何时间触发都会立即推送。" = "Cảnh báo được gửi ngay khi kích hoạt, bất kể giờ nào.";
+"只在 %@–%@ 推送。其他时间触发的提醒，会在下一次 %@ 一到就推送给你。" = "Chỉ gửi từ %1$@ đến %2$@. Cảnh báo kích hoạt ngoài khung giờ này sẽ được gửi ngay khi tới %3$@.";
+"免打扰时段内触发，将于 %@ 推送" = "Kích hoạt trong giờ yên lặng · sẽ gửi lúc %@";

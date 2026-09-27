@@ -847,3 +847,13 @@
 "锁屏大卡片；灵动岛只显示小珍珠" = "Lock Screen card; the Dynamic Island shows just the pearl";
 "灵动岛为主" = "Dynamic Island first";
 "灵动岛显示价格；锁屏只占一行" = "Price in the Dynamic Island; one line on the Lock Screen";
+
+/* 推送时段 (1.16) */
+"推送时段" = "Push hours";
+"全天" = "All day";
+"自定义时段" = "Custom hours";
+"从" = "From";
+"到" = "To";
+"任何时间触发都会立即推送。" = "Alerts are pushed the moment they fire, at any hour.";
+"只在 %@–%@ 推送。其他时间触发的提醒，会在下一次 %@ 一到就推送给你。" = "Pushes only between %1$@ and %2$@. An alert that fires outside those hours is sent as soon as it's %3$@ again.";
+"免打扰时段内触发，将于 %@ 推送" = "Fired in quiet hours · will push at %@";

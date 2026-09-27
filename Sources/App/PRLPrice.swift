@@ -57,13 +57,16 @@ final class PRLPriceManager: ObservableObject {
         await refresh()
     }
 
-    /// Pull a fresh price: SafeTrade public ticker first, WhatToMine×BTC fallback.
+    /// Pull a fresh price: the price-alert worker's first — the same value it pushes to
+    /// the 锁屏盯盘 Live Activity and the widgets fetch — then SafeTrade's public ticker,
+    /// then WhatToMine×BTC. (The Trade tab's live 5 s ticker comes in via adopt().)
     func refresh() async {
         guard !inFlight else { return }
         inFlight = true
         defer { inFlight = false }
 
-        var price = await fetchPRLUsdSafeTrade()
+        var price = await AlertQuote.fetch()?.usd
+        if price == nil { price = await fetchPRLUsdSafeTrade() }
         if price == nil {
             // Fallback: WhatToMine's PRL→BTC exchange_rate × live BTC/USD.
             if let d = await httpGET("https://whattomine.com/coins/469.json"),

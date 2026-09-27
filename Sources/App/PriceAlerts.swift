@@ -25,7 +25,30 @@ import AppKit
 // the server (one-shot, opted into with `oneshot`); the app adopts
 // that from every reply and only re-enables it when the user
 // switches it back on.
+//
+// 推送时段 (1.16): pushes can be limited to a daily window of local
+// time (default: all day). An alert that fires outside it is queued
+// by the worker and pushed at the next window start.
 // ============================================================
+
+/// Daily push window in local time: [start, end) in minutes after midnight;
+/// end < start runs past midnight (e.g. 22:00–02:00).
+struct PushWindow: Codable, Equatable {
+    var start: Int
+    var end: Int
+
+    static let `default` = PushWindow(start: 8 * 60, end: 23 * 60)
+
+    func contains(minute m: Int) -> Bool {
+        start < end ? (m >= start && m < end) : (m >= start || m < end)
+    }
+
+    /// "08:00" in the user's clock style.
+    static func timeText(_ minutes: Int) -> String {
+        let d = Calendar.current.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: Date()) ?? Date()
+        return d.formatted(date: .omitted, time: .shortened)
+    }
+}
 
 struct PriceAlertRule: Codable, Identifiable, Equatable {
     enum Kind: String, Codable { case above, below, move }
@@ -39,6 +62,9 @@ struct PriceAlertRule: Codable, Identifiable, Equatable {
     var enabled = true
     /// Last time the server pushed this rule (from the worker's reply).
     var lastFired: Date?
+    /// Fired during quiet hours; the push waits for the next window start
+    /// (from the worker's reply). Optional so older saved rules still decode.
+    var deferred: Bool?
 
     /// Wire format the worker expects (lastFired is server-owned). `seen_fired`
     /// echoes the server's own last_fired: the worker only lets a fired rule be
@@ -86,8 +112,13 @@ final class PriceAlertStore: ObservableObject {
     @Published private(set) var syncState: SyncState = .idle
     /// Hex APNs device token, once the system has handed one over.
     @Published private(set) var token: String?
+    /// 推送时段; nil = all day (the default).
+    @Published private(set) var window: PushWindow?
 
     private static let rulesKey = "alerts.rules"
+    private static let windowKey = "alerts.window"
+    /// Time zone the worker last got with the window — re-sent after travel.
+    private var sentTimeZone: String?
     private static let tokenKey = "alerts.apnsToken"
     private var syncTask: Task<Void, Never>?
     /// Bumped on every local edit. A server reply is only adopted if no edit
@@ -101,6 +132,8 @@ final class PriceAlertStore: ObservableObject {
         if let d = UserDefaults.standard.data(forKey: Self.rulesKey),
            let r = try? JSONDecoder().decode([PriceAlertRule].self, from: d) { rules = r }
         token = UserDefaults.standard.string(forKey: Self.tokenKey)
+        if let d = UserDefaults.standard.data(forKey: Self.windowKey),
+           let w = try? JSONDecoder().decode(PushWindow.self, from: d) { window = w }
         // The push copy is localized server-side, so a language switch (here or
         // synced from another device) must re-send the rules with the new code.
         languageSub = LocalizationManager.shared.$language.dropFirst().removeDuplicates()
@@ -131,6 +164,17 @@ final class PriceAlertStore: ObservableObject {
         guard let i = rules.firstIndex(where: { $0.id == rule.id }), rules[i].enabled != on else { return }
         rules[i].enabled = on
         rulesChanged()
+    }
+
+    /// Set (or clear, for all day) the push window. The server keeps queued
+    /// alerts; with the window widened they go out on the next tick.
+    func setWindow(_ w: PushWindow?) {
+        guard w != window else { return }
+        window = w
+        if let w, let d = try? JSONEncoder().encode(w) { UserDefaults.standard.set(d, forKey: Self.windowKey) }
+        else { UserDefaults.standard.removeObject(forKey: Self.windowKey) }
+        localVersion += 1
+        if !rules.isEmpty { scheduleSync() }
     }
 
     private func rulesChanged() {
@@ -200,6 +244,8 @@ final class PriceAlertStore: ObservableObject {
             await refreshAuthorization()
             if case .failed = syncState { await ensureRegistered() }
             else if token == nil { await ensureRegistered() }
+            // Crossed a time zone: the window is in local time, so re-send it.
+            else if window != nil, let sent = sentTimeZone, sent != TimeZone.current.identifier { scheduleSync() }
             else { await refresh() }   // alerts that fired while away are now off
         }
     }
@@ -223,7 +269,9 @@ final class PriceAlertStore: ObservableObject {
         guard let token else { return }
         syncState = .syncing
         let sent = localVersion
+        let tz = TimeZone.current.identifier
         let body: [String: Any] = [
+            "window": window.map { ["start": $0.start, "end": $0.end, "tz": tz] as [String: Any] } ?? NSNull(),
             "oneshot": true,
             "env": Self.apnsEnvironment,
             "topic": Bundle.main.bundleIdentifier ?? "com.prl.wizard",
@@ -242,6 +290,7 @@ final class PriceAlertStore: ObservableObject {
                 return
             }
             if sent == localVersion { adoptServerState(data) }   // else a newer PUT is on its way
+            sentTimeZone = tz
             syncState = .synced(Date())
         } catch {
             if (error as? URLError)?.code == .cancelled { return }
@@ -270,10 +319,12 @@ final class PriceAlertStore: ObservableObject {
               let list = o["rules"] as? [[String: Any]] else { return }
         var fired: [String: Date] = [:]
         var enabled: [String: Bool] = [:]
+        var deferred: [String: Bool] = [:]
         for r in list {
             guard let id = r["id"] as? String else { continue }
             if let t = r["last_fired"] as? Double { fired[id] = Date(timeIntervalSince1970: t) }
             if let e = r["enabled"] as? Bool { enabled[id] = e }
+            if let q = r["deferred"] as? Bool { deferred[id] = q }
         }
         var changed = false
         for i in rules.indices {
@@ -281,6 +332,7 @@ final class PriceAlertStore: ObservableObject {
             if rules[i].lastFired != fired[id] { rules[i].lastFired = fired[id]; changed = true }
             // Rules the server doesn't list (Pro lapsed, not synced yet) keep their local state.
             if let e = enabled[id], rules[i].enabled != e { rules[i].enabled = e; changed = true }
+            if let q = deferred[id], rules[i].deferred != q { rules[i].deferred = q; changed = true }
         }
         if changed { persist() }
     }
