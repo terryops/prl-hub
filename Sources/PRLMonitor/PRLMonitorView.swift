@@ -218,3 +218,7 @@ struct StatGrid<Content: View>: View {
 #Preview {
     PRLMonitorView()
 }
+
+/// Green for a gain, red for a loss, neutral for exactly zero (e.g. no devices yet —
+/// a red "¥0" read as a loss).
+func profitColor(_ v: Double) -> Color { v > 0 ? .green : v < 0 ? .red : .primary }

@@ -93,7 +93,7 @@ struct GPURow: View {
                     .foregroundColor(positive ? .green : .red)
                 if store.rentEnabled {
                     Text(store.sym(Loc("租净 ¥")) + f(rentNet, 1)).font(.caption.monospacedDigit())
-                        .foregroundColor(rentNet > 0 ? .green : .red)
+                        .foregroundColor(profitColor(rentNet))
                 } else {
                     Text(formatHashrate(k.g.pearl * 1e12) + " · " + f(k.dailyPRL, 1) + "/d").font(.caption.monospacedDigit()).foregroundColor(.secondary)
                 }
@@ -142,9 +142,9 @@ struct GPUDetailView: View {
                         info(Loc("毛收入"), "$" + f(k.grossRev, 2) + Loc("/天"))
                         info(Loc("扣抽水"), store.localSymbol + f(k.netRev * c.fx, 1) + Loc("/天"))
                         info(Loc("电费"), store.localSymbol + f(k.power * c.fx, 1) + Loc("/天"))
-                        info(Loc("自有净利"), store.localSymbol + f(k.ownNet * c.fx, 1) + Loc("/天"), k.ownNet > 0 ? .green : .red)
-                        info(Loc("30天净"), store.localSymbol + f(k.net30 * c.fx, 0), k.net30 > 0 ? .green : .red)
-                        info(Loc("90天净"), store.localSymbol + f(k.net90 * c.fx, 0), k.net90 > 0 ? .green : .red)
+                        info(Loc("自有净利"), store.localSymbol + f(k.ownNet * c.fx, 1) + Loc("/天"), profitColor(k.ownNet))
+                        info(Loc("30天净"), store.localSymbol + f(k.net30 * c.fx, 0), profitColor(k.net30))
+                        info(Loc("90天净"), store.localSymbol + f(k.net90 * c.fx, 0), profitColor(k.net90))
                         if c.diffGrowthMonthly != 0 {
                             Text(Loc("↑ 已按难度月增 %@%% 衰减；在【参数】可调", f(c.diffGrowthMonthly,0)))
                                 .font(.caption).foregroundColor(.secondary)
@@ -204,14 +204,14 @@ struct GPUDetailView: View {
                 Text(net > 0 ? Loc("✅ 划算") : Loc("❌ 不划算")).font(.callout.bold())
                     .padding(.horizontal, Pearl.Space.sm).padding(.vertical, Pearl.Space.xxs)
                     .background(net > 0 ? Color.green.opacity(0.2) : Color.red.opacity(0.2), in: Capsule())
-                    .foregroundColor(net > 0 ? .green : .red)
+                    .foregroundColor(profitColor(net))
             }
             Stepper(value: Binding(get: { store.rentHour(for: name) }, set: { store.setRentHour(name, $0) }), in: 0...125, step: 0.5) {
                 Text(store.sym(Loc("本卡租金 ¥")) + f(rentDay / 24, 2) + Loc("/小时")).font(.callout.monospacedDigit())
             }
             info(Loc("折合"), store.localSymbol + f(rentDay, 0) + Loc("/天 · $") + f(rentDay / c.fx, 2) + Loc("/天"))
             Toggle(Loc("租金含电费"), isOn: $store.rentCoversPower).font(.callout).toggleStyle(.switch)
-            info(Loc("租净利"), store.localSymbol + f(net * c.fx, 1) + Loc("/天 · 回报 ") + f(roi, 0) + "%", net > 0 ? .green : .red)
+            info(Loc("租净利"), store.localSymbol + f(net * c.fx, 1) + Loc("/天 · 回报 ") + f(roi, 0) + "%", profitColor(net))
             info(Loc("安全垫"), Loc("币价 $") + f(bePrice, 3) + Loc(" 归零"))
             info("", Loc("全网 ") + f(beNet, 1) + Loc(" EH/s 归零"))
         }

@@ -39,7 +39,7 @@ struct DevicesSection: View {
                         summ(Loc("设备"), Loc("%@ 台", "\(store.devices.count)"))
                         summ(Loc("显卡"), Loc("%@ 张 自%@/租%@", "\(fl.cards)", "\(fl.ownCards)", "\(fl.rentedCards)"))
                         summ(Loc("算力"), formatHashrate(fl.pearl * 1e12))
-                        summ(Loc("日净利"), store.localSymbol + f(fl.netDay * c.fx, 1), fl.netDay > 0 ? .green : .red)
+                        summ(Loc("日净利"), store.localSymbol + f(fl.netDay * c.fx, 1), profitColor(fl.netDay))
                         if fl.rentDay > 0 { summ(Loc("日租金"), store.localSymbol + f(fl.rentDay * c.fx, 1), .orange) }
                         summ(Loc("自有功耗"), f(fl.watts, 0) + " W")
                     }
@@ -238,7 +238,7 @@ struct DeviceRow: View {
             Divider()
             HStack {
                 Text(store.sym(Loc("日净利 ¥")) + f(net, 1)).font(.body.monospacedDigit().bold())
-                    .foregroundColor(net > 0 ? .green : .red)
+                    .foregroundColor(profitColor(net))
                 Spacer()
                 // 租用云设备为全包价，不显示功率；自有设备才显示功耗。
                 if !dev.rented {

@@ -56,7 +56,7 @@ struct DashboardSection: View {
                     cardTitle(Loc("日净利 · 设备估算"), Loc("按你的设备算力和电费估算"))
                     if ready {
                         Text(store.localSymbol + " " + f(fl.netDay * c.fx, 1)).font(.system(.largeTitle, design: .rounded).weight(.heavy))
-                            .foregroundColor(fl.netDay > 0 ? .green : .red).monospacedDigit()
+                            .foregroundColor(profitColor(fl.netDay)).monospacedDigit()
                             .lineLimit(1).minimumScaleFactor(0.5)
                         Text(store.sym(Loc("≈ $%@ / 天    ·    月 ≈ ¥%@", f(fl.netDay, 2), f(fl.netDay * c.fx * 30, 0))))
                             .font(.callout).foregroundColor(.secondary)
@@ -198,7 +198,7 @@ struct DashboardSection: View {
                 let rev = incPRL * price
                 let net = rev - costUSD
                 Text(store.localSymbol + f(net * fx, 1)).font(.system(.title2, design: .rounded).weight(.bold))
-                    .foregroundColor(net > 0 ? .green : .red).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+                    .foregroundColor(profitColor(net)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
                 // With no power cost / rent the net IS the income, so don't repeat it.
                 Text(costUSD > 0 ? store.sym(Loc("%@ PRL · 收入 ¥%@", f(incPRL, 1), f(rev * fx, 1))) : "\(f(incPRL, 1)) PRL")
                     .font(.caption2).foregroundColor(.secondary)
