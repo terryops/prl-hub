@@ -11,8 +11,11 @@ import CryptoKit
 //   orders  = GET/POST /api/v2/trade/market/orders       (POST Finex: market,side,amount,price,type)
 //   ticker  = GET /api/v2/peatio/public/markets/{m}/tickers   (peatio ns!)
 //   k-line  = GET /api/v2/trade/public/markets/{m}/k-line     (trade ns!) -> [[ts,o,h,l,c,v]]
+//   depth   = GET /api/v2/trade/public/markets/{m}/depth      -> {asks:[[p,a]…], bids:[[p,a]…]}
+// Ticker naming (checked live 2026-09-27 against depth): `buy` is the price you BUY
+// at — the best ask — and `sell` the best bid. The reverse of the usual Peatio sense.
 
-struct STBalance: Decodable, Identifiable {
+struct STBalance: Decodable, Identifiable, Equatable {
     let currency: String
     let balance: String
     let locked: String
@@ -32,14 +35,37 @@ struct STTicker: Decodable, Equatable {
 }
 private struct STTickerEnvelope: Decodable { let ticker: STTicker }
 
-private actor SafeTradeNonceGenerator {
+/// Millisecond nonces, strictly increasing, on the SERVER's clock: SafeTrade refuses a
+/// nonce outside its time window (`authz.nonce_expired`), so a phone whose clock is
+/// off would fail every signed call. The offset is learned from response `Date` headers.
+actor SafeTradeNonceGenerator {
     private var last = 0
+    private var offsetMs = 0
+    private let httpDate: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "GMT")
+        f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return f
+    }()
 
     func next() -> String {
-        let now = Int(Date().timeIntervalSince1970 * 1000)
+        let now = Int(Date().timeIntervalSince1970 * 1000) + offsetMs
         let nonce = max(now, last + 1)
         last = nonce
         return String(nonce)
+    }
+
+    func observe(serverDate header: String) {
+        guard let server = httpDate.date(from: header) else { return }
+        offsetMs = Self.offset(server: server, local: Date())
+    }
+
+    /// The header has whole-second resolution (the true time is on average half a
+    /// second later), so only a clearly wrong device clock is corrected.
+    nonisolated static func offset(server: Date, local: Date) -> Int {
+        let skew = Int((server.timeIntervalSince(local) + 0.5) * 1000)
+        return abs(skew) >= 2000 ? skew : 0
     }
 }
 
@@ -47,7 +73,7 @@ private actor SafeTradeNonceGenerator {
 /// SafeTrade's wiki says ISO8601 strings, OpenDAX Finex shows unix seconds — so
 /// accept either (plus milliseconds / numeric strings). Never throws: `orders()`
 /// decodes with `try?`, so one odd timestamp must not blank the whole order list.
-struct STTimestamp: Decodable {
+struct STTimestamp: Decodable, Equatable {
     let date: Date?
 
     init(_ date: Date?) { self.date = date }
@@ -70,14 +96,12 @@ struct STTimestamp: Decodable {
     }
 
     private static func iso8601(_ s: String) -> Date? {
-        let f = ISO8601DateFormatter()
-        if let d = f.date(from: s) { return d }
-        f.formatOptions.insert(.withFractionalSeconds)
-        return f.date(from: s)
+        (try? Date(s, strategy: .iso8601))
+            ?? (try? Date(s, strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: true)))
     }
 }
 
-struct STOrder: Decodable {
+struct STOrder: Decodable, Equatable {
     let id: Int?
     let market: String?
     let side: String?
@@ -156,19 +180,16 @@ struct STCurrencyNetwork: Decodable, Identifiable {
     }
 
     /// Address check for this chain: the exchange's own regexes when it publishes
-    /// them (PRL does), else a format check by chain family. The server validates
-    /// too — this just catches pasting an address of the wrong kind.
+    /// them (PRL does), else a checksum check by chain family (see ChainAddress).
     func isValidAddress(_ a: String) -> Bool {
         if let regexes = system_options?.address_validate_regexes, !regexes.isEmpty {
             return regexes.contains { a.range(of: $0, options: .regularExpression) != nil }
         }
         let key = blockchain_key.lowercased()
-        if key.hasPrefix("tron") { return a.range(of: "^T[1-9A-HJ-NP-Za-km-z]{33}$", options: .regularExpression) != nil }
-        if key.hasPrefix("spl") || key.hasPrefix("sol") {
-            return a.range(of: "^[1-9A-HJ-NP-Za-km-z]{32,44}$", options: .regularExpression) != nil
-        }
+        if key.hasPrefix("tron") { return ChainAddress.isValidTron(a) }
+        if key.hasPrefix("spl") || key.hasPrefix("sol") { return ChainAddress.isValidSolana(a) }
         // Ethereum and the EVM chains (BSC, Arbitrum, Base, Polygon, Avalanche, PulseChain…).
-        return a.range(of: "^0x[0-9a-fA-F]{40}$", options: .regularExpression) != nil
+        return ChainAddress.isValidEVM(a)
     }
 }
 struct STCurrency: Decodable {
@@ -214,11 +235,14 @@ struct STWithdraw: Decodable, Identifiable {
 /// An entry in the user's SafeTrade address book ("beneficiary"), managed on the
 /// SafeTrade website. Withdrawing to one skips the e-mail code — the web client
 /// sends `beneficiary_id` instead of address + chain and no email_code.
-/// Decoded leniently: the field names come from the web client, not docs.
+/// Swagger (account_entities.Beneficiary): id, address, label, description,
+/// currency_id, blockchain_key, state. The web client's `name` / `currency` /
+/// `data.address` variants are still read in case the live API differs.
 struct STBeneficiary: Decodable, Identifiable {
     let id: Int
     let label: String?
     let name: String?
+    let description: String?
     let currency_id: String?
     let currency: String?
     let blockchain_key: String?
@@ -227,7 +251,7 @@ struct STBeneficiary: Decodable, Identifiable {
     private let data: Payload?
     private struct Payload: Decodable { let address: String? }
 
-    var title: String { [label, name].compactMap { $0 }.first { !$0.isEmpty } ?? shortAddr(destination ?? "") }
+    var title: String { [label, name, description].compactMap { $0 }.first { !$0.isEmpty } ?? shortAddr(destination ?? "") }
     var currencyID: String? { (currency_id ?? currency)?.lowercased() }
     var destination: String? { (address ?? data?.address)?.trimmingCharacters(in: .whitespacesAndNewlines) }
     /// Pending entries still wait for the e-mail confirmation on the website.
@@ -249,11 +273,18 @@ enum SafeTradeError: LocalizedError {
         case .noCredentials: return Loc("未配置 SafeTrade API 密钥")
         case .invalidURL: return Loc("SafeTrade 请求地址无效")
         case .http(let c, let m):
+            if let auth = SafeTradeAuthProblem(status: c, body: m) { return auth.message }
             if let known = Self.errorKeys(m).lazy.compactMap(Self.message(forKey:)).first { return known }
             return "HTTP \(c): \(m.prefix(120))"
         case .decode(let m): return Loc("解析失败: %@", m)
         case .placedUnverified: return Loc("订单可能已提交但未能确认结果，请到下方订单列表核对，切勿重复下单。")
         }
+    }
+
+    /// Why a signed request was refused, when it was an auth refusal.
+    var authProblem: SafeTradeAuthProblem? {
+        if case .http(let c, let m) = self { return SafeTradeAuthProblem(status: c, body: m) }
+        return nil
     }
 }
 
@@ -266,9 +297,10 @@ extension SafeTradeError {
     }
 
     /// Human copy for the exchange's error keys we expect around withdrawals
-    /// (keys taken from SafeTrade's own web client); unknown keys fall through
-    /// to the raw "HTTP code: body" text.
+    /// (keys taken from SafeTrade's own web client) and orders; unknown keys fall
+    /// through to the raw "HTTP code: body" text.
     static func message(forKey key: String) -> String? {
+        if key.hasPrefix("market.") { return orderMessage(forKey: key) }
         switch key.replacingOccurrences(of: "account.beneficiary.", with: "account.withdraw.") {
         case "account.withdraw.missing_email_code": return Loc("请填写邮箱验证码")
         case "account.withdraw.missing_phone_code": return Loc("请填写短信验证码")
@@ -285,6 +317,23 @@ extension SafeTradeError {
         default: return nil
         }
     }
+
+    /// `market.order.*` / `market.account.*` keys. Matched on words rather than exact
+    /// keys: the swagger lists none, and Peatio / Finex spell them differently.
+    private static func orderMessage(forKey key: String) -> String? {
+        let t = Set(SafeTradeAuthProblem.tokens(key))
+        if t.contains("insufficient") && t.contains("balance") { return Loc("SafeTrade 可用余额不足") }
+        if t.contains("liquidity") { return Loc("盘口深度不够，市价单成交不了这么多，请减少数量或改用限价单") }
+        if t.contains("round") && t.contains("price") { return Loc("价格的小数位太多") }
+        if t.contains("round") && (t.contains("amount") || t.contains("volume")) { return Loc("数量的小数位太多") }
+        if (t.contains("amount") || t.contains("volume")) && (t.contains("min") || t.contains("less") || t.contains("small")) {
+            return Loc("数量低于交易所的最小下单量")
+        }
+        if t.contains("price") && (t.contains("min") || t.contains("max") || t.contains("range") || t.contains("less") || t.contains("greater")) {
+            return Loc("价格超出交易所允许的范围")
+        }
+        return nil
+    }
 }
 
 /// Outcome of an API-key check, classified so the UI can tell the user *why* a
@@ -292,9 +341,9 @@ extension SafeTradeError {
 /// than silently saving a key that will never be able to trade.
 enum SafeTradeCredentialCheck {
     case ok
-    /// The exchange rejected the credentials (401/403). Can't distinguish a bad
-    /// key/secret from an IP that isn't whitelisted — both surface here.
-    case rejected(Int, String)
+    /// The exchange refused the credentials (401/403); `SafeTradeAuthProblem`
+    /// tells a bad key from an IP that isn't whitelisted, a wrong clock, or a block.
+    case rejected(SafeTradeAuthProblem)
     /// Reached the server but it returned some other non-2xx status.
     case serverError(Int, String)
     /// Never reached the server (offline, DNS, timeout, TLS) — the request failed
@@ -303,6 +352,8 @@ enum SafeTradeCredentialCheck {
 }
 
 enum SafeTradeMarket {
+    /// The one market the app trades — the whole app is PRL-centric (price, alerts,
+    /// balances), so the old free-form market setting is gone.
     static let defaultValue = "prlusdt"
     private static let allowedScalars = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789")
 
@@ -326,24 +377,61 @@ struct SafeTradeClient {
     let root = "https://safetrade.com"
     private static let nonceGenerator = SafeTradeNonceGenerator()
 
-    /// Signs with the *passed-in* key/secret (defaulting to the stored ones) so a
-    /// pre-save check can validate exactly what the user just typed.
-    private func signedHeaders(apiKey: String = SafeTradeSecrets.apiKey,
-                               apiSecret: String = SafeTradeSecrets.apiSecret) async -> [String: String] {
-        let nonce = await Self.nonceGenerator.next()
+    /// How a request is signed: not at all (public data), with a stored key pair, or
+    /// with explicit keys (checking what the user typed before it's saved).
+    enum Auth {
+        case none
+        case stored(SafeTradeSecrets.Role)
+        case explicit(key: String, secret: String)
+    }
+
+    /// Our own ephemeral session. URLSession.shared wrote the signed account calls
+    /// (balances, orders, withdrawals, address book) into the on-disk Cache.db — the
+    /// request headers with the API key included. Nothing here may be cached. The
+    /// first use also scrubs what older builds left in the shared cache.
+    private static let session: URLSession = {
+        purgeSharedCacheOnce()
+        let c = URLSessionConfiguration.ephemeral
+        c.urlCache = nil
+        c.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: c)
+    }()
+
+    /// One-time wipe of URLCache.shared (older builds' SafeTrade entries live there).
+    /// Wiping everything is harmless — other features just re-fetch once — and,
+    /// unlike per-URL removal, can't miss a query variant.
+    private static func purgeSharedCacheOnce() {
+        let flag = "safetrade.sharedCachePurged"
+        guard !UserDefaults.standard.bool(forKey: flag) else { return }
+        URLCache.shared.removeAllCachedResponses()
+        UserDefaults.standard.set(true, forKey: flag)
+    }
+
+    /// hex( HMAC_SHA256(secret, nonce + key) ).
+    static func signature(nonce: String, apiKey: String, apiSecret: String) -> String {
         let key = SymmetricKey(data: Data(apiSecret.utf8))
         let mac = HMAC<SHA256>.authenticationCode(for: Data((nonce + apiKey).utf8), using: key)
-        let sig = mac.map { String(format: "%02x", $0) }.joined()
-        return ["X-Auth-Apikey": apiKey, "X-Auth-Nonce": nonce, "X-Auth-Signature": sig]
+        return mac.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func signedHeaders(apiKey: String, apiSecret: String) async -> [String: String] {
+        let nonce = await Self.nonceGenerator.next()
+        return ["X-Auth-Apikey": apiKey, "X-Auth-Nonce": nonce,
+                "X-Auth-Signature": Self.signature(nonce: nonce, apiKey: apiKey, apiSecret: apiSecret)]
     }
 
     /// `path` is a full `/api/v2/...` path (namespaces differ per resource).
-    /// `credentials`, when supplied, signs the request with those explicit keys
-    /// instead of the stored ones (used to verify keys before they're saved).
     private func send(_ path: String, method: String = "GET",
                       query: [URLQueryItem] = [], form: [String: String]? = nil, json: [String: Any]? = nil,
-                      authed: Bool, credentials: (key: String, secret: String)? = nil) async throws -> Data {
-        if authed && credentials == nil && !SafeTradeSecrets.hasCredentials { throw SafeTradeError.noCredentials }
+                      auth: Auth = .none) async throws -> Data {
+        let credentials: (key: String, secret: String)?
+        switch auth {
+        case .none: credentials = nil
+        case .stored(let role):
+            guard let c = SafeTradeSecrets.credentials(for: role) else { throw SafeTradeError.noCredentials }
+            credentials = c
+        case .explicit(let key, let secret): credentials = (key, secret)
+        }
         guard var comps = URLComponents(string: root + path) else { throw SafeTradeError.invalidURL }
         if !query.isEmpty { comps.queryItems = query }
         guard let url = comps.url else { throw SafeTradeError.invalidURL }
@@ -351,11 +439,6 @@ struct SafeTradeClient {
         req.httpMethod = method
         req.timeoutInterval = 20
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        if authed {
-            let headers = await signedHeaders(apiKey: credentials?.key ?? SafeTradeSecrets.apiKey,
-                                              apiSecret: credentials?.secret ?? SafeTradeSecrets.apiSecret)
-            headers.forEach { req.setValue($1, forHTTPHeaderField: $0) }
-        }
         if let form {
             req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
             var body = URLComponents()
@@ -366,14 +449,29 @@ struct SafeTradeClient {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = try JSONSerialization.data(withJSONObject: json)
         }
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(code) else { throw SafeTradeError.http(code, String(data: data, encoding: .utf8) ?? "") }
-        return data
+        for attempt in 0..<2 {
+            if let credentials {
+                let headers = await signedHeaders(apiKey: credentials.key, apiSecret: credentials.secret)
+                headers.forEach { req.setValue($1, forHTTPHeaderField: $0) }
+            }
+            let (data, resp) = try await Self.session.data(for: req)
+            let http = resp as? HTTPURLResponse
+            if let date = http?.value(forHTTPHeaderField: "Date") { await Self.nonceGenerator.observe(serverDate: date) }
+            let code = http?.statusCode ?? 0
+            if (200..<300).contains(code) { return data }
+            let body = String(data: data, encoding: .utf8) ?? ""
+            // A stale nonce is refused at the gateway before the request is acted on,
+            // so one re-sign on the clock just learned from this reply is safe even
+            // for a POST.
+            if credentials != nil, attempt == 0,
+               SafeTradeError.errorKeys(body).contains(where: SafeTradeAuthProblem.isNonceKey) { continue }
+            throw SafeTradeError.http(code, body)
+        }
+        throw SafeTradeError.invalidURL   // unreachable: the loop returns or throws
     }
 
     func balances() async throws -> [STBalance] {
-        let data = try await send("/api/v2/trade/account/balances/spot", authed: true)
+        let data = try await send("/api/v2/trade/account/balances/spot", auth: .stored(.trading))
         do { return try JSONDecoder().decode([STBalance].self, from: data) }
         catch { throw SafeTradeError.decode(error.localizedDescription) }
     }
@@ -385,53 +483,91 @@ struct SafeTradeClient {
     /// is folded into a classified result for the caller to message.
     func verifyCredentials(apiKey: String, apiSecret: String) async -> SafeTradeCredentialCheck {
         do {
-            _ = try await send("/api/v2/trade/account/balances/spot",
-                               authed: true, credentials: (apiKey, apiSecret))
+            _ = try await send("/api/v2/trade/account/balances/spot", auth: .explicit(key: apiKey, secret: apiSecret))
             return .ok
         } catch SafeTradeError.http(let code, let body) {
-            // 401/403 = auth rejected (bad key/secret or IP not whitelisted);
+            // 401/403 = auth refused (see SafeTradeAuthProblem for which kind);
             // anything else 2xx-failing is a server-side problem to retry later.
-            return (code == 401 || code == 403) ? .rejected(code, body) : .serverError(code, body)
-        } catch SafeTradeError.noCredentials {
-            return .rejected(0, "")
+            if let problem = SafeTradeAuthProblem(status: code, body: body) { return .rejected(problem) }
+            return .serverError(code, body)
         } catch {
             // URLSession failure — offline, DNS, timeout, TLS — never hit the server.
             return .network(error.localizedDescription)
         }
     }
 
+    /// The public IP SafeTrade's edge sees for this device — what a Trusted IPs list
+    /// must contain. Cloudflare answers `/cdn-cgi/trace` itself, so it works even
+    /// while the API is refusing the key. Same session as the API calls, so it
+    /// normally rides the same connection (same IPv4 / IPv6 address).
+    func publicIP() async throws -> String {
+        let data = try await send("/cdn-cgi/trace")
+        guard let ip = SafeTradeTrace.ip(in: String(data: data, encoding: .utf8) ?? "") else {
+            throw SafeTradeError.decode("cdn-cgi/trace")
+        }
+        return ip
+    }
+
     func ticker(market: String) async throws -> STTicker {
         let market = SafeTradeMarket.normalized(market)
-        let data = try await send("/api/v2/peatio/public/markets/\(market)/tickers", authed: false)
+        let data = try await send("/api/v2/peatio/public/markets/\(market)/tickers")
         do { return try JSONDecoder().decode(STTickerEnvelope.self, from: data).ticker }
         catch { throw SafeTradeError.decode(error.localizedDescription) }
     }
 
-    func orders(market: String, limit: Int = 20) async throws -> [STOrder] {
+    /// Order rules: precisions, minimum amount, price range.
+    func marketRules(market: String) async throws -> SafeTradeMarketRules {
         let market = SafeTradeMarket.normalized(market)
-        let data = try await send("/api/v2/trade/market/orders",
-                                  query: [.init(name: "market", value: market), .init(name: "limit", value: String(limit))],
-                                  authed: true)
-        return (try? JSONDecoder().decode([STOrder].self, from: data)) ?? []
+        let data = try await send("/api/v2/trade/public/markets/\(market)")
+        do { return try JSONDecoder().decode(SafeTradeMarketRules.self, from: data) }
+        catch { throw SafeTradeError.decode(error.localizedDescription) }
+    }
+
+    /// Order book, best levels first — what a market order will actually fill at.
+    func depth(market: String, limit: Int = 50) async throws -> STDepth {
+        let market = SafeTradeMarket.normalized(market)
+        let data = try await send("/api/v2/trade/public/markets/\(market)/depth",
+                                  query: [.init(name: "limit", value: String(limit))])
+        do { return try JSONDecoder().decode(STDepth.self, from: data) }
+        catch { throw SafeTradeError.decode(error.localizedDescription) }
+    }
+
+    /// Newest first. `state: "wait"` lists every resting order (the plain list is
+    /// capped, so older open orders would otherwise drop out of reach of 撤单).
+    /// Rows are decoded one by one; a body that isn't a list at all throws, so a
+    /// failed read is never mistaken for "no orders".
+    func orders(market: String, state: String? = nil, limit: Int = 20) async throws -> [STOrder] {
+        let market = SafeTradeMarket.normalized(market)
+        var query: [URLQueryItem] = [.init(name: "market", value: market), .init(name: "limit", value: String(limit)),
+                                     .init(name: "ordering", value: "desc")]
+        if let state { query.append(.init(name: "state", value: state)) }
+        let data = try await send("/api/v2/trade/market/orders", query: query, auth: .stored(.trading))
+        guard let rows = decodeRows(STOrder.self, from: data) else {
+            throw SafeTradeError.decode(String(String(data: data, encoding: .utf8)?.prefix(120) ?? ""))
+        }
+        return rows
     }
 
     /// Public currency info — networks with fee / minimum / whether withdrawals are open.
     func currency(_ id: String) async throws -> STCurrency {
-        let data = try await send("/api/v2/trade/public/currencies/\(id)", authed: false)
+        let data = try await send("/api/v2/trade/public/currencies/\(id)")
         do { return try JSONDecoder().decode(STCurrency.self, from: data) }
         catch { throw SafeTradeError.decode(error.localizedDescription) }
     }
 
+    /// Newest first (explicit: the API's default order isn't documented, and the
+    /// unverified-withdrawal check looks for the latest row). Reads sign with the
+    /// trading key — it works from any network, unlike an IP-bound withdraw key.
     func withdraws(currency: String, limit: Int = 10) async throws -> [STWithdraw] {
         let data = try await send("/api/v2/trade/account/withdraws",
                                   query: [.init(name: "currency", value: currency),
-                                          .init(name: "limit", value: String(limit))],
-                                  authed: true)
-        guard let rows = try? JSONSerialization.jsonObject(with: data) as? [Any] else { return [] }
-        return rows.compactMap { row in
-            (try? JSONSerialization.data(withJSONObject: row))
-                .flatMap { try? JSONDecoder().decode(STWithdraw.self, from: $0) }
+                                          .init(name: "limit", value: String(limit)),
+                                          .init(name: "ordering", value: "desc")],
+                                  auth: .stored(.trading))
+        guard let rows = decodeRows(STWithdraw.self, from: data) else {
+            throw SafeTradeError.decode(String(String(data: data, encoding: .utf8)?.prefix(120) ?? ""))
         }
+        return rows
     }
 
     /// The user's SafeTrade address book, all currencies.
@@ -440,7 +576,7 @@ struct SafeTradeClient {
     /// the address book looks empty instead of silently showing nothing.
     func beneficiaries() async throws -> [STBeneficiary] {
         let data = try await send("/api/v2/trade/account/beneficiaries",
-                                  query: [.init(name: "limit", value: "100")], authed: true)
+                                  query: [.init(name: "limit", value: "100")], auth: .stored(.trading))
         let json = try? JSONSerialization.jsonObject(with: data)
         guard let rows = (json as? [Any]) ?? ((json as? [String: Any])?["data"] as? [Any]) else {
             throw SafeTradeError.decode(String(String(data: data, encoding: .utf8)?.prefix(160) ?? ""))
@@ -463,7 +599,7 @@ struct SafeTradeClient {
         _ = try await send("/api/v2/trade/account/withdraws/generate_code", method: "POST",
                            json: ["type": type, "address": address, "currency": currency,
                                   "amount": NSDecimalNumber(decimal: amount), "blockchain_key": blockchainKey],
-                           authed: true)
+                           auth: .stored(.withdraw))
     }
 
     /// Create an on-chain withdrawal (`POST /trade/account/withdraws`, the body the
@@ -471,6 +607,7 @@ struct SafeTradeClient {
     /// exchange demands depends on the account (e-mail always, 2FA / SMS if enabled).
     /// With `beneficiaryID` the destination is a SafeTrade address-book entry and
     /// replaces address + chain; the web client then asks for no e-mail code.
+    /// Signs with the withdraw-only key when one is set.
     func createWithdraw(address: String, amount: Decimal, blockchainKey: String, beneficiaryID: Int?,
                         emailCode: String, otpCode: String, phoneCode: String,
                         currency: String) async throws {
@@ -487,9 +624,11 @@ struct SafeTradeClient {
         if !otpCode.isEmpty { body["otp_code"] = otpCode }
         if !phoneCode.isEmpty { body["phone_code"] = phoneCode }
         do {
-            _ = try await send("/api/v2/trade/account/withdraws", method: "POST", json: body, authed: true)
+            _ = try await send("/api/v2/trade/account/withdraws", method: "POST", json: body, auth: .stored(.withdraw))
         } catch let e as URLError where Self.isAmbiguousPostFailure(e) {
             throw SafeTradeError.withdrawUnverified   // may have gone through — never invite a blind retry
+        } catch SafeTradeError.http(let code, _) where Self.isAmbiguousPostStatus(code) {
+            throw SafeTradeError.withdrawUnverified
         }
     }
 
@@ -504,8 +643,7 @@ struct SafeTradeClient {
                                   query: [.init(name: "period", value: String(period)),
                                           .init(name: "time_from", value: String(from)),
                                           .init(name: "time_to", value: String(to)),
-                                          .init(name: "limit", value: String(limit))],
-                                  authed: false)
+                                          .init(name: "limit", value: String(limit))])
         let rows = (try? JSONSerialization.jsonObject(with: data) as? [[Any]]) ?? []
         func dbl(_ v: Any) -> Double { (v as? NSNumber)?.doubleValue ?? Double("\(v)") ?? 0 }
         return rows.compactMap { r in
@@ -522,7 +660,7 @@ struct SafeTradeClient {
         if type == "limit", let price { form["price"] = price }
         let data: Data
         do {
-            data = try await send("/api/v2/trade/market/orders", method: "POST", form: form, authed: true)
+            data = try await send("/api/v2/trade/market/orders", method: "POST", form: form, auth: .stored(.trading))
         } catch let e as URLError where Self.isAmbiguousPostFailure(e) {
             // The POST body may have reached the exchange and BOOKED the order before
             // the response was lost (timeout / connection dropped / TLS mid-flight).
@@ -531,6 +669,8 @@ struct SafeTradeClient {
             // Pre-send failures (offline/DNS/can't-connect) are NOT reclassified — they
             // never reached the server, so they stay a clean, safe-to-retry failure.
             throw SafeTradeError.placedUnverified
+        } catch SafeTradeError.http(let code, _) where Self.isAmbiguousPostStatus(code) {
+            throw SafeTradeError.placedUnverified   // a 5xx can come back after the engine booked it
         }
         // send() already enforced a 2xx, so by the time we reach here the order has
         // been ACCEPTED server-side. A decode failure means we can't read the result
@@ -543,29 +683,28 @@ struct SafeTradeClient {
     /// Was an order-POST transport failure ambiguous (the request may already be live
     /// on the exchange)? Failures that provably happened BEFORE the request left the
     /// device are safe to retry and stay hard failures; anything in-flight is ambiguous.
-    private static func isAmbiguousPostFailure(_ e: URLError) -> Bool {
+    /// `.badServerResponse` is NOT in the safe list: it means a reply came back
+    /// malformed — i.e. the request was sent (the local proxy has mangled replies before).
+    static func isAmbiguousPostFailure(_ e: URLError) -> Bool {
         switch e.code {
         case .notConnectedToInternet, .cannotFindHost, .cannotConnectToHost,
-             .dnsLookupFailed, .badURL, .unsupportedURL, .badServerResponse:
+             .dnsLookupFailed, .badURL, .unsupportedURL:
             return false   // never reached the exchange → re-tap can't double-book
         default:
-            return true    // timed out / connection lost / TLS after send → may be booked
+            return true    // timed out / connection lost / TLS after send / bad reply → may be booked
         }
     }
 
-    /// Cancel a single resting order by id. OpenDAX exposes TWO cancel routes
-    /// depending on the matching engine: Peatio uses `/orders/{id}/cancel`, Finex
-    /// uses `/orders/cancel/{id}`. SafeTrade's `trade` namespace answers the
-    /// Peatio form (the Finex form 404s), so try that first and fall back to the
-    /// Finex form only on a 404 — robust whichever the gateway exposes.
-    /// A 2xx means the cancel was ACCEPTED; the order flips to `cancel` once the
-    /// engine removes it, which the caller reconciles by re-fetching the list.
+    /// A non-2xx reply to an order / withdrawal POST that doesn't prove it was refused:
+    /// a 5xx (Cloudflare's 502 / 504 included) can arrive after the engine acted on it.
+    /// 4xx are the exchange's own refusals and stay clean failures.
+    static func isAmbiguousPostStatus(_ code: Int) -> Bool { code == 0 || code >= 500 }
+
+    /// Cancel a single resting order by id (`POST /trade/market/orders/{id}/cancel`,
+    /// the only cancel route in the swagger). A 2xx means the cancel was ACCEPTED;
+    /// the order flips to `cancel` once the engine removes it, which the caller
+    /// reconciles by re-fetching the list.
     func cancelOrder(id: Int) async throws {
-        do {
-            _ = try await send("/api/v2/trade/market/orders/\(id)/cancel", method: "POST", authed: true)
-        } catch let e as SafeTradeError {
-            guard case .http(404, _) = e else { throw e }
-            _ = try await send("/api/v2/trade/market/orders/cancel/\(id)", method: "POST", authed: true)
-        }
+        _ = try await send("/api/v2/trade/market/orders/\(id)/cancel", method: "POST", auth: .stored(.trading))
     }
 }

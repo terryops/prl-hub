@@ -2,10 +2,38 @@ import Foundation
 import Combine
 import SwiftUI
 
+/// SafeTrade refused the key for this network's IP: the key has a Trusted IPs list
+/// and SafeTrade sees an address that isn't on it.
+struct SafeTradeIPIssue: Equatable {
+    /// The public IP SafeTrade sees — nil while it's being looked up (or if that failed).
+    var ip: String?
+    var isIPv6: Bool { ip?.contains(":") == true }
+}
+
+/// An order POST whose outcome is unknown (timeout, 5xx, unreadable reply). The order
+/// button stays locked until the order list shows it or, after a few clean looks,
+/// provably doesn't — a blind re-tap could book it twice.
+struct PendingOrderCheck: Equatable {
+    let side: String
+    let knownIDs: Set<Int>
+    /// `knownIDs` is the full recent list from before the POST (not a partial / failed read),
+    /// so "no new id" really means "not booked".
+    let knownComplete: Bool
+
+    /// A new order on the same side. Deliberately loose (no amount match): mistaking
+    /// some other new order for this one only keeps the user from re-ordering; the
+    /// reverse would book a duplicate.
+    func isNew(_ o: STOrder) -> Bool {
+        guard let id = o.id, !knownIDs.contains(id) else { return false }
+        return o.side == nil || o.side == side
+    }
+}
+
 @MainActor
 final class SafeTradeStore: ObservableObject {
     @Published var balances: [STBalance] = []
     @Published var ticker: STTicker?
+    /// Every open order (newest first), then the recent finished ones.
     @Published var orders: [STOrder] = []
     @Published var candles: [STCandle] = []
     /// 1-minute candles for the last ~4 h — only used to work out the rolling
@@ -13,20 +41,45 @@ final class SafeTradeStore: ObservableObject {
     @Published var minuteCandles: [STCandle] = []
     private var minutesFetchedAt: Date?
     @Published var period = 60          // minutes: 15 / 60 / 240 / 1440
-    @Published var loading = false
-    /// An order POST is in flight. SEPARATE from `loading` (which refresh() also
-    /// toggles) so a stray refresh completing mid-order can never drop the order
-    /// overlay or re-enable the order button and invite a duplicate.
+    /// The order book — polled only while the order form is on 市价 (`wantsDepth`).
+    @Published private(set) var depth: STDepth?
+    /// The market's order rules (precisions, minimum); the built-in values until they load.
+    @Published private(set) var rules = SafeTradeMarketRules.prlusdt
+    private var rulesLoaded = false
+    /// Some refresh is in flight (toolbar spinner). The blocking overlay only covers a
+    /// first load that has nothing on screen yet.
+    @Published private(set) var refreshing = false
+    private var lastRefreshAt: Date?
+    /// The last account refresh failed: balances / orders on screen are from before.
+    @Published private(set) var accountStale = false
+    /// An order POST is in flight. SEPARATE from `refreshing` so a stray refresh
+    /// completing mid-order can never drop the order overlay or re-enable the order
+    /// button and invite a duplicate.
     @Published var placing = false
     /// The id of the order currently being canceled, so the row can show a
     /// spinner in place of its 撤单 button. nil when no cancel is in flight.
     @Published var cancelingOrderID: Int?
+    /// Outcome of the user's last action (order / cancel).
     @Published var error: String?
+    /// Why the account couldn't be read (kept separate so a successful refresh clears
+    /// it without wiping an order error).
+    @Published private(set) var accountError: String?
     @Published var lastOrder: String?
+    /// SafeTrade refused the trading key for this network's IP — see UntrustedIPCard.
+    @Published private(set) var ipIssue: SafeTradeIPIssue?
+    @Published private(set) var unverifiedOrder: PendingOrderCheck?
+    @Published private(set) var verifyingOrder = false
+    /// Withdrawals whose POST outcome is unknown, per currency. Held here rather than
+    /// in the withdraw sheet, so closing and reopening the sheet can't unlock a re-submit.
+    @Published var unverifiedWithdraws: [String: PendingWithdrawCheck] = [:]
+    /// The order form is on 市价 — poll the book with the ticker.
+    var wantsDepth = false {
+        didSet { if wantsDepth, !oldValue { Task { await refreshDepth() } } }
+    }
 
     private let client = SafeTradeClient()
     private var candleRequestID = 0
-    var market: String { SafeTradeMarket.normalized(UserDefaults.standard.string(forKey: "safetrade.market")) }
+    let market = SafeTradeMarket.defaultValue
 
     #if DEBUG
     /// Screenshot-only (App Store captures): when SHOT_TRADE_DEMO=1, present a
@@ -56,37 +109,36 @@ final class SafeTradeStore: ObservableObject {
         balances.first { $0.currency.lowercased() == currency.lowercased() }
     }
 
+    /// A full refresh unless one ran within `seconds` — for re-entering the tab or the
+    /// foreground, which can flip several times in a row (Control Center, app switcher).
+    func refreshIfStale(olderThan seconds: TimeInterval = 30) async {
+        if let t = lastRefreshAt, Date().timeIntervalSince(t) < seconds { return }
+        await refresh()
+    }
+
+    /// Market data always; the account (balances, orders) when keys are set. What's
+    /// on screen stays when a part fails — nothing is blanked by a bad read.
     func refresh() async {
         #if DEBUG
         if Self.shotDemo { seedDemo(); await loadPublic(); return }   // demo account + real public market
         #endif
-        guard hasCredentials else {
+        guard !refreshing else { return }
+        refreshing = true
+        defer { refreshing = false; lastRefreshAt = Date() }
+        // Keys may have synced in from another device since the last look.
+        SafeTradeSecrets.invalidateCache()
+        async let pub: Void = loadPublic()
+        if hasCredentials {
+            await refreshAccount()
+        } else {
             balances = []
             orders = []
             lastOrder = nil
-            loading = false
-            error = Loc("未配置 API 密钥")
-            return
+            ipIssue = nil
+            accountStale = false
+            accountError = Loc("未配置 API 密钥")
         }
-        loading = true; error = nil
-        let currentMarket = market
-        let candlePeriod = period
-        let requestID = nextCandleRequestID()
-        async let b = client.balances()
-        async let t = client.ticker(market: currentMarket)
-        async let o = client.orders(market: currentMarket)
-        async let k = client.kline(market: currentMarket, period: candlePeriod)
-        do {
-            balances = try await b
-            ticker = try? await t
-            share(ticker)
-            orders = (try? await o) ?? []
-            let nextCandles = (try? await k) ?? []
-            applyCandles(nextCandles, requestID: requestID, period: candlePeriod)
-        } catch {
-            self.error = (error as? SafeTradeError)?.errorDescription ?? error.localizedDescription
-        }
-        loading = false
+        await pub
     }
 
     func setPeriod(_ p: Int) {
@@ -96,8 +148,9 @@ final class SafeTradeStore: ObservableObject {
         let currentMarket = market
         let requestID = nextCandleRequestID()
         Task {
-            let nextCandles = (try? await client.kline(market: currentMarket, period: p)) ?? []
-            applyCandles(nextCandles, requestID: requestID, period: p)
+            if let next = try? await client.kline(market: currentMarket, period: p) {
+                applyCandles(next, requestID: requestID, period: p)
+            }
         }
     }
 
@@ -108,46 +161,57 @@ final class SafeTradeStore: ObservableObject {
         setPeriod(stored)
     }
 
-    /// Public ticker doesn't need credentials — load it even before keys are set.
+    /// Public market data — ticker, candles, rules, book — needs no keys.
     func loadPublic() async {
-        let currentMarket = market
         let candlePeriod = period
         let requestID = nextCandleRequestID()
-        async let m: Void = refreshMinutes()
-        setTicker(try? await client.ticker(market: currentMarket))
-        let nextCandles = (try? await client.kline(market: currentMarket, period: candlePeriod)) ?? []
-        applyCandles(nextCandles, requestID: requestID, period: candlePeriod)
-        await m
+        async let m: Void = refreshMinutesIfDue(force: true)
+        async let r: Void = loadRulesIfNeeded()
+        async let d: Void = wantsDepth ? refreshDepth() : ()
+        async let t = try? client.ticker(market: market)
+        async let k = try? client.kline(market: market, period: candlePeriod)
+        setTicker(await t)
+        if let next = await k { applyCandles(next, requestID: requestID, period: candlePeriod) }
+        await m; await r; await d
     }
 
-    /// The 5-second 现价 poll. The 1-minute candles only gain a row per minute,
-    /// so they're re-fetched at most every 30 s rather than on every tick.
+    /// The periodic 现价 poll (plus the book on 市价). The 1-minute candles only gain a
+    /// row per minute, so they're re-fetched at most every 30 s.
     func refreshTickerOnly() async {
-        let minutesDue = minutesFetchedAt.map { Date().timeIntervalSince($0) >= 30 } ?? true
-        async let m: Void = minutesDue ? refreshMinutes() : ()
+        async let m: Void = refreshMinutesIfDue(force: false)
+        async let d: Void = wantsDepth ? refreshDepth() : ()
         setTicker(try? await client.ticker(market: market))
-        await m
+        await m; await d
     }
 
     /// Publish only a quote that actually changed: an identical tick every 5 s would
-    /// otherwise re-render the whole Trade tab (K-line included) for nothing.
+    /// otherwise re-render the whole Trade tab (K-line included) for nothing. A failed
+    /// read (nil) keeps the last quote rather than flashing "—".
     private func setTicker(_ t: STTicker?) {
+        guard let t else { return }
         if t != ticker { ticker = t }
-        share(t)
+        if let last = t.last.flatMap(Double.init) { PRLPriceManager.shared.adopt(last) }
     }
 
-    /// Hand a fresh PRL/USDT quote to the app-wide price (only for the PRL market —
-    /// the market is configurable).
-    private func share(_ t: STTicker?) {
-        guard market == SafeTradeMarket.defaultValue, let last = t?.last.flatMap(Double.init) else { return }
-        PRLPriceManager.shared.adopt(last)
-    }
-
-    private func refreshMinutes() async {
+    /// The 1-minute candles only feed the rolling change of the shorter periods — the
+    /// 1日 view shows the exchange's own 24 h change instead.
+    private func refreshMinutesIfDue(force: Bool) async {
+        guard period != 1440 else { return }
+        if !force, let t = minutesFetchedAt, Date().timeIntervalSince(t) < 30 { return }
         if let m = try? await client.kline(market: market, period: 1, limit: 250), !m.isEmpty {
             if m != minuteCandles { minuteCandles = m }
             minutesFetchedAt = Date()
         }
+    }
+
+    private func refreshDepth() async {
+        if let d = try? await client.depth(market: market), d != depth { depth = d }
+    }
+
+    private func loadRulesIfNeeded() async {
+        guard !rulesLoaded, let r = try? await client.marketRules(market: market) else { return }
+        rulesLoaded = true
+        if r != rules { rules = r }
     }
 
     /// % change of `price` against the price `minutes` ago, from the 1-minute
@@ -171,34 +235,34 @@ final class SafeTradeStore: ObservableObject {
     /// immediately while the background reconcile catches up.
     @discardableResult
     func placeOrder(side: String, ordType: String, volume: String, price: String?) async -> Bool {
-        guard !placing else { return false }   // never start a second order while one is in flight
-        // Canonicalize the decimal separator: a ru/vi decimalPad yields "1,5", but the
-        // exchange (and Double()) only accept "1.5" — sending the raw comma string would
-        // silently corrupt the order amount/price (truncate or reject).
-        let volume = Self.canonicalDecimal(volume)
-        let price = price.map(Self.canonicalDecimal)
+        // Never start a second order while one is in flight or unaccounted for.
+        guard !placing, unverifiedOrder == nil, let amount = PRLAmount.parse(volume) else { return false }
+        // The API takes "1.5": a ru/vi decimalPad types "1,5", which PRLAmount.parse accepts.
+        let priceValue = price.flatMap(PRLAmount.parse)
+        let amountText = SafeTradeMarketRules.plain(amount)
+        let priceText = priceValue.map(SafeTradeMarketRules.plain)
+        let before = PendingOrderCheck(side: side, knownIDs: Set(orders.compactMap(\.id)), knownComplete: !accountStale)
         placing = true; error = nil; lastOrder = nil
         do {
-            let o = try await client.placeOrder(market: market, side: side, amount: volume, price: price, type: ordType)
+            let o = try await client.placeOrder(market: market, side: side, amount: amountText, price: priceText, type: ordType)
             placing = false   // order accepted — stop blocking the screen right away
-            lastOrder = Loc("已下单 #%@ · %@ %@ @ %@ · %@", o.id.map(String.init) ?? "?", o.side ?? side, o.origin_amount ?? volume, o.displayPrice ?? price ?? "—", o.state ?? "")
+            lastOrder = Loc("已下单 #%@ · %@ %@ @ %@ · %@", o.id.map(String.init) ?? "?", o.side ?? side, o.origin_amount ?? amountText, o.displayPrice ?? priceText ?? "—", o.state ?? "")
             orders.insert(o, at: 0)            // optimistic: show it at the top at once
             Task { await refreshAccount() }    // reconcile balances + orders off the hot path
             // Auto-dismiss the success banner so it can't linger and invite a duplicate.
             Task { try? await Task.sleep(for: .seconds(5)); withAnimation { lastOrder = nil } }
             return true
+        } catch SafeTradeError.placedUnverified {
+            // The exchange may have booked it. Treat it as submitted (clear inputs) and
+            // lock the button until the order list settles the question.
+            placing = false
+            unverifiedOrder = before
+            error = SafeTradeError.placedUnverified.errorDescription
+            Task { await verifyUnverifiedOrder() }
+            return true
         } catch let e as SafeTradeError {
             placing = false
-            if case .placedUnverified = e {
-                // The exchange ACCEPTED the order (2xx) but we couldn't read the
-                // result. Treat it as submitted (clear inputs, reconcile) and surface
-                // an ambiguous warning rather than a hard "failed" that invites a
-                // duplicate re-tap.
-                self.error = e.errorDescription
-                Task { await refreshAccount() }
-                return true
-            }
-            self.error = e.errorDescription
+            await present(e)
             return false
         } catch {
             placing = false
@@ -209,6 +273,42 @@ final class SafeTradeStore: ObservableObject {
             Task { await refreshAccount() }
             return false
         }
+    }
+
+    /// Settle an unverified order: look for it in the recent list a few times (the
+    /// engine can lag a moment). Found → it went in. Several clean looks at a list
+    /// known to be complete → it didn't, and the button unlocks. Couldn't look → it
+    /// stays locked and the banner offers 重新核对.
+    func verifyUnverifiedOrder() async {
+        guard let check = unverifiedOrder, !verifyingOrder else { return }
+        verifyingOrder = true
+        defer { verifyingOrder = false }
+        var cleanLooks = 0
+        for delay in [0, 3, 6] {
+            if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+            guard let recent = try? await client.orders(market: market) else { continue }
+            if let hit = recent.first(where: check.isNew) {
+                unverifiedOrder = nil
+                error = nil
+                lastOrder = Loc("已在订单列表找到这笔订单 #%@", hit.id.map(String.init) ?? "?")
+                await refreshAccount()
+                return
+            }
+            cleanLooks += 1
+        }
+        if check.knownComplete, cleanLooks >= 2 {
+            unverifiedOrder = nil
+            error = Loc("订单列表里没有这笔订单，下单没有成功，可以重新下单。")
+        } else {
+            error = Loc("暂时无法确认下单结果，请到 SafeTrade 网站核对，或稍后点「重新核对」。")
+        }
+        await refreshAccount()
+    }
+
+    /// Manual override once the user has checked on the SafeTrade website.
+    func dismissUnverifiedOrder() {
+        unverifiedOrder = nil
+        error = nil
     }
 
     /// Cancel a resting order. Shows a per-row spinner (cancelingOrderID) until
@@ -222,32 +322,65 @@ final class SafeTradeStore: ObservableObject {
         do {
             try await client.cancelOrder(id: id)
             await refreshAccount()   // pull the real state (and the unlocked balance)
-        } catch let e as SafeTradeError {
-            self.error = e.errorDescription
         } catch {
-            self.error = error.localizedDescription
+            await present(error)
         }
         cancelingOrderID = nil
     }
 
-    /// Reconcile account-side data (balances + open orders) without raising the
-    /// blocking overlay. Used after placing an order; ticker/K-line are left to
-    /// the periodic refresh since your own order doesn't move them.
-    private func refreshAccount() async {
+    /// Balances + orders: the recent list plus EVERY open order (the recent list is
+    /// capped, and an open order past the cap couldn't be canceled). A failure keeps
+    /// what's on screen, flagged stale — an open order that "vanished" might get placed
+    /// again.
+    func refreshAccount() async {
         async let b = client.balances()
         async let o = client.orders(market: market)
-        if let bb = try? await b { balances = bb }
-        if let oo = try? await o { orders = oo }
+        async let w = try? client.orders(market: market, state: "wait", limit: 100)
+        do {
+            let nextBalances = try await b
+            let recent = try await o
+            let open = await w ?? orders.filter(\.isOpen)
+            if nextBalances != balances { balances = nextBalances }
+            let merged = Self.merge(recent: recent, open: open)
+            if merged != orders { orders = merged }
+            accountStale = false
+            accountError = nil
+            ipIssue = nil
+        } catch {
+            accountStale = true
+            await present(error, account: true)
+        }
+    }
+
+    /// Open orders first, then the recent list, each id once. An order in both lists
+    /// takes the recent list's copy — it's at least as new (the open list may be the
+    /// previous one, reused when the open-orders read fails), so a just-filled order
+    /// isn't shown as still open.
+    static func merge(recent: [STOrder], open: [STOrder]) -> [STOrder] {
+        let fresh = Dictionary(recent.compactMap { o in o.id.map { ($0, o) } }, uniquingKeysWith: { first, _ in first })
+        let stillOpen = open.map { o in o.id.flatMap { fresh[$0] } ?? o }.filter(\.isOpen)
+        var seen = Set<Int>()
+        return (stillOpen + recent).filter { o in
+            guard let id = o.id else { return true }
+            return seen.insert(id).inserted
+        }
+    }
+
+    /// Show a failure. An untrusted-IP refusal gets the IP card (with the address
+    /// SafeTrade sees) instead of a raw error line.
+    private func present(_ e: Error, account: Bool = false) async {
+        if (e as? SafeTradeError)?.authProblem == .untrustedIP {
+            if account { accountError = nil } else { error = nil }
+            if ipIssue == nil { ipIssue = SafeTradeIPIssue(ip: nil) }
+            if let ip = try? await client.publicIP() { ipIssue = SafeTradeIPIssue(ip: ip) }
+            return
+        }
+        if account { accountError = e.localizedDescription } else { error = e.localizedDescription }
     }
 
     private func nextCandleRequestID() -> Int {
         candleRequestID += 1
         return candleRequestID
-    }
-
-    /// Canonicalize a user-typed number to a period decimal separator for the API.
-    static func canonicalDecimal(_ s: String) -> String {
-        s.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
     }
 
     private func applyCandles(_ nextCandles: [STCandle], requestID: Int, period requestedPeriod: Int) {
@@ -292,6 +425,11 @@ final class SafeTradeStore: ObservableObject {
                     created_at: STTimestamp(Date().addingTimeInterval(-26 * 3600)), updated_at: nil),
         ]
         error = nil
+        accountError = nil
+        // SHOT_IP_ISSUE=1 adds the untrusted-IP card, to check its layout without an IP-bound key.
+        if ProcessInfo.processInfo.environment["SHOT_IP_ISSUE"] == "1" {
+            ipIssue = SafeTradeIPIssue(ip: "2605:52c0:2:b43:b037:29ff:fe00:f59a")
+        }
     }
     #endif
 }

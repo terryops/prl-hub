@@ -1,185 +1,6 @@
 import SwiftUI
 import Combine
 
-/// SafeTrade → on-chain withdrawal of PRL or USDT, per SafeTrade's REST API
-/// (swagger: /api/v2/trade/public/swagger.json, checked 2026-09-23):
-///   1. POST /trade/account/withdraws/generate_code {type:"email", address, currency, amount, blockchain_key}
-///      → SafeTrade e-mails a 6-digit code bound to that address + amount
-///   2. POST /trade/account/withdraws {currency, amount, address, blockchain_key,
-///      email_code, otp_code (2FA on), phone_code (phone verified)}
-///   Or, to a SafeTrade address-book entry: {currency, amount, blockchain_key,
-///   beneficiary_id, otp_code, phone_code} — no address, no e-mail code.
-@MainActor
-final class WithdrawStore: ObservableObject {
-    let currency: String                     // "prl" | "usdt"
-    /// Every chain the exchange lists for this currency (open or not).
-    @Published var networks: [STCurrencyNetwork] = []
-    /// Decimal places the exchange accepts for this currency (PRL 8, USDT 6).
-    @Published var precision = 8
-    /// The chosen chain. PRL has one and it is picked automatically; USDT has
-    /// several and the user must pick — a wrong chain can lose the funds.
-    @Published var networkKey: String?
-    var network: STCurrencyNetwork? { networks.first { $0.blockchain_key == networkKey } }
-    var openNetworks: [STCurrencyNetwork] { networks.filter(\.canWithdraw) }
-    @Published var history: [STWithdraw] = []
-    /// SafeTrade address-book entries for this currency (active and pending).
-    @Published var beneficiaries: [STBeneficiary] = []
-    /// Why the SafeTrade address book shows nothing usable here (read failed, or it
-    /// has entries but none for this coin/chain) — nil when it's fine or empty.
-    @Published var bookNote: String?
-    /// Set when the currency info (chains, fee, minimum) couldn't be loaded —
-    /// without it nothing can be submitted, so the page must say why.
-    @Published var loadError: String?
-    @Published var loadingInfo = false
-    /// "email" / "phone" while that code is being requested.
-    @Published var sendingCode: String?
-    /// Seconds until each code's "获取验证码" can be tapped again, per code type.
-    @Published var cooldowns: [String: Int] = [:]
-    /// Address | amount | chain the sent codes were issued for. SafeTrade binds a
-    /// code to exactly these, so once the form drifts from it the codes are dead.
-    @Published var codeContext: String?
-    @Published var submitting = false
-    @Published var needsPhoneCode = false    // revealed when the exchange asks for an SMS code
-    @Published var error: String?
-    @Published var notice: String?
-
-    private let client = SafeTradeClient()
-
-    init(currency: String) { self.currency = currency }
-
-    func load() async {
-        loadingInfo = true
-        async let c = client.currency(currency)
-        async let h = client.withdraws(currency: currency)
-        async let b = client.beneficiaries()
-        do {
-            let cc = try await c
-            networks = cc.networks
-            precision = cc.precision ?? precision
-            if cc.networks.count == 1 { networkKey = cc.networks[0].blockchain_key }
-            loadError = cc.networks.isEmpty ? Loc("SafeTrade 没有返回 %@ 的提现网络", currency.uppercased()) : nil
-        } catch {
-            loadError = Loc("读取 SafeTrade 提现信息失败：%@",
-                            (error as? SafeTradeError)?.errorDescription ?? error.localizedDescription)
-        }
-        loadingInfo = false
-        // History and the address book are optional extras — a failure there just
-        // leaves them out rather than blocking the withdrawal itself.
-        if let hh = try? await h { history = hh }
-        do {
-            let all = try await b
-            // An entry without a currency id still belongs here if its chain is one of ours.
-            beneficiaries = all.filter {
-                $0.currencyID == currency || ($0.currencyID == nil && network(forKey: $0.blockchain_key) != nil)
-            }
-            let usable = beneficiaries.filter { $0.destination != nil && network(forKey: chainKey(of: $0)) != nil }
-            if !all.isEmpty && usable.isEmpty {
-                let kinds = all.prefix(6).map { "\($0.currencyID ?? "?")/\($0.blockchain_key ?? "?")" }
-                bookNote = Loc("SafeTrade 地址簿有 %d 个地址（%@），但没有可用于 %@ 的。",
-                               all.count, kinds.joined(separator: ", "), currency.uppercased())
-            } else {
-                bookNote = nil
-            }
-        } catch {
-            beneficiaries = []
-            bookNote = Loc("读取 SafeTrade 地址簿失败：%@",
-                           (error as? SafeTradeError)?.errorDescription ?? error.localizedDescription)
-        }
-    }
-
-    func cooldown(_ type: String) -> Int { cooldowns[type] ?? 0 }
-
-    /// The form no longer matches what the codes were issued for: drop them and let
-    /// the user request fresh ones straight away (no waiting out the old cooldown).
-    func invalidateCodes() {
-        codeContext = nil
-        cooldowns = [:]
-        notice = nil
-        error = Loc("地址、数量或网络改了，之前的验证码已失效，请重新获取。")
-    }
-
-    func network(forKey key: String?) -> STCurrencyNetwork? { networks.first { $0.blockchain_key == key } }
-
-    /// The chain an address-book entry is on; an entry without one can only mean
-    /// the single chain of a one-chain coin like PRL.
-    func chainKey(of b: STBeneficiary) -> String? {
-        b.blockchain_key ?? (networks.count == 1 ? networks[0].blockchain_key : nil)
-    }
-
-    func sendCode(type: String, address: String, amount: Decimal, context: String) async {
-        guard let key = network?.blockchain_key, sendingCode == nil, cooldown(type) == 0 else { return }
-        sendingCode = type; error = nil; notice = nil
-        do {
-            try await client.sendWithdrawCode(type: type, address: address, amount: amount,
-                                              blockchainKey: key, currency: currency)
-            notice = type == "phone" ? Loc("短信验证码已发送") : Loc("验证码已发到你的 SafeTrade 注册邮箱")
-            codeContext = context
-            startCooldown(type)
-        } catch {
-            present(error)
-        }
-        sendingCode = nil
-    }
-
-    /// Returns true when the exchange accepted (or may have accepted) the request,
-    /// so the form can clear itself instead of inviting a second submit.
-    func submit(address: String, amount: Decimal, beneficiaryID: Int?,
-                emailCode: String, otpCode: String, phoneCode: String) async -> Bool {
-        guard let key = network?.blockchain_key, !submitting else { return false }
-        submitting = true; error = nil; notice = nil
-        defer { submitting = false }
-        do {
-            try await client.createWithdraw(address: address, amount: amount, blockchainKey: key,
-                                            beneficiaryID: beneficiaryID,
-                                            emailCode: emailCode, otpCode: otpCode, phoneCode: phoneCode,
-                                            currency: currency)
-            codeContext = nil
-            notice = Loc("提现已提交，SafeTrade 处理后会广播上链")
-            await load()
-            return true
-        } catch SafeTradeError.withdrawUnverified {
-            codeContext = nil
-            error = SafeTradeError.withdrawUnverified.errorDescription
-            await load()
-            return true
-        } catch {
-            present(error)
-            return false
-        }
-    }
-
-    private func present(_ error: Error) {
-        if case SafeTradeError.http(let code, let body) = error {
-            let keys = SafeTradeError.errorKeys(body)
-            if keys.contains(where: { $0.hasSuffix("missing_phone_code") }) { needsPhoneCode = true }
-            // The key authenticated fine elsewhere (balances load), so an authz
-            // rejection here means the key may not withdraw: SafeTrade keys need
-            // "Enable Withdraw", which in turn requires a Trusted IPs list — and a
-            // phone's IP changes between networks.
-            if (code == 401 || code == 403), keys.contains(where: { $0.hasPrefix("authz.") }) {
-                self.error = Loc("SafeTrade 拒绝了这个 API 密钥的提现请求（%@）。到 SafeTrade「API 管理」编辑这个密钥：勾选 Enable Withdraw，并把当前网络的公网 IP 加入 Trusted IPs。", keys.joined(separator: ", "))
-                return
-            }
-        }
-        self.error = (error as? SafeTradeError)?.errorDescription ?? error.localizedDescription
-    }
-
-    private var cooldownRuns: [String: UUID] = [:]
-
-    private func startCooldown(_ type: String) {
-        cooldowns[type] = 60
-        let run = UUID()
-        cooldownRuns[type] = run   // a newer countdown for this type retires this one
-        Task {
-            while cooldownRuns[type] == run, cooldown(type) > 0 {
-                try? await Task.sleep(for: .seconds(1))
-                guard cooldownRuns[type] == run else { return }
-                cooldowns[type] = max(0, cooldown(type) - 1)
-            }
-        }
-    }
-}
-
 struct WithdrawView: View {
     @ObservedObject var trade: SafeTradeStore
     @ObservedObject private var wallet = WalletStore.shared
@@ -195,6 +16,7 @@ struct WithdrawView: View {
     @State private var otpCode = ""
     @State private var phoneCode = ""
     @State private var confirming = false
+    @State private var authenticating = false   // Face ID / passcode prompt up before submitting
     @State private var naming = false          // "保存为常用地址" name prompt
     @State private var presetName = ""
     @State private var managingPresets = false
@@ -205,7 +27,7 @@ struct WithdrawView: View {
 
     init(trade: SafeTradeStore, currency: String) {
         self.trade = trade
-        _store = StateObject(wrappedValue: WithdrawStore(currency: currency))
+        _store = StateObject(wrappedValue: WithdrawStore(currency: currency, trade: trade))
     }
 
     private var isPRL: Bool { store.currency == "prl" }
@@ -252,7 +74,8 @@ struct WithdrawView: View {
         codeReady && store.network?.canWithdraw == true && (beneficiary != nil || emailCode.count == 6)
             && (otpCode.isEmpty || otpCode.count == 6)
             && (!store.needsPhoneCode || phoneCode.count == 6)
-            && !store.submitting
+            && !store.submitting && !authenticating
+            && store.unverified == nil && !store.verifying   // a previous one's outcome is still unknown
     }
 
     /// Mainnet receive address of every wallet on this device (index 0).
@@ -289,15 +112,7 @@ struct WithdrawView: View {
                 }
                 #endif
             }
-            .overlay {
-                if store.submitting {
-                    ZStack {
-                        Color.black.opacity(0.12).ignoresSafeArea()
-                        ProgressView(Loc("处理中…")).controlSize(.large)
-                            .pearlCard(padding: Pearl.Space.lg, radius: Pearl.Radius.sm, elevated: true)
-                    }
-                }
-            }
+            .processingOverlay(store.submitting)
             .task {
                 if isPRL, address.isEmpty, let a = activeWalletAddress { address = a }
                 await store.load()
@@ -338,11 +153,21 @@ struct WithdrawView: View {
         }
     }
 
-    /// Runs after the user confirms in WithdrawConfirmSheet.
+    /// Runs after the user confirms in WithdrawConfirmSheet. Money leaves the account,
+    /// so the device owner must authenticate first (Face ID / Touch ID / passcode) —
+    /// the same gate as an on-chain send from the wallet.
     private func submitConfirmed() {
         let a = trimmedAddress, v = amountValue ?? 0
         let viaBook = beneficiary?.id
+        authenticating = true
         Task {
+            let ok = await wallet.authenticate(reason: Loc("验证身份以确认提现"))
+            authenticating = false
+            guard ok else {
+                store.error = wallet.lastError ?? Loc("身份验证未通过，已取消提现")
+                wallet.lastError = nil
+                return
+            }
             if await store.submit(address: a, amount: v, beneficiaryID: viaBook,
                                   emailCode: viaBook == nil ? emailCode : "",
                                   otpCode: otpCode, phoneCode: phoneCode) {
@@ -615,7 +440,11 @@ struct WithdrawView: View {
             if store.needsPhoneCode {
                 codeField(Loc("短信验证码"), text: $phoneCode, sendType: "phone")
             }
-            Text(Loc("API 密钥需在 SafeTrade 开启 Enable Withdraw，且只能从它的 Trusted IPs 里的网络提现。"))
+            // Which key signs this withdrawal: SafeTrade keys may only withdraw with
+            // Enable Withdraw + a Trusted IPs list, which is why a separate one exists.
+            Text(SafeTradeSecrets.hasWithdrawCredentials
+                 ? Loc("使用提现专用密钥（%@）。它只能从 Trusted IPs 里的网络提现。", SafeTradeSecrets.maskedWithdrawKey)
+                 : Loc("API 密钥需在 SafeTrade 开启 Enable Withdraw，且只能从它的 Trusted IPs 里的网络提现。"))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button { focused = false; confirming = true } label: { Text(Loc("提现")) }
@@ -657,14 +486,14 @@ struct WithdrawView: View {
     }
 
     @ViewBuilder private var statusMessages: some View {
-        if let msg = store.notice {
-            Label(msg, systemImage: "checkmark.seal.fill").foregroundStyle(.green)
-                .font(.callout).frame(maxWidth: .infinity, alignment: .leading)
+        if store.unverified != nil {
+            UnverifiedBanner(text: Loc("上一笔提现的结果还没确认，核对清楚前暂停提现。"),
+                             checking: store.verifying,
+                             recheck: { Task { await store.verifyUnverified() } },
+                             dismiss: { store.dismissUnverified() })
         }
-        if let e = store.error {
-            Label(e, systemImage: "xmark.octagon").foregroundStyle(.red)
-                .font(.callout).frame(maxWidth: .infinity, alignment: .leading)
-        }
+        if let issue = store.ipIssue { UntrustedIPCard(issue: issue, forWithdraw: true) }
+        TradeStatusLines(notice: store.notice, errors: [store.error])
     }
 
     @ViewBuilder private var historyCard: some View {
@@ -689,7 +518,7 @@ struct WithdrawView: View {
                 Text("\(w.amountText ?? "—") \(unit)" + (isPRL ? "" : store.network(forKey: w.blockchain_key).map { " · \($0.name)" } ?? ""))
                     .font(.callout.monospacedDigit())
                 if let d = w.destination {
-                    Text(short(d)).font(.caption.monospaced()).foregroundStyle(.secondary)
+                    Text(shortAddr(d)).font(.caption.monospaced()).foregroundStyle(.secondary)
                 }
                 if let at = w.created_at?.date {
                     Text(at, format: .dateTime.month(.defaultDigits).day().hour().minute())
@@ -718,8 +547,6 @@ struct WithdrawView: View {
         }
     }
 
-    private func short(_ a: String) -> String { a.count > 20 ? a.prefix(10) + "…" + a.suffix(8) : a }
-
     /// Plain decimal (no grouping, period separator, ≤ 8 dp) — also what MAX fills in,
     /// so it must stay parseable.
     private func fmt(_ d: Decimal, floorTo places: Int = 8) -> String {
@@ -745,187 +572,5 @@ struct WithdrawView: View {
         case "canceled", "cancelled", "rejected", "failed", "errored": return .red
         default: return .orange
         }
-    }
-}
-
-/// List of saved USDT withdrawal addresses, for deleting ones no longer wanted.
-private struct PresetAddressesView: View {
-    let currency: String
-    @ObservedObject var store: WithdrawStore
-    @ObservedObject private var book = WithdrawAddressBook.shared
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                ForEach(book.items(for: currency)) { p in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(p.name)
-                            Text(store.network(forKey: p.blockchainKey)?.name ?? p.blockchainKey)
-                                .font(.caption).foregroundStyle(.secondary)
-                            Text(p.address).font(.caption2.monospaced()).foregroundStyle(.secondary)
-                                .lineLimit(1).truncationMode(.middle)
-                        }
-                        Spacer()
-                        #if os(macOS)
-                        Button(role: .destructive) { book.remove(p.id) } label: { Image(systemName: "trash") }
-                            .buttonStyle(.borderless)
-                        #endif
-                    }
-                }
-                .onDelete { idx in
-                    let list = book.items(for: currency)
-                    idx.map { list[$0].id }.forEach(book.remove)
-                }
-            }
-            .overlay {
-                if book.items(for: currency).isEmpty {
-                    Text(Loc("还没有常用地址")).foregroundStyle(.secondary)
-                }
-            }
-            .navigationTitle(Loc("常用地址"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button(Loc("完成")) { dismiss() } }
-                    .noGlassBackground()
-            }
-        }
-        #if os(macOS)
-        .frame(minWidth: 420, minHeight: 320)
-        #endif
-    }
-}
-
-/// Final check before a withdrawal, laid out like a receipt: the amount maths
-/// (amount − fee = received) in one group, where it goes (network + address) in
-/// another, then the warning and a pinned confirm button. The address is split
-/// into 4-character groups — first and last in bold — so it can be checked
-/// piece by piece against the receiving wallet.
-private struct WithdrawConfirmSheet: View {
-    let amount: String
-    let fee: String
-    let received: String
-    let unit: String
-    let network: String?
-    let address: String
-    let addressName: String?
-    let onConfirm: () -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Pearl.Space.lg) {
-                    section(Loc("金额")) {
-                        row(Loc("提现数量"), amount)
-                        Divider()
-                        row(Loc("手续费"), "− " + fee)
-                        Divider()
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(Loc("实际到账")).font(.subheadline.weight(.semibold))
-                            Spacer()
-                            Text(verbatim: "\(received) \(unit)")
-                                .font(.title3.weight(.bold)).monospacedDigit()
-                        }
-                        .padding(.vertical, 12)
-                    }
-
-                    section(Loc("收款信息")) {
-                        if let network {
-                            row(Loc("网络"), network)
-                            Divider()
-                        }
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text(Loc("收款地址")).foregroundStyle(.secondary)
-                                Spacer()
-                                if let addressName {
-                                    Text(addressName).foregroundStyle(.secondary).lineLimit(1)
-                                }
-                            }
-                            .font(.subheadline)
-                            groupedAddress
-                                .font(.body.monospaced())
-                                .lineSpacing(4)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .textSelection(.enabled)
-                        }
-                        .padding(.vertical, 12)
-                    }
-
-                    Label {
-                        Text(Loc("链上转账无法撤回，请核对地址和网络。"))
-                            .fixedSize(horizontal: false, vertical: true)
-                    } icon: {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                    }
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-                    .padding(Pearl.Space.md)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: Pearl.Radius.xs, style: .continuous))
-                }
-                .padding(Pearl.Space.screen)
-                .frame(maxWidth: 520)
-                .frame(maxWidth: .infinity)
-            }
-            .safeAreaInset(edge: .bottom) {
-                Button { dismiss(); onConfirm() } label: { Text(Loc("确认提现")) }
-                    .buttonStyle(.pearl(Pearl.brand))
-                    .frame(maxWidth: 520)
-                    .padding(.horizontal, Pearl.Space.screen)
-                    .padding(.vertical, Pearl.Space.sm)
-                    .frame(maxWidth: .infinity)
-                    .background(.bar)
-            }
-            .navigationTitle(Loc("确认提现"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(Loc("取消")) { dismiss() } }
-                    .noGlassBackground()
-            }
-        }
-        #if os(iOS)
-        .presentationDetents([.large])
-        #else
-        .frame(minWidth: 420, minHeight: 520)
-        #endif
-    }
-
-    /// A titled group: small caption heading above a card of rows.
-    private func section<Rows: View>(_ title: String, @ViewBuilder _ rows: () -> Rows) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
-                .padding(.leading, 4)
-            VStack(spacing: 0) { rows() }
-                .padding(.horizontal, Pearl.Space.md)
-                .pearlCard(padding: 0, radius: Pearl.Radius.sm)
-        }
-    }
-
-    private func row(_ label: String, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(label).foregroundStyle(.secondary)
-            Spacer()
-            Text(verbatim: value).monospacedDigit().multilineTextAlignment(.trailing)
-        }
-        .font(.subheadline)
-        .padding(.vertical, 12)
-    }
-
-    /// The address in 4-character groups, first and last group bold, the rest
-    /// secondary — e.g. **prl1** pqvw gxsx … 2qxl **z0q9m**.
-    private var groupedAddress: Text {
-        let chars = Array(address)
-        let groups = stride(from: 0, to: chars.count, by: 4).map { String(chars[$0..<min($0 + 4, chars.count)]) }
-        guard groups.count > 2 else { return Text(verbatim: address).bold() }
-        var t = Text(verbatim: groups[0]).bold()
-        for g in groups.dropFirst().dropLast() { t = t + Text(verbatim: " " + g).foregroundColor(.secondary) }
-        return t + Text(verbatim: " " + groups[groups.count - 1]).bold()
     }
 }

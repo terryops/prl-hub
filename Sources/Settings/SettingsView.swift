@@ -3,27 +3,17 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage("ui.appearance") private var appearance = "system"   // system | light | dark
     @AppStorage("ui.lockPortrait") private var lockPortrait = true   // iPhone 锁定竖屏 — same key as OrientationLock.key
-    @AppStorage("safetrade.market") private var market = "prlusdt"
 
-    @State private var apiKeyInput = ""
-    @State private var apiSecretInput = ""
-    @State private var keyMsg: String?          // transient "已保存" / "已清除"
-    @State private var keyMsgIsWarning = false   // green check vs. orange warning
-    @State private var verifyingKey = false      // a save+verify request is in flight
-    @State private var credTick = 0             // bump to re-read SafeTradeSecrets after an iCloud pull
     // Scroll-driven header morph. An @Observable held in @State: only the two views that
     // read `progress` (the logo row and the nav title) re-render per scroll frame, not
     // this whole Form.
     @State private var header = SettingsHeaderScroll()
-    @FocusState private var focusedField: Field?
-    private enum Field { case market, apiKey, apiSecret }
 
     @EnvironmentObject private var loc: LocalizationManager
     @EnvironmentObject private var currency: CurrencyManager
     @ObservedObject private var alerts = PriceAlertStore.shared
     @ObservedObject private var pro = ProStore.shared
     @ObservedObject private var live = PriceLiveActivity.shared
-    private var marketValid: Bool { SafeTradeMarket.isValid(market) }
 
     private var appVersion: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -138,66 +128,8 @@ struct SettingsView: View {
                 }
 
                 if AppFeatures.tradeEnabled {   // gated off for App Store: no in-app trading
-                Section(Loc("交易（SafeTrade）")) {
-                    LabeledContent(Loc("交易所"), value: "safetrade.com")
-                    TextField(Loc("交易市场（例如 prlusdt）"), text: $market)
-                        .focused($focusedField, equals: .market)
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled()
-                        #endif
-                    if !market.isEmpty && !marketValid {
-                        Text(Loc("交易市场只能包含字母和数字，例如 prlusdt"))
-                            .font(.caption).foregroundStyle(.red)
-                    }
-                    // Two mutually-exclusive modes: once keys are saved, show only
-                    // their masked status + 清除密钥 (the input fields/保存密钥 would
-                    // be redundant); clearing flips back to the input fields. credTick
-                    // re-reads the Keychain so the mode switches after save/clear/sync.
-                    let _ = credTick
-                    if SafeTradeSecrets.hasCredentials {
-                        LabeledContent(Loc("当前 Key"), value: SafeTradeSecrets.maskedKey)
-                        LabeledContent(Loc("当前 Secret"), value: Loc("已设置 ✓"))
-                        Button(Loc("清除密钥"), role: .destructive) {
-                            SafeTradeSecrets.clear()
-                            credTick += 1
-                            flashKeyMsg(Loc("已清除"))
-                        }
-                    } else {
-                        SecureField("API Key", text: $apiKeyInput)
-                            .focused($focusedField, equals: .apiKey)
-                            #if os(iOS)
-                            .textInputAutocapitalization(.never).autocorrectionDisabled()
-                            #endif
-                            .accessibilityLabel("SafeTrade API Key")
-                        SecureField("API Secret", text: $apiSecretInput)
-                            .focused($focusedField, equals: .apiSecret)
-                            #if os(iOS)
-                            .textInputAutocapitalization(.never).autocorrectionDisabled()
-                            #endif
-                            .accessibilityLabel("SafeTrade API Secret")
-                        Button {
-                            let key = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                            let secret = apiSecretInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                            Task { await saveAndVerifyKeys(apiKey: key, apiSecret: secret) }
-                        } label: {
-                            HStack {
-                                Text(verifyingKey ? Loc("验证中…") : Loc("保存密钥"))
-                                if verifyingKey { Spacer(); ProgressView() }
-                            }
-                        }
-                        .disabled(apiKeyInput.isEmpty || apiSecretInput.isEmpty || verifyingKey)
-                    }
-                    if let keyMsg {
-                        Label(keyMsg, systemImage: keyMsgIsWarning ? "exclamationmark.triangle" : "checkmark.seal")
-                            .font(.footnote).foregroundStyle(keyMsgIsWarning ? .orange : .green)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityLabel(keyMsg)
-                    }
-                    Label(Loc("API 密钥存于 iCloud 钥匙串（端到端加密，仅你可见），在各设备间同步；助记词不同步，仅存于本机钥匙串。"), systemImage: "key.icloud")
-                        .font(.footnote).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    SafeTradeSettingsSection()
                 }
-                }   // AppFeatures.tradeEnabled
 
                 Section(Loc("安全")) {
                     Label(Loc("助记词加密存于钥匙串；查看助记词与转账需 Face ID / Touch ID 验证。"), systemImage: "key.fill")
@@ -238,12 +170,7 @@ struct SettingsView: View {
             .navigationTitle(Loc("设置"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
-            // 文本/密钥输入键盘上方的「完成」按钮，点一下即可收起键盘。
             .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button(Loc("完成")) { focusedField = nil }.fontWeight(.semibold)
-                }
                 // "设置" ↔ inline logo. The inline logo matches the content header's
                 // fully-collapsed size, so the two icons stay horizontally aligned, and
                 // it only fades in once the big header has scrolled away.
@@ -252,63 +179,11 @@ struct SettingsView: View {
                 }
             }
             #endif
-            .onChange(of: market) { _, value in
-                let cleaned = SafeTradeMarket.cleaned(value)
-                if cleaned != value {
-                    market = cleaned
-                    return
-                }
-                if SafeTradeMarket.isValid(cleaned) { CloudSync.push("safetrade.market") }
-            }
             .onChange(of: appearance) { _, _ in CloudSync.push("ui.appearance") }
             #if os(iOS)
             .onChange(of: lockPortrait) { _, _ in OrientationLock.apply() }
             #endif
-            // Re-read SafeTradeSecrets when iCloud pulls keys in (the @State bump re-renders the body).
-            .onReceive(NotificationCenter.default.publisher(for: .cloudSyncDidUpdate)) { _ in credTick += 1 }
         }
-    }
-
-    /// Save the entered keys, then immediately verify them against SafeTrade so we
-    /// can tell the user *why* if a trade-authed request fails — wrong key/secret,
-    /// IP not whitelisted, or a network problem — instead of silently storing a key
-    /// that won't work. We still save on a failed check (the keys may be correct but
-    /// the IP simply isn't whitelisted yet, which the user fixes exchange-side), and
-    /// surface a warning rather than a hard failure.
-    @MainActor
-    private func saveAndVerifyKeys(apiKey: String, apiSecret: String) async {
-        verifyingKey = true
-        withAnimation { keyMsg = nil }
-        // Check what the user typed *before* committing it (signs with these keys).
-        let check = await SafeTradeClient().verifyCredentials(apiKey: apiKey, apiSecret: apiSecret)
-        // Stored in the iCloud Keychain — syncs to your other devices end-to-end
-        // encrypted, so no manual (plaintext) KVS push.
-        let saved = SafeTradeSecrets.save(apiKey: apiKey, apiSecret: apiSecret)
-        apiKeyInput = ""; apiSecretInput = ""
-        credTick += 1
-        verifyingKey = false
-        guard saved else {
-            flashKeyMsg(Loc("无法写入钥匙串（Keychain）"), warning: true)
-            return
-        }
-        switch check {
-        case .ok:
-            flashKeyMsg(Loc("已保存并通过验证（会经 iCloud 同步到其他设备）"))
-        case .rejected:
-            flashKeyMsg(Loc("已保存，但验证未通过：API Key/Secret 可能不正确，或当前 IP 未加入白名单。请在 SafeTrade 后台核对密钥，并为此网络的 IP 开通访问权限。"), warning: true, sticky: true)
-        case .serverError(let code, _):
-            flashKeyMsg(Loc("已保存，但交易所返回错误（HTTP %@）。请稍后在交易页重试。", String(code)), warning: true, sticky: true)
-        case .network:
-            flashKeyMsg(Loc("已保存，但暂时无法连接 SafeTrade（网络问题）。请检查网络后在交易页确认。"), warning: true, sticky: true)
-        }
-    }
-
-    /// Show a transient status line under the key fields. Warnings are orange and
-    /// linger longer (they're actionable); successes auto-dismiss quickly.
-    private func flashKeyMsg(_ msg: String, warning: Bool = false, sticky: Bool = false) {
-        withAnimation { keyMsg = msg; keyMsgIsWarning = warning }
-        let seconds = sticky ? 10 : 3
-        Task { try? await Task.sleep(for: .seconds(seconds)); withAnimation { keyMsg = nil } }
     }
 }
 
