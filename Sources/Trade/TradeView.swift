@@ -12,9 +12,10 @@ struct TradeView: View {
     @State private var orderToCancel: STOrder?
     @State private var showingKeyGuide = TradeView.shotKeyGuide  // 如何获取 API 密钥
     @State private var withdrawing: WithdrawCurrency? = TradeView.shotWithdraw
+    @State private var depositing: WithdrawCurrency? = TradeView.shotDeposit
     @State private var sideColumnWidth: CGFloat = 20   // measured width of the 买/卖 column
 
-    /// Which balance the withdraw sheet is for (`.sheet(item:)` needs Identifiable).
+    /// Which balance the withdraw / deposit sheet is for (`.sheet(item:)` needs Identifiable).
     struct WithdrawCurrency: Identifiable { let id: String }
 
     /// DEBUG-only: SHOT_WITHDRAW=prl|usdt opens that withdraw sheet on launch (with
@@ -26,6 +27,28 @@ struct TradeView: View {
         }
         #endif
         return nil
+    }
+
+    /// DEBUG-only: SHOT_DEPOSIT=prl|usdt opens that deposit sheet on launch (with
+    /// SHOT_TAB=1). With SHOT_TRADE_DEMO it shows a demo address.
+    private static var shotDeposit: WithdrawCurrency? {
+        #if DEBUG
+        if let c = ProcessInfo.processInfo.environment["SHOT_DEPOSIT"], ["prl", "usdt"].contains(c) {
+            return WithdrawCurrency(id: c)
+        }
+        #endif
+        return nil
+    }
+
+    /// DEBUG-only: the demo account (SHOT_TRADE_DEMO) hides 充值 / 提现, so the App
+    /// Store captures stay as they are; SHOT_FUNDS_BUTTONS=1 (or SHOT_DEPOSIT) shows them.
+    private static var shotFundsButtons: Bool {
+        #if DEBUG
+        let env = ProcessInfo.processInfo.environment
+        return env["SHOT_FUNDS_BUTTONS"] == "1" || env["SHOT_DEPOSIT"] != nil
+        #else
+        return false
+        #endif
     }
 
     /// DEBUG-only: SHOT_KEY_GUIDE=1 opens 如何获取 API 密钥 on launch (with SHOT_TAB=1).
@@ -79,6 +102,7 @@ struct TradeView: View {
             .navigationTitle(Loc("交易 · SafeTrade"))
             .navigationDestination(isPresented: $openAlerts) { PriceAlertsView() }
             .sheet(item: $withdrawing) { WithdrawView(trade: store, currency: $0.id).environmentObject(contacts) }
+            .sheet(item: $depositing) { DepositView(trade: store, currency: $0.id).environmentObject(contacts) }
             .sheet(isPresented: $showingKeyGuide) { SafeTradeKeyGuide() }
             .sheet(isPresented: $upsell.showing, onDismiss: {
                 if ProStore.shared.isPro { openAlerts = true }
@@ -209,7 +233,7 @@ struct TradeView: View {
     /// Both exchange balances in ONE card, side by side — two half-empty cards with
     /// a coloured dot each read as filler; one quiet row reads as a ledger line.
     private var balancesRow: some View {
-        let canWithdraw = store.hasCredentials && !SafeTradeStore.shotDemo
+        let canMoveFunds = (store.hasCredentials && !SafeTradeStore.shotDemo) || Self.shotFundsButtons
         // Both columns reserve the locked line or neither, so they line up.
         let footer = (usdt?.lockedValue ?? 0) > 0 || (prl?.lockedValue ?? 0) > 0
         // "余额" once, as the card's title; each column is then just the coin.
@@ -224,9 +248,9 @@ struct TradeView: View {
                 }
             }
             HStack(alignment: .top, spacing: 0) {
-                balanceColumn("USDT", usdt, withdraw: canWithdraw, footer: footer)
+                balanceColumn("USDT", usdt, funds: canMoveFunds, footer: footer)
                 Divider().padding(.horizontal, Pearl.Space.lg)
-                balanceColumn("PRL", prl, withdraw: canWithdraw, footer: footer)
+                balanceColumn("PRL", prl, funds: canMoveFunds, footer: footer)
             }
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -344,7 +368,22 @@ struct TradeView: View {
         }
     }
 
-    @ViewBuilder private func balanceColumn(_ name: String, _ b: STBalance?, withdraw: Bool, footer: Bool) -> some View {
+    /// One of the two soft capsules under a balance (充值 / 提现).
+    private func fundsButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1).minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(Pearl.accent.opacity(0.12), in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Pearl.accent)
+    }
+
+    @ViewBuilder private func balanceColumn(_ name: String, _ b: STBalance?, funds: Bool, footer: Bool) -> some View {
         let locked = b?.lockedValue ?? 0
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 5) {
@@ -356,8 +395,8 @@ struct TradeView: View {
                 .font(.system(.title3, design: .rounded).weight(.semibold).monospacedDigit())
                 .lineLimit(1).minimumScaleFactor(0.6)
             // Locked amount on its own line (reserved in both columns when either has
-            // one, so they line up), then 提现 as a soft full-width button — off the
-            // coin line, where it crowded the name and the divider.
+            // one, so they line up), then 充值 / 提现 as two soft buttons side by side —
+            // off the coin line, where they would crowd the name and the divider.
             if footer {
                 Text(Loc("锁定 %@", String(format: "%.4f", locked)))
                     .font(.caption2).foregroundStyle(.secondary)
@@ -365,18 +404,11 @@ struct TradeView: View {
                     .opacity(locked > 0 ? 1 : 0)
                     .accessibilityHidden(locked <= 0)
             }
-            if withdraw {
-                Button { withdrawing = WithdrawCurrency(id: name.lowercased()) } label: {
-                    Text(Loc("提现"))
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .background(Pearl.accent.opacity(0.12), in: Capsule())
-                        .contentShape(Capsule())
+            if funds {
+                HStack(spacing: 6) {
+                    fundsButton(Loc("充值")) { depositing = WithdrawCurrency(id: name.lowercased()) }
+                    fundsButton(Loc("提现")) { withdrawing = WithdrawCurrency(id: name.lowercased()) }
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(Pearl.accent)
                 .padding(.top, 2)
             }
         }

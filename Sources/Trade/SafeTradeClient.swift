@@ -19,6 +19,9 @@ struct STBalance: Decodable, Identifiable, Equatable {
     let currency: String
     let balance: String
     let locked: String
+    /// Deposit addresses SafeTrade already generated for this coin (the web client
+    /// reads them off this same response), one per chain; absent until generated.
+    var deposit_addresses: [STDepositAddress]? = nil
     var id: String { currency }
     var balanceValue: Double { Double(balance) ?? 0 }
     var lockedValue: Double { Double(locked) ?? 0 }
@@ -143,9 +146,10 @@ struct STOrder: Decodable, Equatable {
     }
 }
 
-/// One withdrawal network of a currency (`GET /trade/public/currencies/{id}`).
-/// PRL has one (`pearl-tokens`); USDT has several chains (checked live 2026-09-23:
-/// Arbitrum / BSC / Solana / Ethereum open, TRON / Base / Polygon … closed).
+/// One network of a currency (`GET /trade/public/currencies/{id}`), for withdrawing
+/// and depositing. PRL has one (`pearl-tokens`); USDT has several chains (checked live
+/// 2026-09-23: Arbitrum / BSC / Solana / Ethereum open, TRON / Base / Polygon … closed;
+/// deposits 2026-09-27: every chain but Pulsechain open).
 struct STCurrencyNetwork: Decodable, Identifiable {
     let blockchain_key: String
     let `protocol`: String?          // short ticker-style code, e.g. "BSC", "ARB"
@@ -154,9 +158,16 @@ struct STCurrencyNetwork: Decodable, Identifiable {
     let withdraw_fee: String?
     let withdraw_fee_ratio: String?
     let min_withdraw_amount: String?
+    let deposit_enabled: Bool?
+    let min_deposit_amount: String?
+    let min_confirmations: Int?
+    let deposit_fee: String?
     let status: String?
     let explorer_transaction: String?
     let system_options: SystemOptions?
+    /// Free-form per-chain settings (contract address, gas, `maintenance_message`,
+    /// `deposit_note` …); values come as strings, numbers or booleans.
+    let options: [String: STLooseText]?
     struct SystemOptions: Decodable { let address_validate_regexes: [String]? }
 
     var id: String { blockchain_key }
@@ -168,6 +179,14 @@ struct STCurrencyNetwork: Decodable, Identifiable {
         return `protocol` ?? name
     }
     var canWithdraw: Bool { withdraw_enabled == true && (status ?? "active") == "active" }
+    /// Same filter as the web client's deposit page: an active chain with deposits on.
+    var canDeposit: Bool { deposit_enabled == true && (status ?? "active") == "active" }
+    var minDeposit: Decimal { Decimal(string: min_deposit_amount ?? "") ?? 0 }
+    var depositFee: Decimal { Decimal(string: deposit_fee ?? "") ?? 0 }
+    /// SafeTrade's own notice for this chain ("… is in maintenance …"), if any.
+    var maintenanceMessage: String? {
+        options?["maintenance_message"].map(\.text).flatMap { $0.isEmpty ? nil : $0 }
+    }
     /// Same rule as the SafeTrade web client: max(fixed fee, amount × ratio).
     func fee(for amount: Decimal) -> Decimal {
         let fixed = Decimal(string: withdraw_fee ?? "") ?? 0
@@ -230,6 +249,88 @@ struct STWithdraw: Decodable, Identifiable {
     var destination: String? { rid ?? address }
     var chainTxid: String? { [blockchain_txid, txid].compactMap { $0 }.first { !$0.isEmpty } }
     var stateValue: String { (state ?? status ?? "").lowercased() }
+}
+
+/// A JSON scalar kept as text (string, number or bool); anything else becomes "".
+/// Never throws, so one odd value can't fail the object around it.
+struct STLooseText: Decodable, Equatable {
+    let text: String
+    init(_ text: String) { self.text = text }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if let s = try? c.decode(String.self) { text = s }
+        else if let b = try? c.decode(Bool.self) { text = b ? "true" : "false" }
+        else if let d = try? c.decode(Decimal.self) { text = NSDecimalNumber(decimal: d).stringValue }
+        else { text = "" }
+    }
+}
+
+/// A deposit address, as the web client reads it from
+/// `GET /trade/account/deposit_address/{currency}?network={blockchain_key}` and from
+/// each balance's `deposit_addresses`. An address-memo coin packs the memo in as
+/// `"addr?memo=…"` (the web client splits it the same way). An empty address means
+/// SafeTrade is still generating one.
+struct STDepositAddress: Decodable, Equatable {
+    let address: String?
+    let network: String?              // the chain's blockchain_key
+    let currencies: [String]?
+    let parent_address: String?
+
+    /// The address to send to, without the memo part.
+    var plainAddress: String {
+        String((address ?? "").split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).first ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    /// The memo / tag the deposit must carry, if this chain uses one.
+    var memo: String? {
+        guard let a = address, let r = a.range(of: "?memo=") else { return nil }
+        let m = String(a[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return m.isEmpty ? nil : m
+    }
+    var isReady: Bool { !plainAddress.isEmpty }
+
+    /// The address for `currency` on chain `key` among several (a balance's list).
+    static func pick(_ list: [STDepositAddress], currency: String, network key: String) -> STDepositAddress? {
+        list.first { $0.network == key && ($0.currencies ?? [currency]).contains(currency) && $0.isReady }
+    }
+}
+
+/// A deposit as listed by `GET /trade/account/deposits` (fields as the web client's
+/// history table reads them). Decoded per row, every field optional but the id.
+struct STDeposit: Decodable, Identifiable {
+    let id: Int
+    let currency: String?
+    let blockchain_key: String?
+    private let amount: STNumberText?
+    private let fee: STNumberText?
+    /// The web client treats this as a flag (truthy = credited to the balance).
+    private let credited: STLooseText?
+    let fee_paid: Bool?
+    let fee_currency: String?
+    let txid: String?
+    let address: String?
+    let state: String?
+    let created_at: STTimestamp?
+
+    var amountText: String? { amount?.text }
+    var feeText: String? { fee?.text }
+
+    enum Status: Equatable { case credited, processing, feeRequired, failed }
+
+    /// Same reading as the web client: credited → done; a fee in another coin still
+    /// unpaid → waiting on that fee; a terminal failure state → failed; else in progress.
+    var status: Status {
+        if let c = credited?.text.lowercased(), c == "true" || (Decimal(string: c) ?? 0) > 0 { return .credited }
+        switch (state ?? "").lowercased() {
+        case "accepted", "collected", "succeed", "success", "done", "completed": return .credited
+        case "rejected", "canceled", "cancelled", "errored", "failed", "skipped", "refunding": return .failed
+        default: break
+        }
+        if fee_paid == false, let fc = fee_currency, let c = currency, fc.lowercased() != c.lowercased() {
+            return .feeRequired
+        }
+        return .processing
+    }
 }
 
 /// An entry in the user's SafeTrade address book ("beneficiary"), managed on the
@@ -301,6 +402,7 @@ extension SafeTradeError {
     /// through to the raw "HTTP code: body" text.
     static func message(forKey key: String) -> String? {
         if key.hasPrefix("market.") { return orderMessage(forKey: key) }
+        if let m = depositMessage(forKey: key) { return m }
         switch key.replacingOccurrences(of: "account.beneficiary.", with: "account.withdraw.") {
         case "account.withdraw.missing_email_code": return Loc("请填写邮箱验证码")
         case "account.withdraw.missing_phone_code": return Loc("请填写短信验证码")
@@ -316,6 +418,23 @@ extension SafeTradeError {
         case "account.withdraw.non_round_amount": return Loc("数量的小数位太多")
         default: return nil
         }
+    }
+
+    /// Deposit-side keys (from SafeTrade's web client error table).
+    static func depositMessage(forKey key: String) -> String? {
+        switch key {
+        case "account.deposit_address.network_doesnt_exist": return Loc("SafeTrade 不支持用这条链充值")
+        case "account.currency.deposit_disabled": return Loc("SafeTrade 暂停了这个币种的充值")
+        case "account.wallet.not_found": return Loc("SafeTrade 这条链的充值钱包暂时不可用，请稍后再试")
+        default: break
+        }
+        // The web client only asks for an address once 2FA is on; the API's refusal
+        // key isn't documented, so match its words.
+        let t = Set(SafeTradeAuthProblem.tokens(key))
+        if key.hasPrefix("account.deposit"), t.contains("2fa") || t.contains("otp") {
+            return Loc("SafeTrade 要求先开启谷歌验证（2FA）才能生成充值地址")
+        }
+        return nil
     }
 
     /// `market.order.*` / `market.account.*` keys. Matched on words rather than exact
@@ -567,6 +686,36 @@ struct SafeTradeClient {
             throw SafeTradeError.decode(String(String(data: data, encoding: .utf8)?.prefix(120) ?? ""))
         }
         return rows
+    }
+
+    /// Where to send `currency` on chain `network` (a blockchain_key) to top up the
+    /// account — the web client's `GET trade/account/deposit_address/{currency}?network=…`.
+    /// SafeTrade creates the address on first ask; until it exists the reply carries an
+    /// empty address (`isReady` false) and the caller asks again shortly.
+    func depositAddress(currency: String, network: String) async throws -> STDepositAddress {
+        let data = try await send("/api/v2/trade/account/deposit_address/\(currency)",
+                                  query: [.init(name: "network", value: network)], auth: .stored)
+        if let one = try? JSONDecoder().decode(STDepositAddress.self, from: data) { return one }
+        // Tolerate a list (one entry per chain), as the balances response carries them.
+        if let list = decodeRows(STDepositAddress.self, from: data) {
+            return STDepositAddress.pick(list, currency: currency, network: network)
+                ?? STDepositAddress(address: nil, network: network, currencies: nil, parent_address: nil)
+        }
+        throw SafeTradeError.decode(String(String(data: data, encoding: .utf8)?.prefix(120) ?? ""))
+    }
+
+    /// Recent deposits of `currency`, newest first. Rows are decoded one by one; a body
+    /// that isn't a list throws, so a failed read is never mistaken for "no deposits".
+    func deposits(currency: String, limit: Int = 10) async throws -> [STDeposit] {
+        let data = try await send("/api/v2/trade/account/deposits",
+                                  query: [.init(name: "currency", value: currency),
+                                          .init(name: "limit", value: String(limit)),
+                                          .init(name: "page", value: "1")],
+                                  auth: .stored)
+        guard let rows = decodeRows(STDeposit.self, from: data) else {
+            throw SafeTradeError.decode(String(String(data: data, encoding: .utf8)?.prefix(120) ?? ""))
+        }
+        return rows.sorted { ($0.created_at?.date ?? .distantPast) > ($1.created_at?.date ?? .distantPast) }
     }
 
     /// The user's SafeTrade address book, all currencies.

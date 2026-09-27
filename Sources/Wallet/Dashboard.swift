@@ -473,6 +473,13 @@ struct SendView: View {
     @State private var maxSession: String?
     private var session: String { "\(store.activeWalletID ?? "")|\(store.network.rawValue)" }
 
+    /// `prefillAddress`: 交易 → 充值 PRL opens this with the SafeTrade deposit address
+    /// filled in; the amount, fee and device check stay the user's as usual.
+    init(store: WalletStore, prefillAddress: String? = nil) {
+        self.store = store
+        _address = State(initialValue: prefillAddress ?? "")
+    }
+
     // Reserved for the network fee; any unused part returns as change (nothing is lost).
     private let feeReserve = WalletStore.sendFeeReserve
     private var feeReserveText: String { NSDecimalNumber(decimal: feeReserve).stringValue }
