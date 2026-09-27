@@ -10,6 +10,10 @@ struct DepthSection: View {
     @ObservedObject var store: SafeTradeStore
     @ObservedObject private var pro = ProStore.shared
     @State private var showingPaywall = false
+    /// Scrolled into view. The card sits below the fold, and in the tab's plain VStack
+    /// onAppear fires while it's still off-screen — so the book isn't fetched until
+    /// the card is actually seen.
+    @State private var onScreen = false
 
     private var curve: DepthCurve? { store.depth.flatMap(DepthCurve.init) }
 
@@ -27,10 +31,10 @@ struct DepthSection: View {
             if pro.isPro { live } else { locked }
         }
         .pearlCard()
-        // Poll the book only while the live chart is actually on screen.
-        .onAppear { store.wantsDepthChart = pro.isPro }
-        .onDisappear { store.wantsDepthChart = false }
-        .onChange(of: pro.isPro) { _, isPro in store.wantsDepthChart = isPro }
+        // Fetch / poll the book only while the live chart is actually on screen.
+        .onScreenChange { onScreen = $0 }
+        .onChange(of: onScreen) { _, visible in store.wantsDepthChart = visible && pro.isPro }
+        .onChange(of: pro.isPro) { _, isPro in store.wantsDepthChart = onScreen && isPro }
         .sheet(isPresented: $showingPaywall) {
             ProUpsellSheet(headline: Loc("高级版功能：买卖深度图"), headlineIcon: "chart.bar.xaxis")
         }
@@ -336,5 +340,18 @@ struct DepthChart: View {
 
     private func num(_ v: Double, digits: ClosedRange<Int>) -> String {
         v.formatted(.number.precision(.fractionLength(digits)).locale(LocBundleHolder.shared.locale))
+    }
+}
+
+private extension View {
+    /// Whether this view is scrolled into view. iOS 17 / macOS 14 have no scroll
+    /// visibility API, so there it degrades to appear / disappear (i.e. eager).
+    @ViewBuilder func onScreenChange(_ action: @escaping (Bool) -> Void) -> some View {
+        if #available(iOS 18.0, macOS 15.0, *) {
+            onScrollVisibilityChange(threshold: 0.1, action)
+                .onDisappear { action(false) }   // leaving the tab isn't a scroll
+        } else {
+            onAppear { action(true) }.onDisappear { action(false) }
+        }
     }
 }

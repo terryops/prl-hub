@@ -81,8 +81,14 @@ final class SafeTradeStore: ObservableObject {
         didSet { if wantsDepth, !oldValue { Task { await refreshDepth() } } }
     }
     /// The 买卖深度图 card is showing its live (Pro) chart — poll the book every ~10 s.
+    /// Mid-refresh the book waits for the balances and candles: the second phase picks
+    /// it up (see refresh()).
     var wantsDepthChart = false {
-        didSet { if wantsDepthChart, !oldValue, depthDue(every: Self.depthChartInterval) { Task { await refreshDepth() } } }
+        didSet {
+            if wantsDepthChart, !oldValue, !refreshing, depthDue(every: Self.depthChartInterval) {
+                Task { await refreshDepth() }
+            }
+        }
     }
     /// The chart only needs a gentle refresh; the 市价 estimate keeps its per-tick poll.
     private static let depthChartInterval: TimeInterval = 9
@@ -128,6 +134,10 @@ final class SafeTradeStore: ObservableObject {
 
     /// Market data always; the account (balances, orders) when keys are set. What's
     /// on screen stays when a part fails — nothing is blanked by a bad read.
+    ///
+    /// Two phases, so the top of the tab isn't held up by what's below it: first the
+    /// balances, price and candles (each shown the moment it lands), then the order
+    /// lists, 1-minute candles, order rules and — only if its card is on screen — the book.
     func refresh() async {
         #if DEBUG
         if Self.shotDemo { seedDemo(); await loadPublic(); return }   // demo account + real public market
@@ -137,18 +147,26 @@ final class SafeTradeStore: ObservableObject {
         defer { refreshing = false; lastRefreshAt = Date() }
         // Keys may have synced in from another device since the last look.
         SafeTradeSecrets.invalidateCache()
-        async let pub: Void = loadPublic()
-        if hasCredentials {
-            await refreshAccount()
-        } else {
+        guard hasCredentials else {
             balances = []
             orders = []
             lastOrder = nil
             ipIssue = nil
             accountStale = false
             accountError = Loc("未配置 API 密钥")
+            await loadPublic()
+            return
         }
-        await pub
+        async let balanceError = loadBalances()
+        await loadPrimaryMarket()
+        if let error = await balanceError {
+            await settleAccount(error)   // the order lists would fail the same way
+            await loadSecondaryMarket()
+            return
+        }
+        async let orderError = loadOrders()
+        await loadSecondaryMarket()
+        await settleAccount(await orderError)
     }
 
     func setPeriod(_ p: Int) {
@@ -173,16 +191,32 @@ final class SafeTradeStore: ObservableObject {
 
     /// Public market data — ticker, candles, rules, book — needs no keys.
     func loadPublic() async {
+        await loadPrimaryMarket()
+        await loadSecondaryMarket()
+    }
+
+    /// The price and the candles, each put on screen as soon as it arrives.
+    private func loadPrimaryMarket() async {
         let candlePeriod = period
         let requestID = nextCandleRequestID()
+        async let t: Void = setTicker(try? await client.ticker(market: market))
+        async let k: Void = loadCandles(period: candlePeriod, requestID: requestID)
+        await t; await k
+    }
+
+    private func loadCandles(period p: Int, requestID: Int) async {
+        if let next = try? await client.kline(market: market, period: p) {
+            applyCandles(next, requestID: requestID, period: p)
+        }
+    }
+
+    /// What can wait for the top of the tab: 1-minute candles (the rolling change),
+    /// order rules, and the book when the 市价 form or the depth card wants it.
+    private func loadSecondaryMarket() async {
         async let m: Void = refreshMinutesIfDue(force: true)
         async let r: Void = loadRulesIfNeeded()
         let bookWanted = wantsDepth || wantsDepthChart
         async let d: Void = bookWanted ? refreshDepth() : ()
-        async let t = try? client.ticker(market: market)
-        async let k = try? client.kline(market: market, period: candlePeriod)
-        setTicker(await t)
-        if let next = await k { applyCandles(next, requestID: requestID, period: candlePeriod) }
         await m; await r; await d
     }
 
@@ -356,26 +390,56 @@ final class SafeTradeStore: ObservableObject {
     }
 
     /// Balances + orders: the recent list plus EVERY open order (the recent list is
-    /// capped, and an open order past the cap couldn't be canceled). A failure keeps
+    /// capped, and an open order past the cap couldn't be canceled). Each part goes on
+    /// screen as soon as it lands. A failure keeps
     /// what's on screen, flagged stale — an open order that "vanished" might get placed
     /// again.
     func refreshAccount() async {
-        async let b = client.balances()
+        async let b = loadBalances()
+        async let o = loadOrders()
+        let balanceError = await b
+        let orderError = await o
+        await settleAccount(balanceError ?? orderError)
+    }
+
+    /// Balances, applied the moment they arrive (the balance card doesn't wait on the
+    /// order lists). Returns the failure instead of reporting it — see settleAccount.
+    private func loadBalances() async -> Error? {
+        do {
+            let next = try await client.balances()
+            if next != balances { balances = next }
+            return nil
+        } catch {
+            return error
+        }
+    }
+
+    /// Recent + every resting order, merged. The open-orders read is best effort: if
+    /// it fails, the open orders already on screen stand in.
+    private func loadOrders() async -> Error? {
         async let o = client.orders(market: market)
         async let w = try? client.orders(market: market, state: "wait", limit: 100)
         do {
-            let nextBalances = try await b
             let recent = try await o
             let open = await w ?? orders.filter(\.isOpen)
-            if nextBalances != balances { balances = nextBalances }
             let merged = Self.merge(recent: recent, open: open)
             if merged != orders { orders = merged }
+            return nil
+        } catch {
+            return error
+        }
+    }
+
+    /// One verdict for an account read: clear the flags, or keep what's on screen
+    /// flagged stale and show why.
+    private func settleAccount(_ error: Error?) async {
+        if let error {
+            accountStale = true
+            await present(error, account: true)
+        } else {
             accountStale = false
             accountError = nil
             ipIssue = nil
-        } catch {
-            accountStale = true
-            await present(error, account: true)
         }
     }
 
