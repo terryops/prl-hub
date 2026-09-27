@@ -26,6 +26,9 @@ struct DashboardView: View {
 
     /// Donations go to a mainnet address, so the entry only shows on mainnet — and never
     /// while the open wallet IS the donation wallet (that would just pay itself a fee).
+    /// A fresh balance, or last session's while the fresh one loads.
+    private var hasBalance: Bool { store.backendReady || store.balanceIsCached }
+
     private var canDonate: Bool {
         guard Donation.isConfigured, store.network == .mainnet else { return false }
         let mainAddress = store.activeRecord?.addresses[WalletNetwork.mainnet.rawValue]
@@ -131,11 +134,12 @@ struct DashboardView: View {
                             .animation(.snappy, value: unitPriceText)
                         }
 
-                        // Balance — always-present slot; dimmed dashes until the chain syncs.
+                        // Balance — always-present slot; dimmed dashes until the chain syncs,
+                        // or last session's figure (slightly dimmed) until the fresh one lands.
                         // Big grouped "1,234.56" head (2 dp), the remaining fraction digits
                         // tiny & trailing, then the PRL unit.
                         Group {
-                            if store.backendReady {
+                            if hasBalance {
                                 let p = balanceParts(store.balance.total)
                                 (
                                     Text(p.head)
@@ -148,6 +152,7 @@ struct DashboardView: View {
                                         .foregroundStyle(.white.opacity(0.85))
                                 )
                                 .foregroundStyle(.white)
+                                .opacity(store.balanceIsCached ? 0.7 : 1)
                                 .contentTransition(.numericText())
                             } else {
                                 Text(verbatim: "—— PRL")
@@ -157,16 +162,16 @@ struct DashboardView: View {
                         }
                         .monospacedDigit()
                         .lineLimit(1).minimumScaleFactor(0.5)
-                        .accessibilityLabel(store.backendReady ? Loc("余额 %@ PRL", store.balance.total.formatted(.number.locale(LocBundleHolder.shared.locale))) : Loc("同步余额…"))
+                        .accessibilityLabel(hasBalance ? Loc("余额 %@ PRL", store.balance.total.formatted(.number.locale(LocBundleHolder.shared.locale))) : Loc("同步余额…"))
                         // Tuck the balance up under the chip row: with only a right-aligned chip
                         // above it, the full row gap made the number read as sitting low.
                         .padding(.top, -6)
 
                         // Fiat — slot reserved; shows the sync hint until balance+price are in.
                         Group {
-                            if store.backendReady, let usd = price.value(of: store.balance.total) {
+                            if hasBalance, let usd = price.value(of: store.balance.total) {
                                 Text(verbatim: "≈ " + currency.dual(usd))
-                                    .foregroundStyle(.white.opacity(0.85))
+                                    .foregroundStyle(.white.opacity(store.balanceIsCached ? 0.6 : 0.85))
                                     .contentTransition(.numericText())
                                     .accessibilityLabel(Loc("约合 %@", currency.dual(usd)))
                             } else {
@@ -178,6 +183,7 @@ struct DashboardView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .animation(.snappy, value: store.backendReady)
+                    .animation(.snappy, value: store.balanceIsCached)
                 }
 
                 // Backend unreachable: the figures above are the last good snapshot — say so

@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import CryptoKit
 import SwiftUI
 
 /// SafeTrade refused the key for this network's IP: the key has a Trusted IPs list
@@ -32,6 +33,8 @@ struct PendingOrderCheck: Equatable {
 @MainActor
 final class SafeTradeStore: ObservableObject {
     @Published var balances: [STBalance] = []
+    /// `balances` is last session's (shown dimmed) until the first fresh read lands.
+    @Published private(set) var balancesAreCached = false
     @Published var ticker: STTicker?
     /// Every open order (newest first), then the recent finished ones.
     @Published var orders: [STOrder] = []
@@ -149,6 +152,7 @@ final class SafeTradeStore: ObservableObject {
         SafeTradeSecrets.invalidateCache()
         guard hasCredentials else {
             balances = []
+            balancesAreCached = false
             orders = []
             lastOrder = nil
             ipIssue = nil
@@ -156,6 +160,12 @@ final class SafeTradeStore: ObservableObject {
             accountError = Loc("未配置 API 密钥")
             await loadPublic()
             return
+        }
+        // Last session's balances for this key, until the fresh read replaces them — no
+        // blank card (and no full-screen overlay) on opening the tab.
+        if balances.isEmpty, let cached = Self.cachedBalances() {
+            balances = cached
+            balancesAreCached = true
         }
         async let balanceError = loadBalances()
         await loadPrimaryMarket()
@@ -408,10 +418,37 @@ final class SafeTradeStore: ObservableObject {
         do {
             let next = try await client.balances()
             if next != balances { balances = next }
+            if balancesAreCached { balancesAreCached = false }
+            Self.rememberBalances(next)
             return nil
         } catch {
             return error
         }
+    }
+
+    // MARK: last known balances
+
+    /// Per API key (a hash of it — the key itself never goes into UserDefaults), so
+    /// switching to another account's key can't show the old account's figures.
+    private static var balanceCacheKey: String? {
+        let key = SafeTradeSecrets.apiKey
+        guard !key.isEmpty else { return nil }
+        let digest = SHA256.hash(data: Data(key.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
+        return "safetrade.lastBalances.\(digest)"
+    }
+
+    private static func cachedBalances() -> [STBalance]? {
+        guard let k = balanceCacheKey, let rows = UserDefaults.standard.array(forKey: k) as? [[String: String]] else { return nil }
+        let list = rows.compactMap { r -> STBalance? in
+            guard let c = r["currency"], let b = r["balance"], let l = r["locked"] else { return nil }
+            return STBalance(currency: c, balance: b, locked: l)
+        }
+        return list.isEmpty ? nil : list
+    }
+
+    private static func rememberBalances(_ list: [STBalance]) {
+        guard let k = balanceCacheKey else { return }
+        UserDefaults.standard.set(list.map { ["currency": $0.currency, "balance": $0.balance, "locked": $0.locked] }, forKey: k)
     }
 
     /// Recent + every resting order, merged. The open-orders read is best effort: if

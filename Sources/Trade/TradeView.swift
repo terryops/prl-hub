@@ -407,6 +407,7 @@ struct TradeView: View {
             Text(b.map { String(format: "%.4f", $0.balanceValue) } ?? "—")
                 .font(.system(.title3, design: .rounded).weight(.semibold).monospacedDigit())
                 .foregroundStyle(.primary)
+                .opacity(store.balancesAreCached ? 0.55 : 1)   // last session's, until refreshed
                 .lineLimit(1).minimumScaleFactor(0.6)
             // Locked amount on its own line, reserved in both columns when either has
             // one, so they line up.

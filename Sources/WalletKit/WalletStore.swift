@@ -36,6 +36,10 @@ final class WalletStore: ObservableObject {
     @Published private(set) var receiveIndex: Int = 0
     @Published private(set) var xpub: String?
     @Published private(set) var backendReady = false
+    /// The balance on screen is last session's, shown until the first fresh read lands
+    /// (the dashboard dims it) — instead of "—— PRL" while the wallet derives its keys
+    /// and asks the indexer.
+    @Published private(set) var balanceIsCached = false
     /// True only after the tx history has been fetched at least once this session.
     /// The tx list gates its "暂无交易记录" empty state on THIS — otherwise it flashes
     /// "暂无" before history loads.
@@ -412,6 +416,25 @@ final class WalletStore: ObservableObject {
         Task { await loadChain() }
     }
 
+    // MARK: last known balance
+
+    /// The xpub part of the balance (`serverBalance`) as last read from the indexer, per
+    /// wallet and network. The internal-chain change part has its own cache
+    /// (ChangeChainCache.balance), so the two add up to last session's full figure.
+    private func balanceCacheKey(for id: String?, network net: WalletNetwork) -> String {
+        "\(changeKeyPrefix(for: id))\(net.rawValue).lastBalance"
+    }
+
+    private func cachedBalance(network net: WalletNetwork) -> WalletBalance? {
+        guard let data = UserDefaults.standard.data(forKey: balanceCacheKey(for: activeWalletID, network: net)) else { return nil }
+        return try? JSONDecoder().decode(WalletBalance.self, from: data)
+    }
+
+    private func rememberBalance(network net: WalletNetwork) {
+        guard let data = try? JSONEncoder().encode(serverBalance) else { return }
+        UserDefaults.standard.set(data, forKey: balanceCacheKey(for: activeWalletID, network: net))
+    }
+
     // MARK: per-wallet optimistic state
 
     /// Optimistic sends and in-flight recovery guards of a wallet/network the user moved
@@ -647,6 +670,13 @@ final class WalletStore: ObservableObject {
             loadChangeClassification(for: expectedNetwork)
             changeClassLoadedFor = expectedNetwork
         }
+        // Last session's figure first — before key derivation (slow on a cold start) and
+        // before the indexer answers. Any fresh read below replaces it.
+        if !backendReady, !balanceIsCached, let cached = cachedBalance(network: expectedNetwork) {
+            serverBalance = cached
+            balanceIsCached = true
+            publishOverlay()
+        }
         if address == nil || xpub == nil {
             let expectedReceiveIndex = receiveIndex
             // Blocking + disk I/O (creates the wallet db on first run) → off main.
@@ -693,8 +723,10 @@ final class WalletStore: ObservableObject {
             // before (or, on a first load, than the confirmed part).
             let quick = historyReady ? serverBalance.available : summary.confirmed + min(0, summary.unconfirmed)
             serverBalance = WalletBalance(total: total, available: max(0, min(quick, total)))
+            rememberBalance(network: expectedNetwork)
         }
         if !backendReady { backendReady = true }
+        if balanceIsCached { balanceIsCached = false }
         lastSyncedAt = Date()
         if syncError != nil { syncError = nil }
         publishOverlay()
@@ -730,6 +762,7 @@ final class WalletStore: ObservableObject {
         let spendable = utxos.map { list in RawTx.prl(fromSat: list.reduce(Int64(0)) { $0 + (Int64($1.value) ?? 0) }) }
             ?? max(0, account.confirmed + min(0, account.unconfirmed))
         serverBalance = WalletBalance(total: total, available: max(0, min(spendable, total)))
+        rememberBalance(network: expectedNetwork)
         xpubAddresses = account.addresses
         if historyPagesLoaded <= 1, historyHasMore != account.hasMorePages { historyHasMore = account.hasMorePages }
         // Carry over internal-chain spends merged by refreshChangeChain — the xpub
@@ -929,6 +962,9 @@ final class WalletStore: ObservableObject {
         let dbDir = walletDataURL(for: id)
         Task { await WalletDBQueue.shared.run { try? FileManager.default.removeItem(at: dbDir) } }
         ChangeChainCache.remove(prefix: changeKeyPrefix(for: id))
+        for net in WalletNetwork.allCases {
+            UserDefaults.standard.removeObject(forKey: balanceCacheKey(for: id, network: net))
+        }
         for n in WalletNetwork.allCases { parkedOverlays[overlayKey(id, n)] = nil }
         if id == Self.legacyWalletID { UserDefaults.standard.removeObject(forKey: nameKey) }
         wallets.removeAll { $0.id == id }
@@ -971,6 +1007,7 @@ final class WalletStore: ObservableObject {
         historyHasMore = false; historyPagesLoaded = 1; olderTxs = []
         lastSyncedAt = nil; syncError = nil; lastChainLoadAt = nil
         serverBalance = .zero; serverTxs = []; xpubAddresses = []; lastSummary = nil
+        balanceIsCached = false
         pendingSends.removeAll(); sendLocks.removeAll(); unverifiedSends.removeAll()
         clearChangeChainState()
     }
