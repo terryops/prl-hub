@@ -307,7 +307,7 @@ final class PoolStore: ObservableObject {
     /// Mirror ALL pool watches + fiat rates into the shared App Group so the
     /// home-screen Mining widget can show every miner (2+) and refresh itself.
     private func pushWidgetSnapshot() {
-        WidgetBridge.updatePrice(prlUsd: prlUsd, usdCny: usdCny)
+        WidgetBridge.updatePrice(prlUsd: prlUsd)
         let pools = watches.filter(\.isEnabled).map { w -> WidgetPool in
             // The SAME live total the widget computes on its own refresh (PoolMinerStats.liveRate).
             let s = watchData[w.id]?.stats

@@ -72,8 +72,6 @@
 "交易" = "交易";
 "交易 · SafeTrade" = "交易 · SafeTrade";
 "交易在本机签名（私钥不离开设备），经 Blockbook 广播。" = "交易於本機簽署（私鑰不離開裝置），再經 Blockbook 廣播。";
-"交易市场只能包含字母和数字，例如 prlusdt" = "交易市場只能包含字母與數字，例如 prlusdt";
-"交易市场（例如 prlusdt）" = "交易市場（例如 prlusdt）";
 "交易所" = "交易所";
 "交易记录" = "交易紀錄";
 "交易（SafeTrade）" = "交易（SafeTrade）";

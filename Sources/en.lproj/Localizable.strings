@@ -72,8 +72,6 @@
 "交易" = "Trade";
 "交易 · SafeTrade" = "Trade · SafeTrade";
 "交易在本机签名（私钥不离开设备），经 Blockbook 广播。" = "Transactions are signed on-device (your private key never leaves) and broadcast via Blockbook.";
-"交易市场只能包含字母和数字，例如 prlusdt" = "Market may contain letters and numbers only, e.g. prlusdt";
-"交易市场（例如 prlusdt）" = "Market (e.g. prlusdt)";
 "交易所" = "Exchange";
 "交易记录" = "Transaction History";
 "交易（SafeTrade）" = "Trade (SafeTrade)";

@@ -289,7 +289,8 @@ struct CandleChart: View {
 
     @ViewBuilder private func tooltip(_ c: STCandle) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(c.time.formatted(date: .abbreviated, time: .shortened))
+            // Text(_:format:) follows the app's language (environment locale), not the system's.
+            Text(c.time, format: Date.FormatStyle(date: .abbreviated, time: .shortened))
                 .font(.caption.weight(.semibold)).foregroundStyle(.primary)
             // 对齐成 2×2 网格，标签弱化、数值加粗，避免挤在一起看不清。
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 4) {
@@ -324,5 +325,7 @@ struct CandleChart: View {
         }
     }
 
-    private func pf(_ v: Double) -> String { v.formatted(.number.precision(.fractionLength(2...6))) }
+    private func pf(_ v: Double) -> String {
+        v.formatted(.number.precision(.fractionLength(2...6)).locale(LocBundleHolder.shared.locale))
+    }
 }

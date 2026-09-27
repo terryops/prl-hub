@@ -661,7 +661,7 @@ final class PRLStore: ObservableObject {
     /// 5 min unless forced (the 60s auto-timer would otherwise hammer it).
     func loadPriceHistory(force: Bool = false) {
         if !force, !priceHistory.isEmpty, let t = lastPriceFetch, Date().timeIntervalSince(t) < 300 { return }
-        let market = SafeTradeMarket.normalized(UserDefaults.standard.string(forKey: "safetrade.market"))
+        let market = SafeTradeMarket.defaultValue   // the market setting is gone; always PRL/USDT
         Task { [weak self] in
             guard let self else { return }
             if let cs = try? await self.stClient.kline(market: market, period: 1440, limit: 90), !cs.isEmpty {

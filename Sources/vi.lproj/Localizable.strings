@@ -72,8 +72,6 @@
 "交易" = "Giao dịch";
 "交易 · SafeTrade" = "Giao dịch · SafeTrade";
 "交易在本机签名（私钥不离开设备），经 Blockbook 广播。" = "Giao dịch được ký ngay trên máy (khóa riêng không rời thiết bị) và phát qua Blockbook.";
-"交易市场只能包含字母和数字，例如 prlusdt" = "Thị trường giao dịch chỉ được chứa chữ và số, ví dụ prlusdt";
-"交易市场（例如 prlusdt）" = "Thị trường giao dịch (ví dụ prlusdt)";
 "交易所" = "Sàn";
 "交易记录" = "Lịch sử giao dịch";
 "交易（SafeTrade）" = "Giao dịch (SafeTrade)";
