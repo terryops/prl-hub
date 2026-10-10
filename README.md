@@ -10,6 +10,7 @@ A self-custody **Pearl ($PRL)** wallet and mining monitor for iPhone, iPad and M
 - **Mining monitor**: network hashrate and difficulty, a pools overview, and per-address monitors for AlphaPool, F2Pool, HeroMiners, Kryptex, Lucky Pool, Pearl Fortune and PearlHash.
 - **Widgets**: an iOS home-screen widget and a macOS desktop widget.
 - **Price alerts (Pearl Hub Pro)**: push notifications when PRL reaches a target price or moves sharply within 5 minutes, 1 hour or 24 hours, even while the app is closed. Unlocked by a one-time in-app purchase.
+- **Offline alerts (Pearl Hub Pro)**: a push when a worker on one of your pool monitors has been offline for 10, 15, 30 or 60 minutes, and another when it is back online.
 - **Trading (optional)**: a SafeTrade PRL/USDT trading tab that uses your own API keys (stored in the Keychain). It is compiled in only when the `TRADE_ENABLED` condition is set.
 - **6 languages**: English, 简体中文, 繁體中文, Русский, Tiếng Việt, Bahasa Indonesia.
 
@@ -17,7 +18,7 @@ A self-custody **Pearl ($PRL)** wallet and mining monitor for iPhone, iPad and M
 
 - **Keys stay on the device.** `OysterMobile.xcframework` is a [gomobile](https://pkg.go.dev/golang.org/x/mobile) binding of the Pearl wallet code from [pearl-research-labs/pearl](https://github.com/pearl-research-labs/pearl). It generates the mnemonic, derives addresses, and signs transactions offline.
 - **Chain data** comes from Pearl's public Blockbook indexer (`blockbook.pearlresearch.ai`), which also broadcasts signed transactions. The wallet has no backend of its own.
-- **Price alerts** are the one feature with a server: a small alert service (`prl.tools.video`, not part of this repository) checks the PRL price every minute and sends notifications through Apple Push Notification service. The app sends it only the device's push token, the alert conditions and the app language (`Sources/App/PriceAlerts.swift`); no wallet data leaves the device.
+- **Alerts** are the one part with a server: a small alert service (`prl.tools.video`, not part of this repository) checks the PRL price every minute and, for offline alerts, asks the pools' public APIs about the monitors you switched them on for; it sends notifications through Apple Push Notification service. The app sends it the device's push token, the alert conditions, the app language, your push hours with their time zone, Apple's signed record of the Pro purchase and, for offline alerts only, the pool and payout address of those monitors (`Sources/App/PriceAlerts.swift`, `Sources/App/OfflineAlerts.swift`). Nothing is sent until you turn an alert on, and recovery phrases, private keys and balances never leave the device.
 - **Pool, price and exchange-rate data** come from the public APIs of each service.
 
 ## Building
