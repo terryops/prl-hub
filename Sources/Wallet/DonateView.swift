@@ -3,7 +3,7 @@ import SwiftUI
 /// Where in-app donations go. The wallet-page entry stays hidden until `address`
 /// holds a valid mainnet address, so an unset address can never receive a send.
 enum Donation {
-    static let address = "prl1p8wznc8tkhlkjaq7v8ycugz93rgs8uezq6px7873934kh35nk9q2qlz0q9m"
+    static let address = "prl1pmkyxyht58rzhe7cj9ha7ncpm6r28x6g0htq93ffs5hsh7lqsxj7qw9pyjv"
     static let presets: [Decimal] = [5, 10, 20]
     /// Smallest custom amount accepted.
     static let minimum: Decimal = 1
