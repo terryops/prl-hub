@@ -32,6 +32,11 @@ import AppKit
 //
 // The rules and the window also sync over iCloud to the user's other
 // devices (PriceAlertSync.swift); each device registers on its own.
+//
+// This store also owns the device's ONE record on the worker — the
+// APNs token, the permission, the window, the Mac's 本机推送 switch,
+// retries — and the same PUT carries the 掉线提醒 monitors
+// (OfflineAlertStore) next to the price rules.
 // ============================================================
 
 /// Daily push window in local time: [start, end) in minutes after midnight;
@@ -213,6 +218,13 @@ final class PriceAlertStore: ObservableObject {
     /// Time zone the worker last got with the window — re-sent after travel.
     private var sentTimeZone: String?
     private static let tokenKey = "alerts.apnsToken"
+    private static let unsyncedKey = "alerts.unsynced"
+    /// A change the worker hasn't confirmed yet. Survives a relaunch, so one made
+    /// offline — above all removing the last alert, after which nothing here would
+    /// otherwise look worth sending — still reaches the worker later.
+    private var unsynced: Bool {
+        didSet { if unsynced != oldValue { UserDefaults.standard.set(unsynced, forKey: Self.unsyncedKey) } }
+    }
     private var syncTask: Task<Void, Never>?
     private var windowPushTask: Task<Void, Never>?
     /// Bumped on every local edit. A server reply is only adopted if no edit
@@ -233,6 +245,7 @@ final class PriceAlertStore: ObservableObject {
         token = d.string(forKey: Self.tokenKey)
         window = Self.savedWindow()
         pushHere = d.object(forKey: Self.pushHereKey) as? Bool ?? true
+        unsynced = d.bool(forKey: Self.unsyncedKey)
         if d.data(forKey: Self.syncKey) == nil {
             // Rules saved before iCloud sync: stage them as this device's iCloud copy, so
             // CloudSync.start uploads them if iCloud has none yet — or, if another device
@@ -319,7 +332,7 @@ final class PriceAlertStore: ObservableObject {
             CloudSync.push(Self.windowKey)
         }
         localVersion += 1
-        if !rules.isEmpty && pushHere { scheduleSync() }
+        if hasContent && pushHere { scheduleSync() }
     }
 
     /// Turn this device's pushes on or off. Off sends the worker an empty rule list,
@@ -330,6 +343,21 @@ final class PriceAlertStore: ObservableObject {
         UserDefaults.standard.set(on, forKey: Self.pushHereKey)
         localVersion += 1
         if on { followOnServer(prompt: true) } else { scheduleSync() }
+    }
+
+    // MARK: what this device registers
+
+    /// The 掉线提醒 monitors ride on the same device record. (Not touched from init:
+    /// the two singletons would wait on each other.)
+    private var offline: OfflineAlertStore { .shared }
+
+    /// Whether there is anything here to push for — price alerts or 掉线提醒.
+    private var hasContent: Bool { !rules.isEmpty || !offline.wire.isEmpty }
+
+    /// 掉线提醒 changed what it wants watched (a choice, a monitor edited, iCloud).
+    func contentChanged(prompt: Bool) {
+        localVersion += 1
+        followOnServer(prompt: prompt)
     }
 
     private static func savedWindow() -> PushWindow? {
@@ -347,7 +375,7 @@ final class PriceAlertStore: ObservableObject {
     /// for notification permission — only when the user just did something here.
     private func followOnServer(prompt: Bool) {
         guard pushHere else { return }
-        if rules.isEmpty || !ProStore.shared.isPro { scheduleSync() } else { Task { await ensureRegistered(prompt: prompt) } }
+        if !hasContent || !ProStore.shared.isPro { scheduleSync() } else { Task { await ensureRegistered(prompt: prompt) } }
     }
 
     // MARK: iCloud
@@ -356,7 +384,7 @@ final class PriceAlertStore: ObservableObject {
     private func cloudDidUpdate() {
         var changed = reconcile(incoming: true)
         let w = Self.savedWindow()
-        if w != window { window = w; if !rules.isEmpty { changed = true } }
+        if w != window { window = w; if hasContent { changed = true } }
         guard changed else { return }
         localVersion += 1   // a server reply already in flight predates this
         followOnServer(prompt: false)
@@ -389,13 +417,13 @@ final class PriceAlertStore: ObservableObject {
     }
 
     private func proChanged() {
-        guard !rules.isEmpty, pushHere else { return }
+        guard hasContent, pushHere else { return }
         // StoreKit settles the entitlement at every launch: never prompt from here.
         if ProStore.shared.isPro { Task { await ensureRegistered(prompt: false) } } else { scheduleSync() }
     }
 
     private func jwsChanged() {
-        guard !rules.isEmpty, ProStore.shared.isPro, pushHere, token != nil else { return }
+        guard hasContent, ProStore.shared.isPro, pushHere, token != nil else { return }
         scheduleSync()
     }
 
@@ -434,23 +462,28 @@ final class PriceAlertStore: ObservableObject {
     /// Launch hook: re-register if the user has alerts. Never prompts — the rules may
     /// have come from another device; the alerts page asks.
     func launch() {
-        guard !rules.isEmpty, ProStore.shared.isPro, pushHere else { return }
-        Task { await ensureRegistered(prompt: false) }
+        if hasContent, ProStore.shared.isPro, pushHere { Task { await ensureRegistered(prompt: false) } }
+        else if unsynced { scheduleSync() }   // e.g. the last alert was removed while offline
     }
 
-    /// The alerts page opened: the one place to ask for notifications for alerts
-    /// that synced in from another device.
+    /// An alerts page opened (价格提醒 or 掉线提醒): the one place to ask for
+    /// notifications for alerts that synced in from another device.
     func pageOpened() async {
-        guard !rules.isEmpty, ProStore.shared.isPro, pushHere, authorization == .notDetermined else { return }
+        guard hasContent, ProStore.shared.isPro, pushHere, authorization == .notDetermined else { return }
         await ensureRegistered()
     }
 
     func didRegister(tokenData: Data) {
         let hex = tokenData.map { String(format: "%02x", $0) }.joined()
-        if let old = token, old != hex { forget(token: old) }
+        let changed = token != hex
+        if let old = token, changed { forget(token: old) }
         token = hex
         UserDefaults.standard.set(hex, forKey: Self.tokenKey)
-        scheduleSync()
+        // Only a new token needs sending: with the old one still valid, ensureRegistered has
+        // already scheduled the sync it wanted. Syncing here as well sent every change twice
+        // whenever the system answered late — and switching a dozen 掉线提醒 monitors in a
+        // row would then run into the worker's write limit.
+        if changed { scheduleSync() }
     }
 
     func didFailToRegister(_ error: Error) {
@@ -460,23 +493,28 @@ final class PriceAlertStore: ObservableObject {
     /// Foreground hook: pick up a permission change made in system Settings and
     /// retry a sync that failed earlier (e.g. offline when a rule was added).
     func foreground() {
-        guard !rules.isEmpty, ProStore.shared.isPro, pushHere else { return }
+        guard hasContent, ProStore.shared.isPro, pushHere else {
+            if unsynced { scheduleSync() }   // nothing left here, but the worker hasn't heard
+            return
+        }
         Task {
             await refreshAuthorization()
             if case .failed = syncState { await ensureRegistered(prompt: false) }
             else if token == nil { await ensureRegistered(prompt: false) }
             // Crossed a time zone: the window is in local time, so re-send it.
             else if window != nil, let sent = sentTimeZone, sent != TimeZone.current.identifier { scheduleSync() }
+            else if unsynced { scheduleSync() }
             else { await refresh() }   // alerts that fired while away are now off
         }
     }
 
     /// Language changed → the push copy must follow, so re-send.
-    func languageChanged() { if !rules.isEmpty && pushHere { scheduleSync() } }
+    func languageChanged() { if hasContent && pushHere { scheduleSync() } }
 
     // MARK: server sync
 
     private func scheduleSync() {
+        unsynced = true
         syncTask?.cancel()
         syncTask = Task { [weak self] in
             // Coalesce bursts (toggling several rules in a row) into one PUT.
@@ -494,21 +532,44 @@ final class PriceAlertStore: ObservableObject {
         return Array((all.filter(\.on) + all.filter { !$0.on }).prefix(Self.maxRules))
     }
 
+    /// The 掉线提醒 monitors for the worker. nil = say nothing about them (the worker
+    /// keeps what it has): it takes monitors only with the signed purchase, and that
+    /// can arrive a moment after Pro itself is known (`jwsChanged` then re-sends).
+    private var wireWatches: [OfflineAlertWire]? {
+        guard ProStore.shared.isPro, pushHere else { return [] }
+        let list = offline.wire
+        return list.isEmpty || ProStore.shared.jws != nil ? list : nil
+    }
+
+    /// The device record as the worker's PUT /v1/devices/:token takes it (alerts/src/index.js
+    /// putDevice; Tests/Fixtures/alerts_put_body.json is checked against both ends).
+    /// `watches` nil = say nothing about the 掉线提醒 monitors; the worker keeps what it has.
+    nonisolated static func registrationBody(rules: [PriceAlertRule.Wire], watches: [OfflineAlertWire]?,
+                                             window: PushWindow?, timeZone: String, env: String, topic: String,
+                                             lang: String, proJWS: String?) -> [String: Any] {
+        var body: [String: Any] = [
+            "window": window.map { ["start": $0.start, "end": $0.end, "tz": timeZone] as [String: Any] } ?? NSNull(),
+            "oneshot": true,
+            "env": env,
+            "topic": topic,
+            "lang": lang,
+            "rules": rules.map(\.payload),
+        ]
+        if let watches { body["watches"] = watches.map(\.payload) }
+        if let proJWS { body["pro_jws"] = proJWS }
+        return body
+    }
+
     func sync() async {
         guard let token else { return }
         syncState = .syncing
         let sent = localVersion
         let tz = TimeZone.current.identifier
-        var body: [String: Any] = [
-            "window": window.map { ["start": $0.start, "end": $0.end, "tz": tz] as [String: Any] } ?? NSNull(),
-            "oneshot": true,
-            "env": Self.apnsEnvironment,
-            "topic": Bundle.main.bundleIdentifier ?? "com.prl.wizard",
-            "lang": Self.pushLanguage,
-            "rules": wireRules.map(\.payload),
-        ]
-        // The signed Pro purchase, so the worker can check the entitlement itself.
-        if ProStore.shared.isPro, let jws = ProStore.shared.jws { body["pro_jws"] = jws }
+        let body = Self.registrationBody(
+            rules: wireRules, watches: wireWatches, window: window, timeZone: tz, env: Self.apnsEnvironment,
+            topic: Bundle.main.bundleIdentifier ?? "com.prl.wizard", lang: Self.pushLanguage,
+            // The signed Pro purchase, so the worker can check the entitlement itself.
+            proJWS: ProStore.shared.isPro ? ProStore.shared.jws : nil)
         var req = URLRequest(url: Self.endpoint.appendingPathComponent("devices/\(token)"))
         req.httpMethod = "PUT"
         req.timeoutInterval = 15
@@ -520,7 +581,10 @@ final class PriceAlertStore: ObservableObject {
                 syncState = .failed(Loc("服务器暂时不可用，稍后自动重试"))
                 return
             }
-            if sent == localVersion { adoptServerState(data, fromPut: true) }   // else a newer PUT is on its way
+            if sent == localVersion {       // else a newer PUT is on its way
+                unsynced = false
+                adoptServerState(data, fromPut: true)
+            }
             sentTimeZone = tz
             syncState = .synced(Date())
         } catch {
@@ -532,7 +596,7 @@ final class PriceAlertStore: ObservableObject {
     /// Pull the server's view of this device's rules without re-sending them —
     /// picks up alerts that fired (and so switched themselves off) meanwhile.
     func refresh() async {
-        guard let token, ProStore.shared.isPro, pushHere, !rules.isEmpty, syncState != .syncing else { return }
+        guard let token, ProStore.shared.isPro, pushHere, hasContent, syncState != .syncing else { return }
         let asked = localVersion
         var req = URLRequest(url: Self.endpoint.appendingPathComponent("devices/\(token)"))
         req.timeoutInterval = 10
@@ -549,6 +613,7 @@ final class PriceAlertStore: ObservableObject {
     private func adoptServerState(_ data: Data, fromPut: Bool) {
         guard let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let list = o["rules"] as? [[String: Any]] else { return }
+        if let watches = o["watches"] as? [[String: Any]] { offline.adopt(watches) }
         var byID: [String: [String: Any]] = [:]
         for r in list { if let id = r["id"] as? String { byID[id] = r } }
         var changed = false, firedMore = false, behind = false

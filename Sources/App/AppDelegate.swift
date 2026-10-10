@@ -7,11 +7,12 @@ import AppKit
 #endif
 
 // App delegate for the few things SwiftUI's App lifecycle doesn't cover:
-// APNs token callbacks (price alerts, see PriceAlerts.swift), foreground
-// notification banners, and — on iPhone — the 锁定竖屏 orientation lock.
+// APNs token callbacks (price alerts and 掉线提醒, see PriceAlerts.swift /
+// OfflineAlerts.swift), foreground notification banners, and — on iPhone — the
+// 锁定竖屏 orientation lock.
 
 final class PushDelegate: NSObject, UNUserNotificationCenterDelegate {
-    /// Show price alerts as banners even while the app is open.
+    /// Show alerts (price, 掉线提醒) as banners even while the app is open.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         completionHandler([.banner, .list, .sound])

@@ -1,0 +1,16 @@
+{
+  "env": "production",
+  "topic": "com.prl.wizard",
+  "lang": "zh-Hans",
+  "oneshot": true,
+  "window": { "start": 480, "end": 1380, "tz": "Asia/Shanghai" },
+  "pro_jws": "PRO_JWS",
+  "rules": [
+    { "id": "A1B2C3D4-0000-4000-8000-000000000001", "kind": "above", "value": 1.2, "window": 0, "enabled": true, "seen_fired": 0 },
+    { "id": "A1B2C3D4-0000-4000-8000-000000000002", "kind": "move", "value": 5, "window": 3600, "enabled": false, "seen_fired": 1790000000 }
+  ],
+  "watches": [
+    { "id": "6F1B7C2A-1111-4C1C-9C43-000000000001", "pool": "Kryptex", "addr": "prl1p8wznc8tkhlkjaq7v8ycugz93rgs8uezq6px7873934kh35nk9q2qlz0q9m", "label": "Garage", "after": 900 },
+    { "id": "6F1B7C2A-1111-4C1C-9C43-000000000002", "pool": "F2Pool", "addr": "0123456789abcdef0123456789abcdef", "acct": "My Rig", "label": "F2Pool", "after": 3600 }
+  ]
+}

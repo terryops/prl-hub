@@ -5,8 +5,8 @@ import UIKit
 
 // MARK: - Paywall
 
-/// Pearl Hub Pro — a one-time US$2.99 in-app purchase: price alerts, 锁屏盯盘, the
-/// depth chart and the home-screen / desktop widget.
+/// Pearl Hub Pro — a one-time US$4.99 in-app purchase: price alerts, 掉线提醒, 锁屏盯盘,
+/// the depth chart and the home-screen / desktop widget.
 struct ProPaywallCard: View {
     @ObservedObject var pro: ProStore
 
@@ -23,6 +23,7 @@ struct ProPaywallCard: View {
                 feature("scope", Loc("到价提醒：涨破或跌破你设定的价格"))
                 feature("waveform.path.ecg", Loc("涨跌幅提醒：5 分钟、1 小时或 24 小时"))
                 feature("bell.badge", Loc("没打开 App 也能收到通知"))
+                feature("wifi.exclamationmark", Loc("掉线提醒：矿机离线 10 分钟以上就通知你"))
                 if PriceLiveActivity.supported {
                     feature("lock.iphone", Loc("锁屏盯盘：锁屏和灵动岛实时显示价格"))
                 }

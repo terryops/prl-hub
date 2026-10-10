@@ -1,8 +1,5 @@
 import SwiftUI
 import UserNotifications
-#if os(iOS)
-import UIKit
-#endif
 
 /// 价格提醒 — reached from 设置 → 通知 and from the 交易 tab's promo card. Card layout
 /// in the app's Pearl style: the price the alerts watch, then either the Pro paywall
@@ -16,7 +13,6 @@ struct PriceAlertsView: View {
     @State private var quote: AlertQuote?
     @State private var testing = false
     @State private var testMsg: String?
-    @Environment(\.openURL) private var openURL
 
     enum EditTarget: Identifiable {
         case new
@@ -32,7 +28,9 @@ struct PriceAlertsView: View {
             VStack(spacing: Pearl.Space.lg) {
                 priceCard
                 if pro.isPro {
-                    if store.authorization == .denied && store.pushHere { deniedCard }
+                    if store.authorization == .denied && store.pushHere {
+                        NotificationsDeniedCard(message: Loc("通知权限已关闭，价格提醒无法送达"))
+                    }
                     rulesCard
                     #if os(macOS)
                     PushHereCard(store: store)
@@ -41,7 +39,7 @@ struct PriceAlertsView: View {
                 } else {
                     ProPaywallCard(pro: pro)
                 }
-                Label(Loc("服务器只保存本机的推送令牌和提醒条件，不涉及钱包地址或余额。"), systemImage: "lock.shield")
+                Label(Loc("价格提醒只需要本机的推送令牌和提醒条件，不涉及钱包地址或余额。"), systemImage: "lock.shield")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -121,27 +119,12 @@ struct PriceAlertsView: View {
 
     // MARK: rules
 
-    private var deniedCard: some View {
-        HStack(alignment: .center, spacing: Pearl.Space.md) {
-            PearlIconBadge(systemImage: "bell.slash.fill", gradient: Pearl.sunrise, size: 38)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(Loc("通知权限已关闭，价格提醒无法送达"))
-                    .font(.subheadline.weight(.semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-                Button(Loc("打开系统设置")) { openNotificationSettings() }
-                    .font(.subheadline)
-            }
-            Spacer(minLength: 0)
-        }
-        .pearlCard(padding: Pearl.Space.md)
-    }
-
     private var rulesCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
                 Text(Loc("我的提醒")).font(.headline)
                 Spacer()
-                syncStatus
+                AlertSyncStatus(store: store, active: !store.rules.isEmpty)
             }
             .padding(.bottom, Pearl.Space.sm)
 
@@ -163,11 +146,7 @@ struct PriceAlertsView: View {
                 }
             }
 
-            if case .failed(let msg) = store.syncState {
-                Label(msg, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption).foregroundStyle(.orange)
-                    .padding(.top, Pearl.Space.xs)
-            }
+            AlertSyncFailure(store: store)
 
             Button { editing = .new } label: {
                 Label(Loc("添加提醒"), systemImage: "plus")
@@ -231,29 +210,6 @@ struct PriceAlertsView: View {
         }
     }
 
-    /// This device's server sync — nothing to show while it doesn't take pushes.
-    @ViewBuilder private var syncStatus: some View {
-        if store.pushHere { serverSyncStatus }
-    }
-
-    @ViewBuilder private var serverSyncStatus: some View {
-        switch store.syncState {
-        case .syncing:
-            HStack(spacing: 4) {
-                ProgressView().controlSize(.mini)
-                Text(Loc("同步中"))
-            }
-            .font(.caption).foregroundStyle(.secondary)
-        case .synced where !store.rules.isEmpty:
-            Label(Loc("已同步"), systemImage: "checkmark.icloud")
-                .font(.caption).foregroundStyle(.secondary)
-        case .idle where !store.rules.isEmpty && store.token == nil && store.authorization == .authorized:
-            Text(Loc("正在向系统申请推送令牌…")).font(.caption).foregroundStyle(.secondary)
-        default:
-            EmptyView()
-        }
-    }
-
     private func sendTest() async {
         testing = true
         defer { testing = false }
@@ -261,13 +217,5 @@ struct PriceAlertsView: View {
         case .sent: testMsg = Loc("已发送，几秒内应收到一条通知。")
         case .failed(let msg): testMsg = msg
         }
-    }
-
-    private func openNotificationSettings() {
-        #if os(iOS)
-        if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
-        #else
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") { openURL(url) }
-        #endif
     }
 }

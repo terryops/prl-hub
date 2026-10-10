@@ -5,7 +5,7 @@ import StoreKit
 // ============================================================
 // Pearl Hub Pro — one-time in-app purchase (StoreKit 2)
 // ------------------------------------------------------------
-// A single non-consumable (`com.prl.wizard.pro`, US$2.99) unlocks
+// A single non-consumable (`com.prl.wizard.pro`, US$4.99) unlocks
 // the premium features: server-monitored price alerts, 锁屏盯盘, the
 // order-book depth chart and the home-screen / desktop widget.
 // App Store rules (3.1.1) require IAP for unlocking functionality;

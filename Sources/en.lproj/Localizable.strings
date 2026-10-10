@@ -654,7 +654,7 @@
 "操作太频繁，请一分钟后再试" = "Too many requests. Try again in a minute.";
 "无法连接提醒服务器，请检查网络" = "Can't reach the alert server. Check your connection.";
 "时间范围" = "Time Window";
-"服务器只保存本机的推送令牌和提醒条件，不涉及钱包地址或余额。" = "The server only stores this device's push token and alert conditions — never your wallet addresses or balances.";
+"价格提醒只需要本机的推送令牌和提醒条件，不涉及钱包地址或余额。" = "Price alerts only need this device's push token and your alert conditions — never your wallet addresses or balances.";
 "服务器暂时不可用，稍后自动重试" = "The alert server is unavailable. It will retry automatically.";
 "正在向系统申请推送令牌…" = "Requesting a push token from the system…";
 "涨或跌超过这个幅度都会通知你。" = "You'll be notified when the price moves this much in either direction.";
@@ -967,3 +967,23 @@
 "在这台 Mac 上推送" = "Notify on this Mac";
 "提醒触发时，这台 Mac 也会弹出通知。" = "When an alert fires, this Mac shows a notification too.";
 "这台 Mac 不弹通知。提醒仍会通过 iCloud 同步，在你的其他设备上推送。" = "This Mac stays quiet. Alerts still sync over iCloud and notify your other devices.";
+
+/* 掉线提醒 (OfflineAlertsView / OfflineAlerts.swift) */
+"掉线提醒" = "Offline Alerts";
+"新功能：掉线提醒" = "New: Offline Alerts";
+"不提醒" = "Off";
+"%d 分钟" = "%d min";
+"离线 %d 分钟后" = "After %d min offline";
+"矿机离线满 %d 分钟时通知" = "Alert after %d min offline";
+"最多可为 %d 个监控开启掉线提醒。" = "Offline alerts can be on for up to %d monitors.";
+"掉线提醒：矿机离线 10 分钟以上就通知你" = "Offline alerts: know when a worker has been offline for 10+ minutes";
+"矿机掉线，第一时间知道" = "Know when a worker goes offline";
+"矿机离线达到你设定的时长就推送通知，不用打开 App。服务器每 5 分钟向矿池查询一次。" = "Get a push once a worker has been offline for the time you choose — no need to open the app. The server asks the pool every 5 minutes.";
+"监控已暂停，暂停期间不提醒" = "Paused — no alerts for now";
+"矿池查不到这个地址，无法提醒" = "Pool doesn't know this address";
+"通知权限已关闭，掉线提醒无法送达" = "Notifications are turned off, so offline alerts can't be delivered.";
+"还没有监控。先到「我的监控」添加矿池和收款地址。" = "No monitors yet. Add a pool and payout address in “Monitor” first.";
+"推送时段之外掉线的矿机，到时段开始时如果还没恢复，会在那时通知你。" = "A worker that goes offline outside your push hours is reported when they start — if it is still offline then.";
+"为监控开启掉线提醒后，服务器会保存它的矿池和收款地址（F2Pool 为只读页链接），只用来查询矿机状态；不涉及助记词、私钥或余额。" = "Turning on offline alerts for a monitor stores its pool and payout address on the server (for F2Pool, the read-only page link), used only to check worker status. Recovery phrases, private keys and balances are never involved.";
+"矿机离线 10 分钟以上就推送通知。点这里为你的监控开启。" = "Get a push when a worker is offline for 10+ min. Tap to set it up.";
+"矿池暂时查询不到，恢复后继续监控" = "Pool isn't answering — resumes when it does";

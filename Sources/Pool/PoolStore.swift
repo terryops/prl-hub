@@ -141,6 +141,8 @@ final class PoolStore: ObservableObject {
         }
         UserDefaults.standard.set(data, forKey: Self.watchesKey)
         CloudSync.push(Self.watchesKey)   // mirror to iCloud (no-op if not provisioned)
+        // 掉线提醒 registers the monitors with the worker: an edit, a pause or a rename matters there.
+        OfflineAlertStore.shared.watchesChanged()
     }
 
     /// Re-read watches after an incoming iCloud change.
@@ -167,6 +169,7 @@ final class PoolStore: ObservableObject {
         watches.removeAll { $0.id == id }
         watchData[id] = nil
         pruneOnchain()
+        OfflineAlertStore.shared.forget(id)
         saveWatches()
     }
 

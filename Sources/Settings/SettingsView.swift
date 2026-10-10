@@ -8,10 +8,22 @@ struct SettingsView: View {
     // read `progress` (the logo row and the nav title) re-render per scroll frame, not
     // this whole Form.
     @State private var header = SettingsHeaderScroll()
+    @State private var shotOfflineAlerts = SettingsView.shotOfflineAlerts
+
+    /// DEBUG-only: SHOT_OFFLINE_ALERTS=1 opens 掉线提醒 on launch (with SHOT_TAB=4), so a
+    /// verification run can reach it without driving the list.
+    private static var shotOfflineAlerts: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["SHOT_OFFLINE_ALERTS"] == "1"
+        #else
+        return false
+        #endif
+    }
 
     @EnvironmentObject private var loc: LocalizationManager
     @EnvironmentObject private var currency: CurrencyManager
     @ObservedObject private var alerts = PriceAlertStore.shared
+    @ObservedObject private var offline = OfflineAlertStore.shared
     @ObservedObject private var pro = ProStore.shared
     @ObservedObject private var live = PriceLiveActivity.shared
 
@@ -54,6 +66,20 @@ struct SettingsView: View {
                             }
                         } label: {
                             Label(Loc("价格提醒"), systemImage: "bell.badge")
+                        }
+                    }
+                    NavigationLink {
+                        OfflineAlertsView()
+                    } label: {
+                        LabeledContent {
+                            let on = offline.activeCount
+                            if !pro.isPro {
+                                PearlBadge(text: Loc("高级版"), tint: Pearl.accent)
+                            } else if on > 0 {
+                                Text("\(on)")
+                            }
+                        } label: {
+                            Label(Loc("掉线提醒"), systemImage: "wifi.exclamationmark")
                         }
                     }
                     if PriceLiveActivity.supported {
@@ -183,6 +209,7 @@ struct SettingsView: View {
             #if os(iOS)
             .onChange(of: lockPortrait) { _, _ in OrientationLock.apply() }
             #endif
+            .navigationDestination(isPresented: $shotOfflineAlerts) { OfflineAlertsView() }
         }
     }
 }

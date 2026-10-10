@@ -22,8 +22,8 @@ enum CloudSync {
     /// intentionally absent — each device refetches them, so syncing would only
     /// churn the cloud store on every refresh. They're still saved locally.
     static let syncedKeys = [
-        // pool monitor
-        "pool.watches",
+        // pool monitor (+ which monitors have a 掉线提醒, and after how many minutes)
+        "pool.watches", "pool.alerts",
         // exchange / trade — NON-secret only. The API key/secret are stored in the
         // iCloud Keychain (E2E-encrypted), never in this plaintext KVS.
         "safetrade.period", "safetrade.withdrawAddresses",

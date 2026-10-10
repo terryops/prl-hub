@@ -16,6 +16,20 @@ struct PoolView: View {
     @State private var newAddr = ""
     @State private var newAlias = ""
     @State private var draggingWatch: PoolWatch?
+    @ObservedObject private var offlineAlerts = OfflineAlertStore.shared
+    /// The 掉线提醒 pointer above the cards was opened or closed: it never comes back.
+    @AppStorage("pool.alertHintDismissed") private var alertHintDismissed = false
+    @State private var showingOfflineAlerts = false
+
+    /// Point at 掉线提醒 while the user has monitors and hasn't found it yet — until the
+    /// card is opened or closed, or an alert is switched on (here or on another device).
+    private var showsAlertHint: Bool {
+        #if DEBUG
+        // App Store captures seed their monitor with SHOT_WATCH_ADDR: keep those as they are.
+        if ProcessInfo.processInfo.environment["SHOT_WATCH_ADDR"] != nil { return false }
+        #endif
+        return !alertHintDismissed && !offlineAlerts.hasAnyAlert && !store.watches.isEmpty
+    }
 
     var body: some View {
         NavigationStack {
@@ -41,6 +55,10 @@ struct PoolView: View {
                                 .frame(maxWidth: .infinity)
                         }
                     } else {
+                        if showsAlertHint {
+                            OfflineAlertHintCard(onOpen: { alertHintDismissed = true; showingOfflineAlerts = true },
+                                                 onDismiss: { alertHintDismissed = true })
+                        }
                         // Cards: at most 2 per row, laid out by hand (an HStack per row)
                         // rather than LazyVGrid — a grid sizes each cell to its own
                         // content and never stretches a short cell up to the row height,
@@ -59,6 +77,7 @@ struct PoolView: View {
                 }
                 .animation(.snappy, value: store.watches)
                 .animation(.snappy, value: store.loading)
+                .animation(.snappy, value: showsAlertHint)
                 .padding(Pearl.Space.screen).frame(maxWidth: 1200).frame(maxWidth: .infinity)
             }
             // A drop anywhere in the scroll area — not just onto a card (that's the card's own
@@ -107,6 +126,7 @@ struct PoolView: View {
                 store.reloadWatches()   // a watch was added/removed on another device
             }
             .sheet(isPresented: $adding) { watchSheet }
+            .navigationDestination(isPresented: $showingOfflineAlerts) { OfflineAlertsView() }
         }
     }
 
@@ -281,6 +301,7 @@ private struct CardRow: View {
     let watches: [PoolWatch]
     let cols: Int
     @ObservedObject var store: PoolStore
+    @ObservedObject private var alerts = OfflineAlertStore.shared
     @Binding var dragging: PoolWatch?
     let onEdit: (PoolWatch) -> Void
     @State private var rowHeight: CGFloat = 0
@@ -305,6 +326,7 @@ private struct CardRow: View {
                   onchain: addr.flatMap { store.onchain[$0] },
                   addressHr24hRaw: addr.map { store.addressHashrate24h($0) } ?? 0,
                   prlUsd: store.prlUsd, minBodyHeight: cols > 1 ? rowHeight : 0,
+                  alertMinutes: alerts.threshold(for: w.id),
                   onEdit: { onEdit(w) },
                   onDelete: { store.removeWatch(w.id) },
                   onRename: { store.renameWatch(w.id, alias: $0) },
@@ -373,12 +395,16 @@ private struct WatchCard: View {
     /// The tallest card's body height in the row, so every card matches it and
     /// their bottom-pinned 链上到账 footers line up. 0 = size to own content.
     var minBodyHeight: CGFloat = 0
+    /// 掉线提醒 for this monitor: minutes offline before the push, nil = none.
+    var alertMinutes: Int?
     let onEdit: () -> Void
     let onDelete: () -> Void
     let onRename: (String) -> Void
     let onSetEnabled: (Bool) -> Void
 
     @EnvironmentObject private var currency: CurrencyManager
+    @ObservedObject private var pro = ProStore.shared
+    @State private var alertUpsell = false
     @State private var renaming = false
     @State private var aliasDraft = ""
     /// Hide offline rigs in the miner list. One shared, persisted flag — toggling
@@ -400,6 +426,10 @@ private struct WatchCard: View {
                                 .font(.caption2.weight(.medium)).foregroundStyle(.secondary)
                                 .padding(.horizontal, 6).padding(.vertical, 2)
                                 .background(Color.primary.opacity(0.08), in: Capsule())
+                        } else if let alertMinutes, pro.isPro {
+                            Image(systemName: "bell.fill")
+                                .font(.caption2).foregroundStyle(Pearl.accent)
+                                .accessibilityLabel(Loc("矿机离线满 %d 分钟时通知", alertMinutes))
                         }
                     }
                     // When aliased, keep the underlying pool visible as a hint.
@@ -417,6 +447,14 @@ private struct WatchCard: View {
                     Button(action: onEdit) { Label(Loc("编辑监控"), systemImage: "square.and.pencil") }
                     Button { aliasDraft = watch.alias ?? ""; renaming = true } label: {
                         Label(Loc("改别名"), systemImage: "pencil")
+                    }
+                    // 掉线提醒 (Pro): the choice right here; without Pro, what it is.
+                    if pro.isPro {
+                        OfflineAlertPicker(watch: watch, store: OfflineAlertStore.shared) {
+                            Label(Loc("掉线提醒"), systemImage: alertMinutes == nil ? "bell" : "bell.badge")
+                        }
+                    } else {
+                        Button { alertUpsell = true } label: { Label(Loc("掉线提醒"), systemImage: "bell") }
                     }
                     Button(role: .destructive, action: onDelete) { Label(Loc("删除监控"), systemImage: "trash") }
                 } label: {
@@ -514,6 +552,9 @@ private struct WatchCard: View {
             Button(Loc("取消"), role: .cancel) {}
         } message: {
             Text(Loc("给「%@」起个好记的别名；留空恢复默认。", watch.pool.label))
+        }
+        .sheet(isPresented: $alertUpsell) {
+            ProUpsellSheet(headline: Loc("新功能：掉线提醒"), headlineIcon: "wifi.exclamationmark")
         }
     }
 
