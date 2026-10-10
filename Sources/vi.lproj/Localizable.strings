@@ -964,3 +964,6 @@
 "SafeTrade 这条链的充值钱包暂时不可用，请稍后再试" = "Ví nạp của SafeTrade cho mạng này tạm thời không dùng được. Vui lòng thử lại sau.";
 "SafeTrade 要求先开启谷歌验证（2FA）才能生成充值地址" = "SafeTrade yêu cầu bật Google Authenticator (2FA) trước khi tạo địa chỉ nạp";
 "开源可校验 · 请勿从第三方下载，只认官方应用商店或自行编译" = "Mã nguồn mở, có thể kiểm chứng · Chỉ tải từ cửa hàng ứng dụng chính thức, hoặc tự biên dịch";
+"在这台 Mac 上推送" = "Thông báo trên máy Mac này";
+"提醒触发时，这台 Mac 也会弹出通知。" = "Khi cảnh báo kích hoạt, máy Mac này cũng hiện thông báo.";
+"这台 Mac 不弹通知。提醒仍会通过 iCloud 同步，在你的其他设备上推送。" = "Máy Mac này không hiện thông báo. Cảnh báo vẫn đồng bộ qua iCloud và gửi đến các thiết bị khác của bạn.";

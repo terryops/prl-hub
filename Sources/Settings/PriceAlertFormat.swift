@@ -35,7 +35,7 @@ enum PriceAlertFormat {
             default:   what = Loc("24 小时内")
             }
         }
-        guard let t = r.lastFired else { return what }
+        guard let t = r.lastPushed else { return what }
         return what + " · " + Loc("上次提醒：%@", RelTime(t))
     }
 

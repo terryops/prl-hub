@@ -6,7 +6,7 @@ import SwiftUI
 /// alerts are live.
 @MainActor
 func priceAlertSubtitle(_ store: PriceAlertStore, isPro: Bool) -> String {
-    let on = store.rules.filter(\.enabled).count
+    let on = store.rules.filter(\.isOn).count
     if !isPro { return Loc("涨破、跌破或急涨急跌时推送通知") }
     return on > 0 ? Loc("%d 条提醒生效中", on) : Loc("添加到价或涨跌幅提醒")
 }

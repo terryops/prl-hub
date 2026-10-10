@@ -963,4 +963,7 @@
 "SafeTrade 暂停了这个币种的充值" = "SafeTrade has paused deposits of this coin";
 "SafeTrade 这条链的充值钱包暂时不可用，请稍后再试" = "SafeTrade's deposit wallet for this network is unavailable. Try again later.";
 "SafeTrade 要求先开启谷歌验证（2FA）才能生成充值地址" = "SafeTrade needs Google Authenticator (2FA) turned on before it creates a deposit address";
-"开源可校验 · 请勿从第三方下载，只认官方应用商店或自行编译" = "Open source & verifiable · Get it only from official app stores or source";
+"开源可校验 · 请勿从第三方下载，只认官方应用商店或自行编译" = "Open source & verifiable · Don't download from third parties — only from official app stores, or build it yourself";
+"在这台 Mac 上推送" = "Notify on this Mac";
+"提醒触发时，这台 Mac 也会弹出通知。" = "When an alert fires, this Mac shows a notification too.";
+"这台 Mac 不弹通知。提醒仍会通过 iCloud 同步，在你的其他设备上推送。" = "This Mac stays quiet. Alerts still sync over iCloud and notify your other devices.";

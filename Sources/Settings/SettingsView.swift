@@ -46,7 +46,7 @@ struct SettingsView: View {
                         PriceAlertsView()
                     } label: {
                         LabeledContent {
-                            let on = alerts.rules.filter(\.enabled).count
+                            let on = alerts.rules.filter(\.isOn).count
                             if !pro.isPro {
                                 PearlBadge(text: Loc("高级版"), tint: Pearl.accent)
                             } else if on > 0 {

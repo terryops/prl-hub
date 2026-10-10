@@ -32,8 +32,11 @@ struct PriceAlertsView: View {
             VStack(spacing: Pearl.Space.lg) {
                 priceCard
                 if pro.isPro {
-                    if store.authorization == .denied { deniedCard }
+                    if store.authorization == .denied && store.pushHere { deniedCard }
                     rulesCard
+                    #if os(macOS)
+                    PushHereCard(store: store)
+                    #endif
                     PushWindowCard(store: store)
                 } else {
                     ProPaywallCard(pro: pro)
@@ -57,7 +60,7 @@ struct PriceAlertsView: View {
             AlertEditorSheet(existing: { if case .rule(let r) = target { return r }; return nil }(),
                              current: refPrice,
                              onSave: { rule in
-                                 if case .rule = target { store.update(rule) } else { store.add(rule) }
+                                 if case .rule(let old) = target { store.update(rule, from: old) } else { store.add(rule) }
                              },
                              onDelete: { rule in store.remove(rule) })
         }
@@ -67,7 +70,7 @@ struct PriceAlertsView: View {
             await store.refreshAuthorization()
             // Alerts that came over iCloud from another device: ask for notifications here,
             // where it's clear what for, rather than on some later launch.
-            if store.authorization == .notDetermined { store.launch() }
+            await store.pageOpened()
             await price.refreshIfStale()
             await pro.loadProduct()
             quote = await q
@@ -173,7 +176,7 @@ struct PriceAlertsView: View {
             .disabled(store.rules.count >= PriceAlertStore.maxRules)
             .padding(.top, Pearl.Space.md)
 
-            if !store.rules.isEmpty && store.token != nil {
+            if !store.rules.isEmpty && store.token != nil && store.pushHere {
                 HStack(spacing: Pearl.Space.xs) {
                     Button {
                         Task { await sendTest() }
@@ -203,7 +206,7 @@ struct PriceAlertsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(PriceAlertFormat.title(rule))
                     .font(.body.weight(.semibold)).monospacedDigit()
-                if rule.deferred == true, let w = store.window {
+                if rule.deferred == true, store.pushHere, let w = store.window {
                     // Fired in quiet hours; the worker pushes it at the window start.
                     Label(Loc("免打扰时段内触发，将于 %@ 推送", PushWindow.timeText(w.start)), systemImage: "moon.zzz.fill")
                         .font(.caption).foregroundStyle(Pearl.accent)
@@ -215,11 +218,11 @@ struct PriceAlertsView: View {
                 }
             }
             Spacer(minLength: Pearl.Space.xs)
-            Toggle(Loc("启用"), isOn: Binding(get: { rule.enabled }, set: { store.setEnabled(rule, $0) }))
+            Toggle(Loc("启用"), isOn: Binding(get: { rule.isOn }, set: { store.setEnabled(rule, $0) }))
                 .labelsHidden()
         }
         .padding(.vertical, Pearl.Space.sm)
-        .opacity(rule.enabled ? 1 : 0.5)
+        .opacity(rule.isOn ? 1 : 0.5)
         .contentShape(Rectangle())
         .onTapGesture { editing = .rule(rule) }
         .contextMenu {
@@ -228,7 +231,12 @@ struct PriceAlertsView: View {
         }
     }
 
+    /// This device's server sync — nothing to show while it doesn't take pushes.
     @ViewBuilder private var syncStatus: some View {
+        if store.pushHere { serverSyncStatus }
+    }
+
+    @ViewBuilder private var serverSyncStatus: some View {
         switch store.syncState {
         case .syncing:
             HStack(spacing: 4) {

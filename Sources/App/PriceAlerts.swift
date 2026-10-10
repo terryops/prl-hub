@@ -62,50 +62,93 @@ struct PriceAlertRule: Codable, Identifiable, Equatable {
     var value: Double
     /// move only: 300, 3600 or 86400 seconds.
     var window: Int = 0
+    /// Switched on by the user (synced). Whether it is live right now: `isOn`.
     var enabled = true
-    /// Last time the server pushed this rule (from the worker's reply).
+    /// Last time the server pushed this rule to THIS device (from the worker's reply).
     var lastFired: Date?
     /// Fired during quiet hours; the push waits for the next window start
     /// (from the worker's reply). Optional so older saved rules still decode.
     var deferred: Bool?
-    /// Unix seconds of the last user change (added, edited, switched — here or on
-    /// another device) or of the firing that switched it off. Decides which copy
-    /// wins in the iCloud merge. nil for rules saved before sync existed.
+    /// Unix seconds of the last user change (added, edited, switched, deleted — here
+    /// or on another device). Decides which copy wins in the iCloud merge; a firing
+    /// never moves it. nil for rules saved before sync existed.
     var changedAt: TimeInterval?
+    /// Latest firing of this condition on any of the user's devices — the worker's
+    /// clock, never the phone's. Synced, merged by max.
+    var fired: TimeInterval?
+    /// Firings up to this worker time had been seen when the user last switched the
+    /// rule on. Synced.
+    var ack: TimeInterval?
+
+    /// One-shot: an alert that fired after it was last switched on is off until the
+    /// user switches it back on. Only worker timestamps are compared.
+    var isOn: Bool { enabled && (fired ?? 0) <= (ack ?? 0) }
+
+    /// When the alert last went out, on any device.
+    var lastPushed: Date? { fired.map { Date(timeIntervalSince1970: $0) } ?? lastFired }
+
+    func hasSameCondition(kind k: Kind, value v: Double, window w: Int) -> Bool {
+        kind == k && value == v && window == w
+    }
+
+    func hasSameCondition(as other: PriceAlertRule) -> Bool {
+        hasSameCondition(kind: other.kind, value: other.value, window: other.window)
+    }
+
+    /// A stamp for a user change to a rule last changed at `previous`: now, but
+    /// always after `previous`, so a clock that runs behind another device's (or the
+    /// copy it is editing) can't lose its own change in the merge.
+    static func stamp(after previous: TimeInterval?) -> TimeInterval {
+        max(Date().timeIntervalSince1970, (previous ?? 0) + 0.001)
+    }
 
     /// This rule as edited to `edited`'s condition, keeping its id. A changed
     /// condition is a new alert: switched on, fired state cleared (the worker resets
     /// it too) — an edited one-shot alert that had fired used to stay off. An
     /// unchanged condition keeps its on/off and fired state.
     func applyingEdit(_ edited: PriceAlertRule) -> PriceAlertRule {
+        if hasSameCondition(as: edited) { return self }
         var r = edited
         r.id = id
-        if kind == edited.kind && value == edited.value && window == edited.window {
-            r.enabled = enabled
-            r.lastFired = lastFired
-            r.deferred = deferred
-            r.changedAt = changedAt
-        } else {
-            r.enabled = true
-            r.lastFired = nil
-            r.deferred = nil
-            r.changedAt = Date().timeIntervalSince1970
-        }
+        r.enabled = true
+        r.lastFired = nil
+        r.deferred = nil
+        r.fired = nil
+        r.ack = nil
+        r.changedAt = Self.stamp(after: changedAt)
         return r
     }
 
-    /// Wire format the worker expects (lastFired is server-owned). `seen_fired`
-    /// echoes the server's own last_fired: the worker only lets a fired rule be
-    /// switched back on by an app that has seen that firing (and so showed the
-    /// rule as off). A rule switched on at `changedAt` has had every earlier firing
-    /// seen — possibly on another device, which is why this device's own copy may
-    /// never have shown it — so that time counts as seen too.
-    fileprivate var payload: [String: Any] {
-        ["id": id, "kind": kind.rawValue, "value": value, "window": window, "enabled": enabled,
-         "seen_fired": seenFired]
+    /// A rule saved before sync (one-shot state kept in `enabled` alone), in the
+    /// fired/ack terms: same on/off as it had.
+    func migratedFromLegacy() -> PriceAlertRule {
+        guard fired == nil, let t = lastFired?.timeIntervalSince1970 else { return self }
+        var r = self
+        r.fired = t
+        if enabled, ack == nil { r.ack = t }
+        return r
     }
 
-    var seenFired: Int { Int(max(lastFired?.timeIntervalSince1970 ?? 0, enabled ? changedAt ?? 0 : 0)) }
+    /// What the worker gets for this rule. `seen_fired` is `ack`, a worker timestamp:
+    /// the worker only lets a fired rule back on for an app that has seen that firing
+    /// — here or on another device, where the user switched it back on.
+    var wire: Wire {
+        Wire(id: id, kind: kind, value: value, window: window, on: isOn,
+             seen: Int(max(ack ?? 0, lastFired?.timeIntervalSince1970 ?? 0)))
+    }
+
+    struct Wire: Equatable {
+        var id: String
+        var kind: Kind
+        var value: Double
+        var window: Int
+        var on: Bool
+        var seen: Int
+
+        fileprivate var payload: [String: Any] {
+            ["id": id, "kind": kind.rawValue, "value": value, "window": window, "enabled": on, "seen_fired": seen]
+        }
+    }
 }
 
 /// The worker's own price + moves — the numbers the alerts actually trigger on:
@@ -155,6 +198,9 @@ final class PriceAlertStore: ObservableObject {
     @Published private(set) var token: String?
     /// 推送时段; nil = all day (the default).
     @Published private(set) var window: PushWindow?
+    /// Whether THIS device gets the pushes (a per-device switch, shown on the Mac).
+    /// Off: the worker forgets this device; the rules still sync and can be edited here.
+    @Published private(set) var pushHere: Bool
 
     private static let rulesKey = "alerts.rules"
     /// iCloud copy of the rules (CloudSync mirrors it); merged into `rules`, never read directly.
@@ -162,11 +208,13 @@ final class PriceAlertStore: ObservableObject {
     /// Deleted rule ids → when, so a deletion also reaches the other devices.
     private static let removedKey = "alerts.removed"
     static let windowKey = "alerts.window"
+    private static let pushHereKey = "alerts.pushHere"
     private var removed: [String: TimeInterval] = [:]
     /// Time zone the worker last got with the window — re-sent after travel.
     private var sentTimeZone: String?
     private static let tokenKey = "alerts.apnsToken"
     private var syncTask: Task<Void, Never>?
+    private var windowPushTask: Task<Void, Never>?
     /// Bumped on every local edit. A server reply is only adopted if no edit
     /// happened while it was in flight — otherwise a slow reply (e.g. a GET that
     /// raced a toggle's PUT) would put back the state from before the edit.
@@ -179,17 +227,23 @@ final class PriceAlertStore: ObservableObject {
     init() {
         let d = UserDefaults.standard
         if let data = d.data(forKey: Self.rulesKey),
-           let r = try? JSONDecoder().decode([PriceAlertRule].self, from: data) { rules = r }
+           let r = try? JSONDecoder().decode([PriceAlertRule].self, from: data) { rules = r.map { $0.migratedFromLegacy() } }
         if let data = d.data(forKey: Self.removedKey),
            let r = try? JSONDecoder().decode([String: TimeInterval].self, from: data) { removed = r }
         token = d.string(forKey: Self.tokenKey)
         window = Self.savedWindow()
-        // Rules saved before iCloud sync: stage them as this device's iCloud copy, so
-        // CloudSync.start uploads them if iCloud has none yet — or, if another device
-        // got there first, pulls that copy in and we merge.
-        if d.data(forKey: Self.syncKey) == nil, !rules.isEmpty,
-           let data = CloudAlerts(rules: rules.map(\.cloud)).encoded() {
-            d.set(data, forKey: Self.syncKey)
+        pushHere = d.object(forKey: Self.pushHereKey) as? Bool ?? true
+        if d.data(forKey: Self.syncKey) == nil {
+            // Rules saved before iCloud sync: stage them as this device's iCloud copy, so
+            // CloudSync.start uploads them if iCloud has none yet — or, if another device
+            // got there first, pulls that copy in and we merge.
+            if !rules.isEmpty, let data = CloudAlerts(rules: rules.map(\.cloud)).encoded() {
+                d.set(data, forKey: Self.syncKey)
+            }
+        } else {
+            // CloudSync may have pulled before this store existed (its notification then
+            // went unheard): merge whatever it left.
+            reconcile(incoming: true)
         }
         cloudSub = NotificationCenter.default.publisher(for: .cloudSyncDidUpdate)
             .receive(on: RunLoop.main)
@@ -212,40 +266,41 @@ final class PriceAlertStore: ObservableObject {
 
     func add(_ rule: PriceAlertRule) {
         var r = rule
-        r.changedAt = Date().timeIntervalSince1970
+        r.changedAt = PriceAlertRule.stamp(after: nil)
         rules.append(r)
         rulesChanged()
     }
 
-    /// Replace an edited rule (same id). Its fired/armed state resets server-side
-    /// because kind/value/window changed. The edit is re-applied to the stored copy:
-    /// the editor's snapshot may predate the alert firing or a change synced in.
-    func update(_ rule: PriceAlertRule) {
-        guard let i = rules.firstIndex(where: { $0.id == rule.id }) else { return }
-        let r = rules[i].applyingEdit(rule)
+    /// Save an edit made to `original`. Only the condition can be edited, so an
+    /// unchanged one saves nothing — the stored copy may have moved on since the
+    /// editor opened (fired, or edited on another device) and must not be put back.
+    /// A changed condition is a new alert: its fired/armed state resets, server-side too.
+    func update(_ edited: PriceAlertRule, from original: PriceAlertRule) {
+        guard !edited.hasSameCondition(as: original),
+              let i = rules.firstIndex(where: { $0.id == original.id }) else { return }
+        let r = rules[i].applyingEdit(edited)
         guard r != rules[i] else { return }
         rules[i] = r
         rulesChanged()
     }
 
     func remove(at offsets: IndexSet) {
-        let now = Date().timeIntervalSince1970
-        for i in offsets { removed[rules[i].id] = now }
+        for i in offsets { removed[rules[i].id] = PriceAlertRule.stamp(after: rules[i].changedAt) }
         rules.remove(atOffsets: offsets)
         rulesChanged()
     }
 
     func remove(_ rule: PriceAlertRule) {
-        guard rules.contains(where: { $0.id == rule.id }) else { return }
-        removed[rule.id] = Date().timeIntervalSince1970
-        rules.removeAll { $0.id == rule.id }
-        rulesChanged()
+        guard let i = rules.firstIndex(where: { $0.id == rule.id }) else { return }
+        remove(at: IndexSet(integer: i))
     }
 
+    /// The user's switch. Switching on also marks every firing so far as seen.
     func setEnabled(_ rule: PriceAlertRule, _ on: Bool) {
-        guard let i = rules.firstIndex(where: { $0.id == rule.id }), rules[i].enabled != on else { return }
+        guard let i = rules.firstIndex(where: { $0.id == rule.id }), rules[i].isOn != on else { return }
         rules[i].enabled = on
-        rules[i].changedAt = Date().timeIntervalSince1970
+        if on { rules[i].ack = max(rules[i].ack ?? 0, rules[i].fired ?? 0) }
+        rules[i].changedAt = PriceAlertRule.stamp(after: rules[i].changedAt)
         rulesChanged()
     }
 
@@ -256,9 +311,25 @@ final class PriceAlertStore: ObservableObject {
         window = w
         if let w, let d = try? JSONEncoder().encode(w) { UserDefaults.standard.set(d, forKey: Self.windowKey) }
         else { UserDefaults.standard.removeObject(forKey: Self.windowKey) }
-        CloudSync.push(Self.windowKey)
+        // Upload once the time picker settles, not on every step of it.
+        windowPushTask?.cancel()
+        windowPushTask = Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+            CloudSync.push(Self.windowKey)
+        }
         localVersion += 1
-        if !rules.isEmpty { scheduleSync() }
+        if !rules.isEmpty && pushHere { scheduleSync() }
+    }
+
+    /// Turn this device's pushes on or off. Off sends the worker an empty rule list,
+    /// which drops this device's record.
+    func setPushHere(_ on: Bool) {
+        guard on != pushHere else { return }
+        pushHere = on
+        UserDefaults.standard.set(on, forKey: Self.pushHereKey)
+        localVersion += 1
+        if on { followOnServer(prompt: true) } else { scheduleSync() }
     }
 
     private static func savedWindow() -> PushWindow? {
@@ -269,7 +340,14 @@ final class PriceAlertStore: ObservableObject {
         localVersion += 1
         persist()
         reconcile(incoming: false)
-        if rules.isEmpty || !ProStore.shared.isPro { scheduleSync() } else { Task { await ensureRegistered() } }
+        followOnServer(prompt: true)
+    }
+
+    /// Bring this device's server record in line with the rules. `prompt`: may ask
+    /// for notification permission — only when the user just did something here.
+    private func followOnServer(prompt: Bool) {
+        guard pushHere else { return }
+        if rules.isEmpty || !ProStore.shared.isPro { scheduleSync() } else { Task { await ensureRegistered(prompt: prompt) } }
     }
 
     // MARK: iCloud
@@ -281,9 +359,7 @@ final class PriceAlertStore: ObservableObject {
         if w != window { window = w; if !rules.isEmpty { changed = true } }
         guard changed else { return }
         localVersion += 1   // a server reply already in flight predates this
-        // Never prompt for notifications here: this device's user didn't just ask for
-        // an alert. launch() / the alerts page ask when it's their move.
-        if rules.isEmpty || !ProStore.shared.isPro { scheduleSync() } else { Task { await ensureRegistered(prompt: false) } }
+        followOnServer(prompt: false)
     }
 
     /// Merge the rules with the iCloud copy, keep the result and upload it if iCloud
@@ -291,14 +367,18 @@ final class PriceAlertStore: ObservableObject {
     @discardableResult
     private func reconcile(incoming: Bool) -> Bool {
         let d = UserDefaults.standard
-        let cloud = CloudAlerts.decode(d.data(forKey: Self.syncKey))
+        let raw = d.data(forKey: Self.syncKey)
+        let cloud = CloudAlerts.decode(raw)
+        // Written by a newer version this one can't read: leave it alone rather than
+        // overwrite it with only what this device knows.
+        if raw != nil && cloud == nil { return false }
         if incoming && cloud == nil { return false }
         let merged = PriceAlertSync.merge(local: rules, removed: removed, cloud: cloud, incoming: incoming)
-        let changed = merged.rules.map(\.cloud) != rules.map(\.cloud)
-        if merged.rules != rules { rules = merged.rules; persist() }
-        if merged.removed != removed {
+        let changed = merged.rules.map(\.wire) != rules.map(\.wire)
+        if merged.rules != rules || merged.removed != removed {
+            rules = merged.rules
             removed = merged.removed
-            if let data = try? JSONEncoder().encode(removed) { d.set(data, forKey: Self.removedKey) }
+            persist()
         }
         let out = CloudAlerts(rules: rules.map(\.cloud), removed: removed)
         if out != cloud, !(cloud == nil && out.isEmpty), let data = out.encoded() {
@@ -309,17 +389,20 @@ final class PriceAlertStore: ObservableObject {
     }
 
     private func proChanged() {
-        guard !rules.isEmpty else { return }
-        if ProStore.shared.isPro { Task { await ensureRegistered() } } else { scheduleSync() }
+        guard !rules.isEmpty, pushHere else { return }
+        // StoreKit settles the entitlement at every launch: never prompt from here.
+        if ProStore.shared.isPro { Task { await ensureRegistered(prompt: false) } } else { scheduleSync() }
     }
 
     private func jwsChanged() {
-        guard !rules.isEmpty, ProStore.shared.isPro, token != nil else { return }
+        guard !rules.isEmpty, ProStore.shared.isPro, pushHere, token != nil else { return }
         scheduleSync()
     }
 
     private func persist() {
-        if let d = try? JSONEncoder().encode(rules) { UserDefaults.standard.set(d, forKey: Self.rulesKey) }
+        let d = UserDefaults.standard
+        if let data = try? JSONEncoder().encode(rules) { d.set(data, forKey: Self.rulesKey) }
+        if let data = try? JSONEncoder().encode(removed) { d.set(data, forKey: Self.removedKey) }
     }
 
     // MARK: permission + registration
@@ -348,10 +431,18 @@ final class PriceAlertStore: ObservableObject {
         if token != nil { scheduleSync() }
     }
 
-    /// Launch hook: re-register only if the user has alerts (never prompt otherwise).
+    /// Launch hook: re-register if the user has alerts. Never prompts — the rules may
+    /// have come from another device; the alerts page asks.
     func launch() {
-        guard !rules.isEmpty, ProStore.shared.isPro else { return }
-        Task { await ensureRegistered() }
+        guard !rules.isEmpty, ProStore.shared.isPro, pushHere else { return }
+        Task { await ensureRegistered(prompt: false) }
+    }
+
+    /// The alerts page opened: the one place to ask for notifications for alerts
+    /// that synced in from another device.
+    func pageOpened() async {
+        guard !rules.isEmpty, ProStore.shared.isPro, pushHere, authorization == .notDetermined else { return }
+        await ensureRegistered()
     }
 
     func didRegister(tokenData: Data) {
@@ -369,11 +460,11 @@ final class PriceAlertStore: ObservableObject {
     /// Foreground hook: pick up a permission change made in system Settings and
     /// retry a sync that failed earlier (e.g. offline when a rule was added).
     func foreground() {
-        guard !rules.isEmpty, ProStore.shared.isPro else { return }
+        guard !rules.isEmpty, ProStore.shared.isPro, pushHere else { return }
         Task {
             await refreshAuthorization()
-            if case .failed = syncState { await ensureRegistered() }
-            else if token == nil { await ensureRegistered() }
+            if case .failed = syncState { await ensureRegistered(prompt: false) }
+            else if token == nil { await ensureRegistered(prompt: false) }
             // Crossed a time zone: the window is in local time, so re-send it.
             else if window != nil, let sent = sentTimeZone, sent != TimeZone.current.identifier { scheduleSync() }
             else { await refresh() }   // alerts that fired while away are now off
@@ -381,7 +472,7 @@ final class PriceAlertStore: ObservableObject {
     }
 
     /// Language changed → the push copy must follow, so re-send.
-    func languageChanged() { if !rules.isEmpty { scheduleSync() } }
+    func languageChanged() { if !rules.isEmpty && pushHere { scheduleSync() } }
 
     // MARK: server sync
 
@@ -395,6 +486,14 @@ final class PriceAlertStore: ObservableObject {
         }
     }
 
+    /// What goes to the worker: live alerts first, so the cap never drops one of
+    /// those for a switched-off one (rules merged from several devices can pass it).
+    private var wireRules: [PriceAlertRule.Wire] {
+        guard ProStore.shared.isPro, pushHere else { return [] }
+        let all = rules.map(\.wire)
+        return Array((all.filter(\.on) + all.filter { !$0.on }).prefix(Self.maxRules))
+    }
+
     func sync() async {
         guard let token else { return }
         syncState = .syncing
@@ -406,7 +505,7 @@ final class PriceAlertStore: ObservableObject {
             "env": Self.apnsEnvironment,
             "topic": Bundle.main.bundleIdentifier ?? "com.prl.wizard",
             "lang": Self.pushLanguage,
-            "rules": ProStore.shared.isPro ? rules.prefix(Self.maxRules).map(\.payload) : [],
+            "rules": wireRules.map(\.payload),
         ]
         // The signed Pro purchase, so the worker can check the entitlement itself.
         if ProStore.shared.isPro, let jws = ProStore.shared.jws { body["pro_jws"] = jws }
@@ -433,7 +532,7 @@ final class PriceAlertStore: ObservableObject {
     /// Pull the server's view of this device's rules without re-sending them —
     /// picks up alerts that fired (and so switched themselves off) meanwhile.
     func refresh() async {
-        guard let token, ProStore.shared.isPro, !rules.isEmpty, syncState != .syncing else { return }
+        guard let token, ProStore.shared.isPro, pushHere, !rules.isEmpty, syncState != .syncing else { return }
         let asked = localVersion
         var req = URLRequest(url: Self.endpoint.appendingPathComponent("devices/\(token)"))
         req.timeoutInterval = 10
@@ -443,46 +542,34 @@ final class PriceAlertStore: ObservableObject {
         adoptServerState(data, fromPut: false)
     }
 
-    /// Copy the server's last-fired times onto the local rules, and switch off the
-    /// ones it pushed (one-shot) since they were last switched on. Any other on/off
-    /// difference means the server is behind a change made here or synced in from
-    /// another device — that is re-sent (after a GET; a PUT reply is what we just sent).
+    /// Take this device's firings from the server's reply. A firing newer than what
+    /// the user had seen switches the alert off (`isOn`) — on every device, through
+    /// iCloud. Any other on/off difference means the server is behind a change made
+    /// here or synced in; a GET re-sends (a PUT reply already reflects what we sent).
     private func adoptServerState(_ data: Data, fromPut: Bool) {
         guard let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let list = o["rules"] as? [[String: Any]] else { return }
-        var listed: Set<String> = []
-        var fired: [String: Date] = [:]
-        var enabled: [String: Bool] = [:]
-        var deferred: [String: Bool] = [:]
-        for r in list {
-            guard let id = r["id"] as? String else { continue }
-            listed.insert(id)
-            if let t = r["last_fired"] as? Double { fired[id] = Date(timeIntervalSince1970: t) }
-            if let e = r["enabled"] as? Bool { enabled[id] = e }
-            if let q = r["deferred"] as? Bool { deferred[id] = q }
-        }
-        var changed = false, firedOff = false, behind = false
+        var byID: [String: [String: Any]] = [:]
+        for r in list { if let id = r["id"] as? String { byID[id] = r } }
+        var changed = false, firedMore = false, behind = false
         for i in rules.indices {
-            let id = rules[i].id
-            // Rules the server doesn't list (Pro lapsed, not synced yet) keep their local
-            // state — including when they last fired.
-            guard listed.contains(id) else { continue }
-            if rules[i].lastFired != fired[id] { rules[i].lastFired = fired[id]; changed = true }
-            if let q = deferred[id], rules[i].deferred != q { rules[i].deferred = q; changed = true }
-            guard let e = enabled[id], e != rules[i].enabled else { continue }
-            if !e, let t = fired[id]?.timeIntervalSince1970, t > rules[i].changedAt ?? 0 {
-                rules[i].enabled = false
-                rules[i].changedAt = t
-                firedOff = true
-            } else {
-                behind = true
-            }
+            // Rules the server doesn't list (Pro lapsed, not synced yet), or lists with
+            // another condition (an edit not sent yet), keep their local state.
+            guard let s = byID[rules[i].id],
+                  let kind = (s["kind"] as? String).flatMap(PriceAlertRule.Kind.init(rawValue:)),
+                  let value = s["value"] as? Double,
+                  rules[i].hasSameCondition(kind: kind, value: value, window: s["window"] as? Int ?? 0)
+            else { continue }
+            let last = (s["last_fired"] as? Double).map { Date(timeIntervalSince1970: $0) }
+            if rules[i].lastFired != last { rules[i].lastFired = last; changed = true }
+            if let q = s["deferred"] as? Bool, rules[i].deferred != q { rules[i].deferred = q; changed = true }
+            if let t = last?.timeIntervalSince1970, t > rules[i].fired ?? 0 { rules[i].fired = t; firedMore = true }
+            if let e = s["enabled"] as? Bool, e != rules[i].isOn { behind = true }
         }
-        if changed || firedOff { persist() }
-        // The switch-off shows on the other devices too — unless one of them switched
-        // the rule back on later, which the merge keeps and the server must hear.
-        if firedOff, reconcile(incoming: false) { behind = true; localVersion += 1 }
-        if behind && (!fromPut || firedOff) { scheduleSync() }
+        if changed || firedMore { persist() }
+        // Tell the other devices; the merge may also bring in a newer switch-on.
+        if firedMore, reconcile(incoming: false) { localVersion += 1; behind = true }
+        if behind && (!fromPut || firedMore) { scheduleSync() }
     }
 
     /// A rotated token: drop the stale server record so it doesn't linger.

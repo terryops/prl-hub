@@ -964,3 +964,6 @@
 "SafeTrade 这条链的充值钱包暂时不可用，请稍后再试" = "Dompet deposit SafeTrade untuk jaringan ini sedang tidak tersedia. Coba lagi nanti.";
 "SafeTrade 要求先开启谷歌验证（2FA）才能生成充值地址" = "SafeTrade mengharuskan Google Authenticator (2FA) aktif sebelum membuat alamat deposit";
 "开源可校验 · 请勿从第三方下载，只认官方应用商店或自行编译" = "Sumber terbuka & dapat diverifikasi · Unduh hanya dari toko aplikasi resmi, atau kompilasi sendiri";
+"在这台 Mac 上推送" = "Beri notifikasi di Mac ini";
+"提醒触发时，这台 Mac 也会弹出通知。" = "Saat peringatan terpicu, Mac ini juga menampilkan notifikasi.";
+"这台 Mac 不弹通知。提醒仍会通过 iCloud 同步，在你的其他设备上推送。" = "Mac ini tidak menampilkan notifikasi. Peringatan tetap disinkronkan lewat iCloud dan dikirim ke perangkat Anda yang lain.";
