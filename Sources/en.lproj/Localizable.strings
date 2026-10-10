@@ -979,7 +979,7 @@
 "掉线提醒：矿机离线 10 分钟以上就通知你" = "Offline alerts: know when a worker has been offline for 10+ minutes";
 "矿机掉线，第一时间知道" = "Know when a worker goes offline";
 "矿机离线达到你设定的时长就推送通知，不用打开 App。服务器每 5 分钟向矿池查询一次。" = "Get a push once a worker has been offline for the time you choose — no need to open the app. The server asks the pool every 5 minutes.";
-"监控已暂停，暂停期间不提醒" = "Paused — no alerts for now";
+"监控都已暂停。恢复监控后，可以在这里开启掉线提醒。" = "All your monitors are paused. Resume one to set an offline alert here.";
 "矿池查不到这个地址，无法提醒" = "Pool doesn't know this address";
 "通知权限已关闭，掉线提醒无法送达" = "Notifications are turned off, so offline alerts can't be delivered.";
 "还没有监控。先到「我的监控」添加矿池和收款地址。" = "No monitors yet. Add a pool and payout address in “Monitor” first.";

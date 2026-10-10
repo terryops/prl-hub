@@ -1,9 +1,9 @@
 import SwiftUI
 import UserNotifications
 
-/// 掉线提醒 — reached from 设置 → 通知 and from a monitor card's menu. One row per
-/// pool monitor with how long a worker may be offline before the push; the checking
-/// itself happens on the server — see OfflineAlertStore.
+/// 掉线提醒 — reached from 设置 → 通知 and from the pointer card on 我的监控. One row per
+/// running pool monitor with how long a worker may be offline before the push; the
+/// checking itself happens on the server — see OfflineAlertStore.
 struct OfflineAlertsView: View {
     @ObservedObject private var store = OfflineAlertStore.shared
     @ObservedObject private var push = PriceAlertStore.shared
@@ -83,11 +83,16 @@ struct OfflineAlertsView: View {
             }
             .padding(.bottom, Pearl.Space.sm)
 
-            if store.watches.isEmpty {
+            // Only the monitors that are running: a paused one is not watched, so an alert
+            // for it has nothing to say until it is resumed (its choice is kept meanwhile).
+            let running = store.watches.filter(\.isEnabled)
+            if running.isEmpty {
                 VStack(spacing: 6) {
-                    Image(systemName: "square.stack.3d.up")
+                    Image(systemName: store.watches.isEmpty ? "square.stack.3d.up" : "pause.circle")
                         .font(.title2).foregroundStyle(Pearl.accent.opacity(0.7))
-                    Text(Loc("还没有监控。先到「我的监控」添加矿池和收款地址。"))
+                    Text(store.watches.isEmpty
+                         ? Loc("还没有监控。先到「我的监控」添加矿池和收款地址。")
+                         : Loc("监控都已暂停。恢复监控后，可以在这里开启掉线提醒。"))
                         .font(.subheadline).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
@@ -95,7 +100,7 @@ struct OfflineAlertsView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Pearl.Space.md)
             } else {
-                ForEach(Array(store.watches.enumerated()), id: \.element.id) { i, w in
+                ForEach(Array(running.enumerated()), id: \.element.id) { i, w in
                     if i > 0 { Divider().padding(.leading, 34 + Pearl.Space.sm) }
                     row(w)
                 }
@@ -114,9 +119,7 @@ struct OfflineAlertsView: View {
     private func row(_ w: PoolWatch) -> some View {
         let m = store.threshold(for: w.id)
         return HStack(spacing: Pearl.Space.sm) {
-            // Dimmed while nothing is being watched: no alert, or the monitor is paused.
-            PearlIconBadge(systemImage: m == nil ? "bell.slash" : "bell.badge.fill", size: 34)
-                .opacity(m == nil || !w.isEnabled ? 0.5 : 1)
+            PoolIcon(pool: w.pool, size: 34)
             VStack(alignment: .leading, spacing: 2) {
                 Text(w.displayName).font(.body.weight(.semibold)).lineLimit(1)
                 subtitle(w, minutes: m)
@@ -132,10 +135,7 @@ struct OfflineAlertsView: View {
     }
 
     @ViewBuilder private func subtitle(_ w: PoolWatch, minutes m: Int?) -> some View {
-        if m != nil, !w.isEnabled {
-            Label(Loc("监控已暂停，暂停期间不提醒"), systemImage: "pause.circle")
-                .font(.caption).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
-        } else if m != nil, store.missing.contains(w.id) {
+        if m != nil, store.missing.contains(w.id) {
             Label(Loc("矿池查不到这个地址，无法提醒"), systemImage: "exclamationmark.triangle.fill")
                 .font(.caption).foregroundStyle(.orange).lineLimit(1).minimumScaleFactor(0.8)
         } else if m != nil, store.stale.contains(w.id) {
@@ -156,7 +156,7 @@ struct OfflineAlertsView: View {
 }
 
 /// The 不提醒 / 10 / 15 / 30 / 60 分钟 choice for one monitor, as a menu. Shared by the
-/// 掉线提醒 page (a labelled button) and the monitor card's own menu (a submenu).
+/// 掉线提醒 page (a labelled button) and the monitor card (the chip beside its name).
 struct OfflineAlertPicker<MenuLabel: View>: View {
     let watch: PoolWatch
     @ObservedObject var store: OfflineAlertStore

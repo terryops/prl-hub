@@ -417,19 +417,19 @@ private struct WatchCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Pearl.Space.sm) {
             HStack(spacing: Pearl.Space.sm) {
-                PearlIconBadge(systemImage: "person.crop.circle")
+                PoolIcon(pool: watch.pool).opacity(watch.isEnabled ? 1 : 0.5)
                 VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 5) {
+                    HStack(spacing: 6) {
                         Text(watch.displayName).font(.headline)
                         if !watch.isEnabled {
                             Text(Loc("已暂停"))
                                 .font(.caption2.weight(.medium)).foregroundStyle(.secondary)
                                 .padding(.horizontal, 6).padding(.vertical, 2)
                                 .background(Color.primary.opacity(0.08), in: Capsule())
-                        } else if let alertMinutes, pro.isPro {
-                            Image(systemName: "bell.fill")
-                                .font(.caption2).foregroundStyle(Pearl.accent)
-                                .accessibilityLabel(Loc("矿机离线满 %d 分钟时通知", alertMinutes))
+                        } else {
+                            // 掉线提醒 sits beside the name, in the open — not inside the ⋯ menu.
+                            // (A paused monitor has none: nothing is watched while it is paused.)
+                            alertControl
                         }
                     }
                     // When aliased, keep the underlying pool visible as a hint.
@@ -447,14 +447,6 @@ private struct WatchCard: View {
                     Button(action: onEdit) { Label(Loc("编辑监控"), systemImage: "square.and.pencil") }
                     Button { aliasDraft = watch.alias ?? ""; renaming = true } label: {
                         Label(Loc("改别名"), systemImage: "pencil")
-                    }
-                    // 掉线提醒 (Pro): the choice right here; without Pro, what it is.
-                    if pro.isPro {
-                        OfflineAlertPicker(watch: watch, store: OfflineAlertStore.shared) {
-                            Label(Loc("掉线提醒"), systemImage: alertMinutes == nil ? "bell" : "bell.badge")
-                        }
-                    } else {
-                        Button { alertUpsell = true } label: { Label(Loc("掉线提醒"), systemImage: "bell") }
                     }
                     Button(role: .destructive, action: onDelete) { Label(Loc("删除监控"), systemImage: "trash") }
                 } label: {
@@ -556,6 +548,36 @@ private struct WatchCard: View {
         .sheet(isPresented: $alertUpsell) {
             ProUpsellSheet(headline: Loc("新功能：掉线提醒"), headlineIcon: "wifi.exclamationmark")
         }
+    }
+
+    /// 掉线提醒 for this monitor, as a chip beside its name: it shows whether an alert is on
+    /// (and after how long), and tapping it opens the choice — Pro; without Pro, what it is.
+    @ViewBuilder private var alertControl: some View {
+        Group {
+            if pro.isPro {
+                OfflineAlertPicker(watch: watch, store: OfflineAlertStore.shared) { alertChip }
+                    .menuIndicator(.hidden)
+            } else {
+                Button { alertUpsell = true } label: { alertChip }
+            }
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityLabel(Loc("掉线提醒"))
+        .accessibilityValue(alertMinutes.map { Loc("矿机离线满 %d 分钟时通知", $0) } ?? Loc("不提醒"))
+    }
+
+    private var alertChip: some View {
+        let on = alertMinutes != nil && pro.isPro
+        return HStack(spacing: 3) {
+            Image(systemName: on ? "bell.fill" : "bell.slash")
+            if on, let alertMinutes { Text(Loc("%d 分钟", alertMinutes)).monospacedDigit() }
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(on ? Pearl.accent : Color.secondary)
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(on ? Pearl.accent.opacity(0.13) : Color.primary.opacity(0.08), in: Capsule())
+        .contentShape(Capsule())
     }
 
     /// The window this card is actually showing: the shared choice when this pool publishes

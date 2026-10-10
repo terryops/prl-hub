@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "f2pool.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

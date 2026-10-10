@@ -600,7 +600,13 @@ private struct PoolComparisonTable: View {
         let isBest = p.yieldTrustworthy && p.earningsPerPH == best
         HStack(spacing: 12) {
             HStack(spacing: 8) {
-                PearlIconBadge(systemImage: "server.rack", gradient: p.gradient, size: 22)
+                // The pool's own logo for the ones the app has one for (the names here are
+                // PoolKind's); any other pool keeps the generic badge.
+                if let kind = PoolKind(rawValue: p.name) {
+                    PoolIcon(pool: kind, size: 22)
+                } else {
+                    PearlIconBadge(systemImage: "server.rack", gradient: p.gradient, size: 22)
+                }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(p.name).font(.callout.weight(.medium)).lineLimit(1).minimumScaleFactor(0.7)
                     // ALWAYS render the type line, "—" when the feed omits it (PearlHash does,
