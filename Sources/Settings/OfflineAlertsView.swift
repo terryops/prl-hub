@@ -65,7 +65,7 @@ struct OfflineAlertsView: View {
             PearlIconBadge(systemImage: "wifi.exclamationmark", size: 44)
             VStack(alignment: .leading, spacing: 3) {
                 Text(Loc("矿机掉线，第一时间知道")).font(.headline)
-                Text(Loc("矿机离线达到你设定的时长就推送通知，不用打开 App。服务器每 5 分钟向矿池查询一次。"))
+                Text(Loc("矿机离线达到你设定的时长就推送通知，不用打开 App。服务器每 3 分钟向矿池查询一次。"))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -162,26 +162,31 @@ struct OfflineAlertPicker<MenuLabel: View>: View {
     @ObservedObject var store: OfflineAlertStore
     @ViewBuilder var label: () -> MenuLabel
 
-    private var selection: Binding<Int> {
-        Binding(get: { store.threshold(for: watch.id) ?? 0 },
-                set: { store.set(watch.id, minutes: $0 == 0 ? nil : $0) })
-    }
-
     var body: some View {
         Menu {
-            Picker(Loc("掉线提醒"), selection: selection) {
-                Text(Loc("不提醒")).tag(0)
+            // The heading says what is being chosen: the card's bell (and a bare "10 分钟")
+            // don't. Checkable items rather than an inline Picker, because a menu drops
+            // the heading of a section that holds nothing but a picker.
+            Section {
+                item(nil, Loc("不提醒"))
                 // At the cap, a monitor without an alert can't get one; the others still can change.
                 if store.threshold(for: watch.id) != nil || store.canAddMore {
                     ForEach(OfflineAlertStore.choices, id: \.self) { m in
-                        Text(Loc("离线 %d 分钟后", m)).tag(m)
+                        item(m, Loc("离线 %d 分钟后", m))
                     }
                 }
+            } header: {
+                Text(Loc("掉线提醒：离线多久后通知"))
             }
-            .pickerStyle(.inline)
         } label: {
             label()
         }
+    }
+
+    /// One choice, ticked while it is the monitor's. (Tapping the ticked one changes nothing.)
+    private func item(_ minutes: Int?, _ title: String) -> some View {
+        Toggle(title, isOn: Binding(get: { store.threshold(for: watch.id) == minutes },
+                                    set: { if $0 { store.set(watch.id, minutes: minutes) } }))
     }
 }
 

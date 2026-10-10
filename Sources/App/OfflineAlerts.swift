@@ -7,7 +7,7 @@ import Combine
 // The app can't watch a pool while it is closed, so — as with
 // price alerts — the checking runs on the worker (repo alerts/,
 // src/watch.js): it asks the pool about each registered monitor
-// every 5 minutes and pushes once a worker has been offline for
+// every 3 minutes and pushes once a worker has been offline for
 // the time the user chose (10 / 15 / 30 / 60 minutes).
 //
 // It is opt-in per monitor, and switching it on is what sends
