@@ -33,7 +33,7 @@ struct DonateView: View {
     @ObservedObject var store: WalletStore
     @Environment(\.dismiss) private var dismiss
     @State private var custom = ""
-    /// The signed donation awaiting confirmation (shows the real fee); nil = no alert.
+    /// The signed donation awaiting confirmation (shows the real fee); nil = picking an amount.
     @State private var prepared: PreparedSend?
     @State private var preparing = false
     @State private var sending = false
@@ -47,95 +47,20 @@ struct DonateView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: Pearl.Space.lg) {
-                    VStack(spacing: Pearl.Space.sm) {
-                        PearlIconBadge(systemImage: "heart.fill", gradient: Pearl.sunrise, size: 56)
-                        Text(Loc("喜欢 Pearl Hub？请开发者喝杯咖啡"))
-                            .font(.headline).multilineTextAlignment(.center)
-                        PearlBadge(text: Loc("开源项目 · GPL-3.0"),
-                                   systemImage: "chevron.left.forwardslash.chevron.right", tint: Pearl.accent)
-                        Text(Loc("Pearl Hub 是免费的开源项目，全部代码公开在 GitHub，没有广告和追踪。你的捐赠会直接支持它持续更新。"))
-                            .font(.callout).foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Link(destination: AppLinks.github) {
-                            Label(Loc("在 GitHub 查看源码"), systemImage: "arrow.up.right.square")
-                        }
-                        .font(.callout.weight(.medium))
-                    }
-
-                    HStack(spacing: Pearl.Space.sm) {
-                        ForEach(Donation.presets, id: \.self) { amount in
-                            Button { prepare(amount) } label: {
-                                Text(verbatim: "\(Self.text(amount)) PRL")
-                                    .font(.headline.monospacedDigit())
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, Pearl.Space.xs)
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.large)
-                            .disabled(busy || !canAfford(amount))
-                        }
-                    }
-
-                    if showingCustom {
-                        HStack(spacing: Pearl.Space.sm) {
-                            TextField(Loc("自定义金额（最少 %@ PRL）", Self.text(Donation.minimum)), text: $custom)
-                                .textFieldStyle(.roundedBorder)
-                                .font(.body.monospacedDigit())
-                                #if os(iOS)
-                                .keyboardType(.decimalPad)
-                                #endif
-                                .focused($customFocused)
-                                .onAppear { customFocused = true }
-                                .onChange(of: custom) { _, _ in error = nil }
-                            Button(Loc("捐赠")) {
-                                if let a = customAmount { prepare(a) }
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(busy || !(customAmount.map(canAfford) ?? false))
-                        }
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                        if let a = customAmount, a < Donation.minimum {
-                            Text(Loc("自定义金额最少 %@ PRL", Self.text(Donation.minimum)))
-                                .font(.caption).foregroundStyle(.orange)
-                        }
+                Group {
+                    if let p = prepared {
+                        confirmation(p)
+                            .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
+                                                    removal: .opacity))
                     } else {
-                        Button { withAnimation(.snappy) { showingCustom = true } } label: {
-                            Text(Loc("自定义金额"))
-                                .font(.footnote)
-                                .underline()
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .disabled(busy)
-                    }
-
-                    VStack(spacing: Pearl.Space.xxs) {
-                        Text(Loc("可用余额 %@ PRL", store.balance.available.formatted(.number.precision(.fractionLength(0...8)).locale(LocBundleHolder.shared.locale))))
-                        Text(Loc("开发者地址 %@", shortAddr(Donation.address)))
-                            .font(.caption.monospaced())
-                    }
-                    .font(.caption).foregroundStyle(.secondary)
-
-                    Text(Loc("捐赠会从当前钱包直接转到开发者地址，在本机签名并广播，手续费从余额扣除。"))
-                        .font(.caption).foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if busy {
-                        ProgressView(sending ? Loc("签名并广播…") : Loc("正在构建交易…"))
-                    }
-                    if let error {
-                        Label(error, systemImage: "xmark.octagon")
-                            .font(.callout).foregroundStyle(.red).textSelection(.enabled)
+                        chooser
+                            .transition(.opacity)
                     }
                 }
                 .padding(Pearl.Space.screen)
                 .frame(maxWidth: 460)
                 .frame(maxWidth: .infinity)
-                .animation(.snappy, value: busy)
-                .animation(.snappy, value: error)
+                .animation(.snappy, value: prepared?.id)
             }
             .navigationTitle(Loc("支持开发者"))
             #if os(iOS)
@@ -144,26 +69,180 @@ struct DonateView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(Loc("关闭")) { dismiss() }
+                        .disabled(sending)
                 }
-            }
-            // .alert (not .confirmationDialog): centered on every platform — see SendView.
-            .alert(Loc("确认捐赠"), isPresented: Binding(
-                get: { prepared != nil }, set: { if !$0 { prepared = nil } }), presenting: prepared) { p in
-                Button(Loc("确认捐赠 %@ PRL", Self.text(p.amount))) { donate(p) }
-                Button(Loc("取消"), role: .cancel) { prepared = nil }
-            } message: { p in
-                if let fee = p.fee {
-                    Text(Loc("向开发者地址\n%@\n捐赠 %@ PRL，网络手续费 %@ PRL。交易不可撤销。",
-                             Donation.address, Self.text(p.amount), Self.text(fee)))
-                } else {
-                    Text(Loc("向开发者地址\n%@\n捐赠 %@ PRL。手续费从余额扣除，交易不可撤销。",
-                             Donation.address, Self.text(p.amount)))
-                }
+                .noGlassBackground()
             }
         }
         #if os(iOS)
         .presentationDetents([.fraction(0.8), .large])
+        .interactiveDismissDisabled(sending)
         #endif
+    }
+
+    /// Step 1: pick a preset or type an amount.
+    private var chooser: some View {
+        VStack(spacing: Pearl.Space.lg) {
+            VStack(spacing: Pearl.Space.sm) {
+                PearlIconBadge(systemImage: "heart.fill", gradient: Pearl.sunrise, size: 56)
+                Text(Loc("喜欢 Pearl Hub？请开发者喝杯咖啡"))
+                    .font(.headline).multilineTextAlignment(.center)
+                PearlBadge(text: Loc("开源项目 · GPL-3.0"),
+                           systemImage: "chevron.left.forwardslash.chevron.right", tint: Pearl.accent)
+                Text(Loc("Pearl Hub 是免费的开源项目，全部代码公开在 GitHub，没有广告和追踪。你的捐赠会直接支持它持续更新。"))
+                    .font(.callout).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                Link(destination: AppLinks.github) {
+                    Label(Loc("在 GitHub 查看源码"), systemImage: "arrow.up.right.square")
+                }
+                .font(.callout.weight(.medium))
+            }
+
+            HStack(spacing: Pearl.Space.sm) {
+                ForEach(Donation.presets, id: \.self) { amount in
+                    Button { prepare(amount) } label: {
+                        Text(verbatim: "\(Self.text(amount)) PRL")
+                            .font(.headline.monospacedDigit())
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Pearl.Space.xs)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .disabled(busy || !canAfford(amount))
+                }
+            }
+
+            if showingCustom {
+                HStack(spacing: Pearl.Space.sm) {
+                    TextField(Loc("自定义金额（最少 %@ PRL）", Self.text(Donation.minimum)), text: $custom)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.body.monospacedDigit())
+                        #if os(iOS)
+                        .keyboardType(.decimalPad)
+                        #endif
+                        .focused($customFocused)
+                        .onAppear { customFocused = true }
+                        .onChange(of: custom) { _, _ in error = nil }
+                    Button(Loc("捐赠")) {
+                        if let a = customAmount { prepare(a) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(busy || !(customAmount.map(canAfford) ?? false))
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                if let a = customAmount, a < Donation.minimum {
+                    Text(Loc("自定义金额最少 %@ PRL", Self.text(Donation.minimum)))
+                        .font(.caption).foregroundStyle(.orange)
+                }
+            } else {
+                Button { withAnimation(.snappy) { showingCustom = true } } label: {
+                    Text(Loc("自定义金额"))
+                        .font(.footnote)
+                        .underline()
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .disabled(busy)
+            }
+
+            VStack(spacing: Pearl.Space.xxs) {
+                Text(Loc("可用余额 %@ PRL", store.balance.available.formatted(.number.precision(.fractionLength(0...8)).locale(LocBundleHolder.shared.locale))))
+                Text(Loc("开发者地址 %@", shortAddr(Donation.address)))
+                    .font(.caption.monospaced())
+            }
+            .font(.caption).foregroundStyle(.secondary)
+
+            Text(Loc("捐赠会从当前钱包直接转到开发者地址，在本机签名并广播，手续费从余额扣除。"))
+                .font(.caption).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if preparing {
+                ProgressView(Loc("正在构建交易…"))
+            }
+            if let error {
+                Label(error, systemImage: "xmark.octagon")
+                    .font(.callout).foregroundStyle(.red).textSelection(.enabled)
+            }
+        }
+        .animation(.snappy, value: busy)
+        .animation(.snappy, value: error)
+    }
+
+    /// Step 2: the signed donation laid out like a receipt — the real fee, the full
+    /// developer address to check — before anything is broadcast.
+    private func confirmation(_ p: PreparedSend) -> some View {
+        VStack(spacing: Pearl.Space.lg) {
+            VStack(spacing: Pearl.Space.sm) {
+                PearlIconBadge(systemImage: "heart.fill", gradient: Pearl.sunrise, size: 56)
+                Text(Loc("确认捐赠")).font(.headline)
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(verbatim: Self.text(p.amount))
+                    .font(.system(size: 44, weight: .bold, design: .rounded).monospacedDigit())
+                Text(verbatim: "PRL")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+
+            VStack(alignment: .leading, spacing: Pearl.Space.sm) {
+                VStack(alignment: .leading, spacing: Pearl.Space.xxs) {
+                    Text(Loc("开发者")).font(.caption).foregroundStyle(.secondary)
+                    // Two fixed halves: left to wrap, the system hyphenates the address
+                    // ("…93ff-") — a character that isn't in it, on the screen meant for checking it.
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(Self.halves(Donation.address), id: \.self) { Text(verbatim: $0) }
+                    }
+                    .font(.footnote.monospaced())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .textSelection(.enabled)
+                }
+                Divider()
+                receiptRow(Loc("手续费"), p.fee.map { "\(Self.text($0)) PRL" } ?? Loc("从余额扣除"))
+                if let fee = p.fee {
+                    Divider()
+                    receiptRow(Loc("合计"), "\(Self.text(p.amount + fee)) PRL", emphasized: true)
+                }
+            }
+            .pearlCard(padding: Pearl.Space.md)
+
+            Label(Loc("在本机签名，上链后不可撤销"), systemImage: "lock.shield")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: Pearl.Space.sm) {
+                Button { donate(p) } label: {
+                    HStack(spacing: Pearl.Space.xs) {
+                        if sending { ProgressView().controlSize(.small).tint(.white) }
+                        Text(sending ? Loc("签名并广播…") : Loc("确认捐赠 %@ PRL", Self.text(p.amount)))
+                    }
+                }
+                .buttonStyle(.pearl(Pearl.sunrise))
+                .disabled(sending)
+
+                Button(Loc("返回")) { prepared = nil }
+                    .buttonStyle(.plain)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .disabled(sending)
+            }
+        }
+    }
+
+    private func receiptRow(_ label: String, _ value: String, emphasized: Bool = false) -> some View {
+        HStack {
+            Text(label).foregroundStyle(.secondary)
+            Spacer(minLength: Pearl.Space.sm)
+            Text(verbatim: value)
+                .fontWeight(emphasized ? .semibold : .regular)
+                .monospacedDigit()
+        }
+        .font(.subheadline)
     }
 
     private var busy: Bool { preparing || sending }
@@ -177,6 +256,7 @@ struct DonateView: View {
         preparing = true
         error = nil
         Task {
+            customFocused = false
             do { prepared = try await store.prepareSend(to: Donation.address, amountPRL: amount) }
             catch { self.error = error.localizedDescription }
             preparing = false
@@ -184,7 +264,6 @@ struct DonateView: View {
     }
 
     private func donate(_ p: PreparedSend) {
-        prepared = nil
         sending = true
         error = nil
         Task {
@@ -196,10 +275,16 @@ struct DonateView: View {
                 dismiss()
                 await store.loadChain()
             case .failed(let m), .unverified(let m):
+                prepared = nil
                 error = m
             }
         }
     }
 
     private static func text(_ amount: Decimal) -> String { NSDecimalNumber(decimal: amount).stringValue }
+
+    private static func halves(_ s: String) -> [String] {
+        let mid = s.index(s.startIndex, offsetBy: (s.count + 1) / 2)
+        return [String(s[..<mid]), String(s[mid...])]
+    }
 }

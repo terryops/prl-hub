@@ -615,6 +615,10 @@
 "开发者地址 %@" = "Địa chỉ nhà phát triển %@";
 "确认捐赠" = "Xác nhận ủng hộ";
 "确认捐赠 %@ PRL" = "Ủng hộ %@ PRL";
+"合计" = "Tổng cộng";
+"返回" = "Quay lại";
+"在本机签名，上链后不可撤销" = "Ký trên thiết bị này · không thể hoàn tác khi đã lên chuỗi";
+"从余额扣除" = "Trừ vào số dư";
 "向开发者地址\n%@\n捐赠 %@ PRL。手续费从余额扣除，交易不可撤销。" = "Ủng hộ %2$@ PRL đến địa chỉ nhà phát triển\n%1$@\nPhí mạng trừ vào số dư. Giao dịch không thể hoàn tác.";
 "感谢支持 ❤️" = "Cảm ơn bạn đã ủng hộ ❤️";
 "自定义金额（最少 %@ PRL）" = "Số tiền khác (tối thiểu %@ PRL)";

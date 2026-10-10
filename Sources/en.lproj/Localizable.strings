@@ -615,6 +615,10 @@
 "开发者地址 %@" = "Developer address %@";
 "确认捐赠" = "Confirm Donation";
 "确认捐赠 %@ PRL" = "Donate %@ PRL";
+"合计" = "Total";
+"返回" = "Back";
+"在本机签名，上链后不可撤销" = "Signed on this device · final once on-chain";
+"从余额扣除" = "Deducted from balance";
 "向开发者地址\n%@\n捐赠 %@ PRL。手续费从余额扣除，交易不可撤销。" = "Donate %2$@ PRL to the developer's address\n%1$@\nThe network fee comes out of your balance. This can't be undone.";
 "感谢支持 ❤️" = "Thank you for your support ❤️";
 "自定义金额（最少 %@ PRL）" = "Custom amount (min %@ PRL)";
