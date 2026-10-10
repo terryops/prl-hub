@@ -53,7 +53,11 @@ struct AlertSyncStatus: View {
         switch store.syncState {
         case .syncing:
             HStack(spacing: 4) {
+                // A spinner has no text in it and gives its top edge as its baseline. Left
+                // at that, this whole label hangs below the card title's baseline and the
+                // title row is 10 pt taller for as long as a sync runs — the page jumps.
                 ProgressView().controlSize(.mini)
+                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
                 Text(Loc("同步中"))
             }
             .font(.caption).foregroundStyle(.secondary)
