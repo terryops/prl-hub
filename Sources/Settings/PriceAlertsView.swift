@@ -65,6 +65,9 @@ struct PriceAlertsView: View {
             async let q = AlertQuote.fetch()
             await store.refresh()
             await store.refreshAuthorization()
+            // Alerts that came over iCloud from another device: ask for notifications here,
+            // where it's clear what for, rather than on some later launch.
+            if store.authorization == .notDetermined { store.launch() }
             await price.refreshIfStale()
             await pro.loadProduct()
             quote = await q
@@ -167,7 +170,7 @@ struct PriceAlertsView: View {
                 Label(Loc("添加提醒"), systemImage: "plus")
             }
             .buttonStyle(.pearl)
-            .disabled(store.rules.count >= 20)
+            .disabled(store.rules.count >= PriceAlertStore.maxRules)
             .padding(.top, Pearl.Space.md)
 
             if !store.rules.isEmpty && store.token != nil {

@@ -31,6 +31,10 @@ enum CloudSync {
         "wallet.name", "wallet.network", "wallet.contacts",
         // app appearance / language / currency
         "ui.appearance", "app.language", "currency.secondary",
+        // price alerts: alerts.sync is merged rule by rule in PriceAlertStore (see
+        // PriceAlertSync.swift) rather than adopted whole. The APNs token and each
+        // device's fired state stay local.
+        "alerts.sync", "alerts.window",
         // PRL mining monitor — user config (NOT the live-fetched market numbers).
         // prl.fx is intentionally NOT synced: each device derives its own 1-USD→local
         // rate from ITS own secondary currency. prl.rentCcy tags the currency the

@@ -963,3 +963,4 @@
 "SafeTrade 暂停了这个币种的充值" = "SafeTrade has paused deposits of this coin";
 "SafeTrade 这条链的充值钱包暂时不可用，请稍后再试" = "SafeTrade's deposit wallet for this network is unavailable. Try again later.";
 "SafeTrade 要求先开启谷歌验证（2FA）才能生成充值地址" = "SafeTrade needs Google Authenticator (2FA) turned on before it creates a deposit address";
+"开源可校验 · 请勿从第三方下载，只认官方应用商店或自行编译" = "Open source & verifiable · Get it only from official app stores or source";

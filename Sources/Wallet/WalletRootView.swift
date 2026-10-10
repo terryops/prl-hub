@@ -78,6 +78,12 @@ struct WelcomeView: View {
                 }
                 .padding(.top, Pearl.Space.xs)
 
+                // Clones of open-source wallets get re-signed with a stealer inside. Names no
+                // other platform's store on purpose: guideline 2.3.10 rejects that.
+                Text(Loc("开源可校验 · 请勿从第三方下载，只认官方应用商店或自行编译"))
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
                 Spacer(minLength: Pearl.Space.lg)
             }
             .padding(Pearl.Space.screen)
