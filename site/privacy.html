@@ -26,12 +26,12 @@
 <body>
 <header><div class="in"><img src="/logo.png" alt="Pearl Hub"><div><h1>Privacy Policy</h1><a href="/">← Pearl Hub</a></div></div></header>
 <main>
-  <p class="muted">Last updated: October 9, 2026</p>
+  <p class="muted">Last updated: October 10, 2026</p>
 
   <p><strong>Pearl Hub</strong> ("the app") is a self-custody cryptocurrency wallet and mining
   monitor for the Pearl ($PRL) network. We designed it to keep your data on your device.
   <strong>We do not sell or share any data, and we collect none unless you turn on Price
-  Alerts or Offline Alerts</strong> (see below).</p>
+  Alerts, Offline Alerts or the Lock Screen live price</strong> (see below).</p>
 
   <div class="box">
   <h2>No accounts, no tracking</h2>
@@ -47,13 +47,16 @@
 
   <h2>Price Alerts (optional, Pearl Hub Pro)</h2>
   <p>If you unlock Pearl Hub Pro and add price alerts, the app sends our alert server
-  (<code>prl.tools.video</code>, hosted on Cloudflare) three things: this device's Apple push
-  notification token, the alert conditions you set (for example "PRL rises to $1.20"), and
-  the app's display language. The server uses them only to check the $PRL price every minute
+  (<code>prl.tools.video</code>, hosted on Cloudflare) what it needs to do that: this device's
+  Apple push notification token, the alert conditions you set (for example "PRL rises to
+  $1.20"), the app's display language and, if you limit notifications to certain hours, those
+  hours and your time zone. The server uses them only to check the $PRL price every minute
   and notify you through Apple's push service when a condition is met. For price alerts it never
   receives your wallet addresses, balances, recovery phrase or any account information, and the
   push token cannot be used to identify you. Removing all your alerts deletes this data from the server;
-  tokens that Apple reports as no longer valid are deleted automatically.</p>
+  tokens that Apple reports as no longer valid are deleted automatically. The Lock Screen
+  live price works the same way: while it is running the server holds the push token Apple
+  issues for it, and forgets it when it ends.</p>
 
   <h2>Offline Alerts (optional, Pearl Hub Pro)</h2>
   <p>Offline alerts are off until you switch them on for a pool monitor. When you do, the app
@@ -62,13 +65,18 @@
   you entered, and its account name), the name you gave the monitor, the delay you chose, this
   device's push notification token and the app's display language. The server asks the pool's
   public API about that address every few minutes and notifies you when a worker has been
-  offline for the time you chose; it keeps the worker names and online status the pool last
-  reported, for that purpose only. It never receives your recovery phrase, private keys or
+  offline for the time you chose, and again when it is back online; it keeps the worker names
+  and online status the pool last reported, for that purpose only. It never receives your recovery phrase, private keys or
   balances. Switching the alert off, or deleting the monitor, removes it from the server.</p>
 
   <h2>In-app purchases</h2>
   <p>Pearl Hub Pro is a one-time in-app purchase processed entirely by Apple. We never receive
-  your payment details; the app checks your purchase on-device with Apple's StoreKit.</p>
+  your payment details or your Apple Account; the app checks your purchase on-device with
+  Apple's StoreKit. If you turn on the alerts above, the app also sends the alert server
+  Apple's signed record of that purchase, and Apple notifies the server of purchases and
+  refunds. The server keeps the purchase's transaction identifier, with the price and
+  storefront country Apple reports, to confirm that alerts belong to a Pro purchase and to
+  stop them if it is refunded.</p>
 
   <h2>Third-party services the app contacts</h2>
   <p>To provide its features, the app makes direct requests from your device to public

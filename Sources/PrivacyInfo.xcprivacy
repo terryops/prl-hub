@@ -3,10 +3,21 @@
 <!--
   App privacy manifest (com.prl.wizard).
 
-  Self-custody wallet: no analytics/ads/crash SDKs, no IDFA, no tracking, and no
-  user data collected by us. The recovery phrase stays in the device Keychain;
-  SafeTrade API keys go only to the exchange the user configures (iCloud Keychain,
-  end-to-end encrypted) — never to us. So NSPrivacyCollectedDataTypes is empty.
+  Self-custody wallet: no analytics/ads/crash SDKs, no IDFA, no tracking. The
+  recovery phrase stays in the device Keychain; SafeTrade API keys go only to the
+  exchange the user configures (iCloud Keychain, end-to-end encrypted) — never to us.
+
+  NSPrivacyCollectedDataTypes: what the optional alert service (prl.tools.video —
+  price alerts, 掉线提醒, the Lock Screen live price) keeps while one of them is on.
+  Nothing is sent before that. All for app functionality, none linked to an identity
+  (there are no accounts), none used for tracking. Keep in step with the App Privacy
+  answers in App Store Connect and with site/privacy.html:
+    • Device ID        — the APNs / Live Activity push token
+    • User ID          — 掉线提醒: the pool payout address (F2Pool: read-only page key
+                         and account name) of a monitor the user switched it on for
+    • Purchase history — the Pro purchase's transaction id (entitlement, refunds)
+    • Other data       — the alert settings: conditions, monitor names, language,
+                         push hours and time zone
 
   Required-reason APIs actually used by the app target (verified in source):
     • UserDefaults — Currency.swift / PRLPrice.swift caches + @AppStorage settings.
@@ -21,7 +32,56 @@
     <key>NSPrivacyTrackingDomains</key>
     <array/>
     <key>NSPrivacyCollectedDataTypes</key>
-    <array/>
+    <array>
+        <dict>
+            <key>NSPrivacyCollectedDataType</key>
+            <string>NSPrivacyCollectedDataTypeDeviceID</string>
+            <key>NSPrivacyCollectedDataTypeLinked</key>
+            <false/>
+            <key>NSPrivacyCollectedDataTypeTracking</key>
+            <false/>
+            <key>NSPrivacyCollectedDataTypePurposes</key>
+            <array>
+                <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSPrivacyCollectedDataType</key>
+            <string>NSPrivacyCollectedDataTypeUserID</string>
+            <key>NSPrivacyCollectedDataTypeLinked</key>
+            <false/>
+            <key>NSPrivacyCollectedDataTypeTracking</key>
+            <false/>
+            <key>NSPrivacyCollectedDataTypePurposes</key>
+            <array>
+                <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSPrivacyCollectedDataType</key>
+            <string>NSPrivacyCollectedDataTypePurchaseHistory</string>
+            <key>NSPrivacyCollectedDataTypeLinked</key>
+            <false/>
+            <key>NSPrivacyCollectedDataTypeTracking</key>
+            <false/>
+            <key>NSPrivacyCollectedDataTypePurposes</key>
+            <array>
+                <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSPrivacyCollectedDataType</key>
+            <string>NSPrivacyCollectedDataTypeOtherDataTypes</string>
+            <key>NSPrivacyCollectedDataTypeLinked</key>
+            <false/>
+            <key>NSPrivacyCollectedDataTypeTracking</key>
+            <false/>
+            <key>NSPrivacyCollectedDataTypePurposes</key>
+            <array>
+                <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+            </array>
+        </dict>
+    </array>
     <key>NSPrivacyAccessedAPITypes</key>
     <array>
         <dict>
