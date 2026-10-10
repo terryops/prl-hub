@@ -979,7 +979,7 @@
 "掉线提醒：离线多久后通知" = "Peringatan offline: beri tahu saat sebuah worker offline";
 "掉线提醒：矿机离线 10 分钟以上就通知你" = "Peringatan offline: tahu saat worker offline 10+ menit";
 "矿机掉线，第一时间知道" = "Tahu saat worker offline";
-"矿机离线达到你设定的时长就推送通知，不用打开 App。服务器每 3 分钟向矿池查询一次。" = "Dapatkan notifikasi saat worker offline selama waktu yang Anda pilih — tanpa membuka aplikasi. Server memeriksa pool setiap 3 menit.";
+"矿机离线达到你设定的时长就推送通知，恢复上线后再通知一次，不用打开 App。服务器每 3 分钟向矿池查询一次。" = "Dapatkan notifikasi saat worker offline selama waktu yang Anda pilih, dan satu lagi saat worker kembali online — tanpa membuka aplikasi. Server memeriksa pool setiap 3 menit.";
 "监控都已暂停。恢复监控后，可以在这里开启掉线提醒。" = "Semua monitor dijeda. Lanjutkan salah satunya untuk mengatur peringatan offline di sini.";
 "矿池查不到这个地址，无法提醒" = "Pool tidak mengenali alamat ini";
 "通知权限已关闭，掉线提醒无法送达" = "Notifikasi dimatikan, jadi peringatan offline tidak dapat dikirim.";

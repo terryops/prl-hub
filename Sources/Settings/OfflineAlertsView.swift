@@ -65,7 +65,7 @@ struct OfflineAlertsView: View {
             PearlIconBadge(systemImage: "wifi.exclamationmark", size: 44)
             VStack(alignment: .leading, spacing: 3) {
                 Text(Loc("矿机掉线，第一时间知道")).font(.headline)
-                Text(Loc("矿机离线达到你设定的时长就推送通知，不用打开 App。服务器每 3 分钟向矿池查询一次。"))
+                Text(Loc("矿机离线达到你设定的时长就推送通知，恢复上线后再通知一次，不用打开 App。服务器每 3 分钟向矿池查询一次。"))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

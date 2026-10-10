@@ -979,7 +979,7 @@
 "掉线提醒：离线多久后通知" = "Cảnh báo ngoại tuyến: báo khi một worker ngoại tuyến";
 "掉线提醒：矿机离线 10 分钟以上就通知你" = "Cảnh báo ngoại tuyến: biết khi worker ngoại tuyến từ 10 phút";
 "矿机掉线，第一时间知道" = "Biết ngay khi worker ngoại tuyến";
-"矿机离线达到你设定的时长就推送通知，不用打开 App。服务器每 3 分钟向矿池查询一次。" = "Nhận thông báo khi worker ngoại tuyến đủ thời gian bạn chọn — không cần mở ứng dụng. Máy chủ hỏi pool mỗi 3 phút.";
+"矿机离线达到你设定的时长就推送通知，恢复上线后再通知一次，不用打开 App。服务器每 3 分钟向矿池查询一次。" = "Nhận thông báo khi worker ngoại tuyến đủ thời gian bạn chọn, và một thông báo nữa khi nó trực tuyến trở lại — không cần mở ứng dụng. Máy chủ hỏi pool mỗi 3 phút.";
 "监控都已暂停。恢复监控后，可以在这里开启掉线提醒。" = "Tất cả mục theo dõi đang tạm dừng. Hãy tiếp tục một mục để bật cảnh báo ngoại tuyến tại đây.";
 "矿池查不到这个地址，无法提醒" = "Pool không biết địa chỉ này";
 "通知权限已关闭，掉线提醒无法送达" = "Thông báo đang tắt nên không thể gửi cảnh báo ngoại tuyến.";
