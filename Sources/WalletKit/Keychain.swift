@@ -55,9 +55,13 @@ enum Keychain {
         // a lookup could hit different keychains (the "保存后仍未设置" bug), and a
         // ThisDeviceOnly class would be silently ignored. iOS only has the data-protection
         // keychain, so the flag is a harmless no-op there.
-        if store == .dataProtection {
-            query[kSecUseDataProtectionKeychain as String] = kCFBooleanTrue!
-        }
+        //
+        // The legacy store must say `false` EXPLICITLY. A macOS query without the flag
+        // targets BOTH keychains when the app has keychain entitlements, so the "legacy"
+        // delete after a migration also deleted the fresh data-protection copy — 1.17 lost
+        // every Mac seed on its first launch that way.
+        query[kSecUseDataProtectionKeychain as String] =
+            store == .dataProtection ? kCFBooleanTrue! : kCFBooleanFalse!
         return query
     }
 
@@ -96,7 +100,8 @@ enum Keychain {
         #if os(macOS)
         if status == errSecSuccess, !synchronizable {
             // The fresh copy supersedes any legacy file-keychain one.
-            SecItemDelete(baseQuery(account: account, synchronizable: false, store: .legacyFile) as CFDictionary)
+            deleteLegacy(account)
+            return ensureDataProtectionCopy(data, account: account)
         } else if status == errSecMissingEntitlement, !synchronizable {
             // A build without a keychain entitlement (ad-hoc local run) can't reach the
             // data-protection keychain at all — keep working the old way.
@@ -226,14 +231,17 @@ enum Keychain {
         guard let legacy = accountNames(store: .legacyFile), !legacy.isEmpty else { return }
         for account in legacy {
             // A denied access prompt / locked keychain: try again next launch.
-            guard let value = read(account: account, synchronizable: false, store: .legacyFile) else { continue }
+            guard let value = read(account: account, synchronizable: false, store: .legacyFile),
+                  let data = value.data(using: .utf8) else { continue }
             if let existing = read(account: account, synchronizable: false, store: .dataProtection) {
                 // Already copied by an earlier (interrupted) run. Only a byte-identical copy
                 // lets the legacy one go; a mismatch keeps both (get() prefers the new one).
-                if existing == value { deleteLegacy(account) }
+                if existing == value {
+                    deleteLegacy(account)
+                    ensureDataProtectionCopy(data, account: account)
+                }
                 continue
             }
-            guard let data = value.data(using: .utf8) else { continue }
             var add = baseQuery(account: account, synchronizable: false)
             add[kSecValueData as String] = data
             add[kSecAttrAccessible as String] = accessibility(synchronizable: false)
@@ -246,11 +254,27 @@ enum Keychain {
                 continue
             }
             deleteLegacy(account)
+            ensureDataProtectionCopy(data, account: account)
         }
     }
 
     private static func deleteLegacy(_ account: String) {
         SecItemDelete(baseQuery(account: account, synchronizable: false, store: .legacyFile) as CFDictionary)
+    }
+
+    /// Belt and braces after a legacy copy is removed: the data-protection copy must still
+    /// read back. If anything took it too, write it back — and if even that fails, put it
+    /// in the legacy keychain again, so the value is never left in neither.
+    @discardableResult
+    private static func ensureDataProtectionCopy(_ data: Data, account: String) -> Bool {
+        let value = String(data: data, encoding: .utf8)
+        if read(account: account, synchronizable: false, store: .dataProtection) == value { return true }
+        var add = baseQuery(account: account, synchronizable: false)
+        add[kSecValueData as String] = data
+        add[kSecAttrAccessible as String] = accessibility(synchronizable: false)
+        if SecItemAdd(add as CFDictionary, nil) == errSecSuccess,
+           read(account: account, synchronizable: false, store: .dataProtection) == value { return true }
+        return setLegacy(data, account: account)
     }
 
     private static func setLegacy(_ data: Data, account: String) -> Bool {
