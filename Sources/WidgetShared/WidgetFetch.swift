@@ -62,7 +62,7 @@ enum WidgetFetch {
     /// SafeTrade's public ticker if the worker is unreachable.
     static func prlUsd() async -> Double? {
         // Its last stored row comes back even if its cron stopped: only a recent one counts.
-        if let obj = await json("https://prl.tools.video/v1/price", timeout: 6) as? [String: Any],
+        if let obj = await json("https://pearlhub.net/v1/price", timeout: 6) as? [String: Any],
            Date().timeIntervalSince1970 - double(obj["ts"]) < 300 {
             let v = double(obj["usd"])
             if v > 0 { return v }

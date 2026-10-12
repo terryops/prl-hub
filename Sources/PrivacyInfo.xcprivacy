@@ -7,7 +7,7 @@
   recovery phrase stays in the device Keychain; SafeTrade API keys go only to the
   exchange the user configures (iCloud Keychain, end-to-end encrypted) — never to us.
 
-  NSPrivacyCollectedDataTypes: what the optional alert service (prl.tools.video —
+  NSPrivacyCollectedDataTypes: what the optional alert service (pearlhub.net —
   price alerts, 掉线提醒, the Lock Screen live price) keeps while one of them is on.
   Nothing is sent before that. All for app functionality, none linked to an identity
   (there are no accounts), none used for tracking. Keep in step with the App Privacy

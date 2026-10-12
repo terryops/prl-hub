@@ -190,7 +190,7 @@ struct AlertQuote: Equatable {
 final class PriceAlertStore: ObservableObject {
     static let shared = PriceAlertStore()
 
-    nonisolated static let endpoint = URL(string: "https://prl.tools.video/v1")!
+    nonisolated static let endpoint = URL(string: "https://pearlhub.net/v1")!
     /// The worker's cap on rules per device.
     static let maxRules = 20
 
