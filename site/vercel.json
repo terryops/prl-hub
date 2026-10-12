@@ -3,6 +3,11 @@
   "trailingSlash": false,
   "redirects": [
     {
+      "source": "/",
+      "destination": "https://pearlhub.net/",
+      "permanent": true
+    },
+    {
       "source": "/:path*",
       "destination": "https://pearlhub.net/:path*",
       "permanent": true
