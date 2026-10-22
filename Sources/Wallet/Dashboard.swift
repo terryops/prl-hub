@@ -546,7 +546,6 @@ struct SendView: View {
     private var overBalance: Bool { !isMaxArmed && amountDec > 0 && amountDec + feeReserve > store.balance.available }
     private var addressValid: Bool { PRLAddress.isValid(addr, network: store.network) }
     private var canSend: Bool { !preparing && !sending && amountDec > 0 && amountPrecisionOK && !overBalance && addressValid }
-    private static func text(_ d: Decimal) -> String { NSDecimalNumber(decimal: d).stringValue }
 
     var body: some View {
         ScrollView {
@@ -641,23 +640,11 @@ struct SendView: View {
         }
         .pearlScreenBackground()
         .navigationTitle(Loc("转账"))
-        // .alert (not .confirmationDialog): a confirmationDialog renders as a popover
-        // anchored to this view on regular-width iPad/Mac, floating it over the nav bar.
-        // An alert is centered on every platform.
-        // The tx is built and signed first, so this shows what it really costs; an unusually
-        // high fee gets its own title and warning line.
-        .alert(prepared?.feeIsHigh == true ? Loc("手续费偏高，确认转账？") : Loc("确认转账"),
-               isPresented: Binding(get: { prepared != nil }, set: { if !$0 { prepared = nil } }),
-               presenting: prepared) { p in
-            Button(Loc("确认发送 %@ PRL", Self.text(p.amount)), role: .destructive) { broadcast(p) }
-            Button(Loc("取消"), role: .cancel) { prepared = nil }
-        } message: { p in
-            if let fee = p.fee {
-                Text((p.feeIsHigh ? Loc("本笔手续费明显高于平常，请确认。") + "\n" : "")
-                     + Loc("发送 %@ PRL 至\n%@\n网络手续费 %@ PRL，交易不可撤销。", Self.text(p.amount), p.recipient, Self.text(fee)))
-            } else {
-                Text(Loc("发送 %@ PRL 至\n%@\n手续费将从余额扣除，交易不可撤销。", Self.text(p.amount), p.recipient))
-            }
+        // The tx is built and signed first, so the receipt shows what it really costs; an
+        // unusually high fee gets its own warning. Dismissing it (取消 / swipe) clears `prepared`.
+        .sheet(item: $prepared) { p in
+            SendConfirmSheet(send: p, contactName: contacts.name(for: p.recipient),
+                             network: store.network) { broadcast(p) }
         }
         .sheet(isPresented: $savingContact) { ContactEditor(draft: ContactDraft(prefillAddress: addr)) }
         // Working out the fee rate takes a few requests; start them now (cached ~2 min) so
@@ -706,6 +693,7 @@ struct SendView: View {
     }
 
     private func broadcast(_ p: PreparedSend) {
+        guard !sending else { return }   // one send at a time, however the confirm got tapped
         prepared = nil
         sending = true; result = nil
         Task {
