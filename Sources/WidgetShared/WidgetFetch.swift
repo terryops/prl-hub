@@ -13,10 +13,11 @@ enum WidgetFetch {
         "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
     private static func json(_ urlString: String, timeout: TimeInterval = 10,
-                            xhr: Bool = false) async -> Any? {
+                            xhr: Bool = false, headers: [String: String] = [:]) async -> Any? {
         guard let url = URL(string: urlString) else { return nil }
         var req = URLRequest(url: url)
         req.timeoutInterval = timeout
+        for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue(browserUA, forHTTPHeaderField: "User-Agent")
         // F2Pool's read-only page serves JSON only to XHR callers; otherwise it renders
@@ -38,13 +39,20 @@ enum WidgetFetch {
     /// xpub so the caller can fire it concurrently without a pre-guard.
     static func balancePRL(xpub: String?, network: String) async -> Double? {
         guard let xpub, !xpub.isEmpty else { return nil }
-        let base = network == "testnet"
-            ? "https://blockbook.testnet.pearlresearch.ai"
-            : "https://blockbook.pearlresearch.ai"
-        guard let obj = await json("\(base)/api/v2/xpub/\(xpub)?details=basic") as? [String: Any] else { return nil }
-        let confirmed = double(obj["balance"])
-        let unconfirmed = double(obj["unconfirmedBalance"])
-        return (confirmed + unconfirmed) / 1e8
+        // Same indexers and order as the app's BlockbookClient: Pearl Hub's own first (it
+        // answers 503 while lagging), then the official one.
+        let own = "https://node.pearlhub.net"
+        let bases = network == "testnet" ? ["https://blockbook.testnet.pearlresearch.ai"]
+            : NodeAccess.enabled ? [own, "https://blockbook.pearlresearch.ai"] : ["https://blockbook.pearlresearch.ai"]
+        for base in bases {
+            let headers = base == own ? [NodeAccess.header: NodeAccess.key] : [:]
+            guard let obj = await json("\(base)/api/v2/xpub/\(xpub)?details=basic", headers: headers) as? [String: Any],
+                  obj["balance"] != nil else { continue }
+            let confirmed = double(obj["balance"])
+            let unconfirmed = double(obj["unconfirmedBalance"])
+            return (confirmed + unconfirmed) / 1e8
+        }
+        return nil
     }
 
     /// The price the app (or the other widget) fetched within the last 2 minutes,

@@ -258,7 +258,12 @@ struct DashboardView: View {
                         } else {
                             // 始终 3 个等高槽：有交易填真实行，没有的留等高空槽（高度恒定）。
                             ForEach(0..<3, id: \.self) { i in
-                                if i < recent.count { txRow(recent[i]).frame(height: rowH) }
+                                if i < recent.count {
+                                    NavigationLink { TxDetailView(store: store, txid: recent[i].txid) } label: {
+                                        txRow(recent[i]).frame(height: rowH).contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                                 else { Color.clear.frame(height: rowH) }
                             }
                         }
@@ -514,6 +519,10 @@ struct SendView: View {
     @State private var maxString: String?
     /// Wallet + network the MAX was computed for; a switch voids it (see onChange below).
     @State private var maxSession: String?
+    /// The input total the MAX quote came from — handed to `prepareSend` as the sweep intent.
+    @State private var maxTotalSat: Int64?
+    /// MAX is fetching the UTXOs and fee rate it needs.
+    @State private var quotingMax = false
     private var session: String { "\(store.activeWalletID ?? "")|\(store.network.rawValue)" }
 
     /// `prefillAddress`: 交易 → 充值 PRL opens this with the SafeTrade deposit address
@@ -531,7 +540,10 @@ struct SendView: View {
     private var amountDec: Decimal { parsedAmount ?? 0 }
     private var addr: String { address.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var amountPrecisionOK: Bool { parsedAmount != nil }
-    private var overBalance: Bool { amountDec > 0 && amountDec + feeReserve > store.balance.available }
+    /// The user tapped MAX, didn't edit it, and is still on the wallet/network it was tapped for.
+    private var isMaxArmed: Bool { maxString != nil && amount == maxString && maxSession == session && maxTotalSat != nil }
+    /// A MAX amount already has the real fee taken off, so the fixed reserve doesn't apply.
+    private var overBalance: Bool { !isMaxArmed && amountDec > 0 && amountDec + feeReserve > store.balance.available }
     private var addressValid: Bool { PRLAddress.isValid(addr, network: store.network) }
     private var canSend: Bool { !preparing && !sending && amountDec > 0 && amountPrecisionOK && !overBalance && addressValid }
     private static func text(_ d: Decimal) -> String { NSDecimalNumber(decimal: d).stringValue }
@@ -588,11 +600,11 @@ struct SendView: View {
                     HStack {
                         Text(Loc("金额 (PRL)")).font(.headline)
                         Spacer()
-                        Button("MAX") {
-                            let m = store.balance.available - feeReserve
-                            let s = NSDecimalNumber(decimal: m > 0 ? m : 0).stringValue
-                            amount = s; maxString = s; maxSession = session   // arm explicit sweep intent
-                        }.font(.caption)
+                        Button { quoteMax() } label: {
+                            if quotingMax { ProgressView().controlSize(.mini) } else { Text("MAX") }
+                        }
+                        .font(.caption)
+                        .disabled(quotingMax || preparing || sending)
                     }
                     TextField("0.0", text: $amount).textFieldStyle(.roundedBorder)
                         #if os(iOS)
@@ -648,22 +660,43 @@ struct SendView: View {
             }
         }
         .sheet(isPresented: $savingContact) { ContactEditor(draft: ContactDraft(prefillAddress: addr)) }
+        // Working out the fee rate takes a few requests; start them now (cached ~2 min) so
+        // MAX and 发送 don't wait on them.
+        .task(id: store.network) { _ = await BlockbookClient(network: store.network).pinned(to: store.chainReadBase, strict: false).estimateFeePerKB() }
         // This screen can stay pushed while the wallet or network is switched from Settings:
         // an amount (and above all a MAX) computed for the old one must not carry over.
         .onChange(of: session) { _, _ in
-            amount = ""; maxString = nil; maxSession = nil; result = nil; prepared = nil
+            amount = ""; maxString = nil; maxSession = nil; maxTotalSat = nil; result = nil; prepared = nil
+        }
+    }
+
+    /// Fill in everything spendable minus the real fee for sending it all, and arm the
+    /// explicit sweep intent.
+    private func quoteMax() {
+        let tappedFor = session
+        quotingMax = true; result = nil
+        Task {
+            defer { quotingMax = false }
+            do {
+                let q = try await store.maxSendQuote()
+                guard session == tappedFor else { return }   // switched wallet/network meanwhile
+                let s = NSDecimalNumber(decimal: q.amount).stringValue
+                amount = s; maxString = s; maxSession = tappedFor; maxTotalSat = q.totalSat
+            } catch {
+                resultIsWarning = false
+                result = error.localizedDescription
+            }
         }
     }
 
     /// Build + sign on-device (no broadcast yet), then confirm with the real fee.
     private func prepare() {
         guard let amt = parsedAmount else { return }
-        // User tapped MAX, didn't edit it, and is still on the wallet/network it was tapped for.
-        let isMax = maxString != nil && amount == maxString && maxSession == session
+        let sweepTotal = isMaxArmed ? maxTotalSat : nil
         preparing = true; result = nil
         Task {
             do {
-                prepared = try await store.prepareSend(to: addr, amountPRL: amt, isMax: isMax)
+                prepared = try await store.prepareSend(to: addr, amountPRL: amt, sweepTotalSat: sweepTotal)
             } catch {
                 resultIsWarning = false
                 result = error.localizedDescription
@@ -702,6 +735,8 @@ struct SendView: View {
 
 struct ActivityView: View {
     @ObservedObject var store: WalletStore
+    @State private var opened: WalletTx?
+    @State private var lookingUp = false
     var body: some View {
         Group {
             if !store.historyReady && store.txs.isEmpty {
@@ -720,7 +755,7 @@ struct ActivityView: View {
                     VStack(spacing: Pearl.Space.md) {
                         LazyVStack(spacing: 0) {
                             ForEach(store.txs) { tx in
-                                ActivityRow(tx: tx)
+                                ActivityRow(tx: tx) { opened = tx }
                                     .padding(.vertical, Pearl.Space.xs)
                                 if tx.id != store.txs.last?.id {
                                     Divider().padding(.leading, 36 + Pearl.Space.sm)
@@ -748,6 +783,16 @@ struct ActivityView: View {
             }
         }
         .navigationTitle(Loc("交易记录"))
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { lookingUp = true } label: { Image(systemName: "magnifyingglass") }
+                    .accessibilityLabel(Loc("交易查询"))
+                    .help(Loc("交易查询"))
+            }
+            .noGlassBackground()
+        }
+        .navigationDestination(item: $opened) { TxDetailView(store: store, txid: $0.txid) }
+        .navigationDestination(isPresented: $lookingUp) { TxLookupView(store: store) }
         .task { await store.refreshIfStale() }
         .refreshable { await store.loadChain() }
     }
@@ -755,7 +800,10 @@ struct ActivityView: View {
 
 private struct ActivityRow: View {
     let tx: WalletTx
+    /// Opens 交易详情 (a tap anywhere but the copy buttons).
+    let onOpen: () -> Void
     @EnvironmentObject private var contacts: ContactsStore
+    @State private var copiedTxid = false
     var body: some View {
         VStack(alignment: .leading, spacing: Pearl.Space.xs) {
             HStack(alignment: .top, spacing: Pearl.Space.sm) {
@@ -790,6 +838,10 @@ private struct ActivityRow: View {
                             .font(.caption2).foregroundStyle(tx.confirmations == 0 ? .orange : .secondary)
                     }
                 }
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+                    .padding(.top, 4)
+                    .accessibilityHidden(true)
             }
             if !tx.address.isEmpty {
                 HStack(spacing: Pearl.Space.xs) {
@@ -807,8 +859,33 @@ private struct ActivityRow: View {
                     .accessibilityLabel(Loc("复制地址"))
                 }
             }
+            HStack(spacing: Pearl.Space.xs) {
+                Text(Loc("交易 ID")).font(.caption2).foregroundStyle(.secondary)
+                Text(verbatim: tx.txid).font(.caption2.monospaced()).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+                    .accessibilityLabel(Loc("交易 ID") + " " + tx.txid)
+                Button {
+                    copyToPasteboard(tx.txid)
+                    copiedTxid = true
+                    Task { try? await Task.sleep(for: .seconds(1.5)); copiedTxid = false }
+                } label: {
+                    Image(systemName: copiedTxid ? "checkmark" : "doc.on.doc").font(.caption2)
+                }
+                .buttonStyle(.borderless).padding(4).contentShape(Rectangle())
+                .accessibilityLabel(copiedTxid ? Loc("已复制") : Loc("复制交易 ID"))
+            }
         }
         .padding(.vertical, Pearl.Space.xxs)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onOpen)
+        .contextMenu {
+            Button(action: onOpen) { Label(Loc("交易详情"), systemImage: "info.circle") }
+            Button { copyToPasteboard(tx.txid) } label: { Label(Loc("复制交易 ID"), systemImage: "doc.on.doc") }
+            if !tx.address.isEmpty {
+                Button { copyToPasteboard(tx.address) } label: { Label(Loc("复制地址"), systemImage: "doc.on.doc") }
+            }
+        }
+        .accessibilityAction(named: Loc("交易详情"), onOpen)
     }
 }
 

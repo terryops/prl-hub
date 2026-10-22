@@ -174,8 +174,6 @@ struct AboutSettingsView: View {
                 NavigationLink {
                     LicensesView()
                 } label: { Label(Loc("开源许可"), systemImage: "doc.text") }
-                PearlInfoRow(Loc("自托管 · 私钥与签名留在本机（钥匙串 / 安全隔区）"), systemImage: "shield.lefthalf.filled")
-                PearlInfoRow(Loc("内置 PRL 挖矿监控"), systemImage: "chart.line.uptrend.xyaxis")
             }
             .pearlListRowSurface()
         }
@@ -249,7 +247,9 @@ private struct NetworkSettingsSection: View {
                 set: { wallet.changeNetwork($0) })) {
                 ForEach(WalletNetwork.allCases) { Text($0.label).tag($0) }
             }
-            LabeledContent(Loc("索引服务"), value: "blockbook.pearlresearch.ai")
+            // The indexers this build actually uses, in order.
+            LabeledContent(Loc("索引服务"), value: BlockbookClient(network: wallet.network).allBases
+                .map { URL(string: $0)?.host ?? $0 }.joined(separator: " · "))
         }
         .pearlListRowSurface()
     }

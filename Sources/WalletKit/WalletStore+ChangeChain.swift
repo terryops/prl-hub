@@ -44,7 +44,8 @@ extension WalletStore {
     func refreshChangeChain(xpub xp: String, dir: String, net: String, token: UUID, force: Bool) async {
         guard let mnemonic else { return }
         let scanNetwork = network
-        let bb = BlockbookClient(network: scanNetwork)
+        // Part of a refresh: from the index its balance came from.
+        let bb = BlockbookClient(network: scanNetwork).pinned(to: chainReadBase, strict: true)
         func current() -> Bool { isCurrentChainLoad(token, mnemonic: mnemonic, network: scanNetwork) }
         // A send funded ENTIRELY by internal-chain change touches no xpub-derived
         // address, so the xpub history can never report it: its optimistic 待确认
@@ -230,8 +231,8 @@ extension WalletStore {
         guard !sets.isEmpty, total > 0 else { return (false, Loc("没有可找回的找零")) }
         let dir = walletDataDir
         let net = network.rawValue
-        let bb = BlockbookClient(network: network)
-        let feePerKB = (try? await bb.estimateFeePerKB()) ?? 50_000
+        let bb = BlockbookClient(network: network).pinned(to: chainReadBase, strict: false)
+        let feePerKB = await bb.estimateFeePerKB()
         guard chainLoadToken == session else { return (false, Loc("钱包或网络已切换，已取消本次找回")) }
         let utxosJSON = Self.encodeUTXOs(sets)
         let inputCount = sets.reduce(0) { $0 + $1.utxos.count }

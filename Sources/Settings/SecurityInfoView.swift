@@ -19,16 +19,23 @@ struct SecurityInfoView: View {
                     PearlInfoRow(Loc("只存在你的钥匙串里（开着 iCloud 钥匙串时由 Apple 端到端加密同步）；交易请求由 App 签名后直接发往 safetrade.com。"),
                                  title: Loc("SafeTrade API 密钥"), systemImage: "key.horizontal.fill")
                 }
-                PearlInfoRow(Loc("App 直接向区块浏览器查询，不经过我们的服务器。"),
-                             title: Loc("余额与交易记录"), systemImage: "list.bullet.rectangle")
                 PearlInfoRow(Loc("内购全程由 Apple 处理，我们拿不到你的付款方式和 Apple 账号。"),
                              title: Loc("付款信息"), systemImage: "creditcard")
                 PearlInfoRow(Loc("App 里没有广告、统计或崩溃收集 SDK，也不做跨应用追踪。"),
                              title: Loc("统计与追踪"), systemImage: "eye.slash")
+                // A build without the node key (e.g. from the public repo) never asks ours.
+                if !NodeAccess.enabled {
+                    PearlInfoRow(Loc("App 直接向区块浏览器查询，不经过我们的服务器。"),
+                                 title: Loc("余额与交易记录"), systemImage: "list.bullet.rectangle")
+                }
             }
             .pearlListRowSurface()
 
             Section(Loc("发给我们服务器（pearlhub.net）的数据")) {
+                if NodeAccess.enabled {
+                    PearlInfoRow(Loc("App 先向我们自建的区块索引 node.pearlhub.net 查询，它不可用或数据落后时改用 Pearl 官方的 blockbook.pearlresearch.ai。查询时发送钱包的扩展公钥（xpub，可据此推出这个钱包的全部地址）；转账时签好的交易同时广播给两边。矿池监控的「链上到账」（发送收益地址）和全网算力图也按这个顺序查询。"),
+                                 title: Loc("余额与交易记录"), systemImage: "list.bullet.rectangle")
+                }
                 PearlInfoRow(Loc("币价、矿池汇总和矿池费率。这些请求不带地址，也不带任何身份信息。"),
                              title: Loc("公开数据"), systemImage: "chart.line.uptrend.xyaxis")
                 PearlInfoRow(Loc("开启后才发送：推送令牌、提醒条件、界面语言，以及推送时段和时区。删掉全部提醒、结束盯盘后，服务器上的这些数据随之删除。"),
@@ -43,7 +50,9 @@ struct SecurityInfoView: View {
             .pearlListRowSurface()
 
             Section(Loc("App 直接连接的第三方服务")) {
-                PearlInfoRow(Loc("blockbook.pearlresearch.ai。查余额和记录时发送钱包的扩展公钥（xpub，可据此推出这个钱包的全部地址）；转账时广播本机签好的交易。"),
+                PearlInfoRow(NodeAccess.enabled
+                             ? Loc("blockbook.pearlresearch.ai。我们的索引不可用或数据落后时，App 改向它查询余额和记录（同样发送扩展公钥）；转账时签好的交易也同时广播给它。")
+                             : Loc("blockbook.pearlresearch.ai。查余额和记录时发送钱包的扩展公钥（xpub，可据此推出这个钱包的全部地址）；转账时广播本机签好的交易。"),
                              title: Loc("Pearl 区块浏览器"), systemImage: "cube")
                 PearlInfoRow(Loc("添加矿池监控后，App 把收益地址（F2Pool 为只读页链接）发给对应矿池。"),
                              title: Loc("矿池公开接口"), systemImage: "server.rack")

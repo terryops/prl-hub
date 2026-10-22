@@ -3,7 +3,7 @@ import Charts
 
 // ============================================================
 // 全网走势图（概览）：算力(绿色面积) + 难度(白色虚线·右轴) + 出块时间(蓝色小图)。
-// 数据来自自家 Blockbook：在所选时间窗内均匀采样 ~64 个区块，每个区块自带
+// 数据来自 Blockbook（先自建 node.pearlhub.net，不行再用官方）：在所选时间窗内均匀采样 ~64 个区块，每个区块自带
 // difficulty 与时间戳。算力与出块时间都是从这些采样点**实测**出来的：
 //   出块时间 = 采样点前后的时间差 ÷ 块数差
 //   算力     = 难度 × 2^48 ÷ 出块时间
@@ -63,6 +63,10 @@ final class ChainHistory: ObservableObject {
     /// the wider spacing actually STEADIES the measured series (each block-time estimate then
     /// rests on more blocks). With the private session below a cold chart lands in ~4 s.
     nonisolated private static let sampleCount = 28
+
+    /// Mainnet indexers in the wallet's order: Pearl Hub's own first, the official one as the
+    /// fallback (and while ours lags).
+    nonisolated private static let indexers = BlockbookClient(network: .mainnet)
 
     /// Private session purely so these fetches aren't capped at the shared session's 4–6
     /// connections per host. Ephemeral: the responses are big and already cached in `cache`.
@@ -150,10 +154,9 @@ final class ChainHistory: ObservableObject {
     /// fetched for that probe that are also sample points (the tip always is), so they aren't
     /// downloaded twice — each is ~87 KB.
     nonisolated private static func plan(span: Span) async -> (heights: [Int], probed: [ChainSample])? {
-        guard let d = await httpGET("https://blockbook.pearlresearch.ai/api/v2/", timeout: 15),
-              let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
-              let bb = o["blockbook"] as? [String: Any],
-              let tip = bb["bestHeight"] as? Int, tip > 2 else { return nil }
+        struct Status: Decodable { struct BB: Decodable { let bestHeight: Int }; let blockbook: BB }
+        guard let tip = (try? await indexers.get("/api/v2/", as: Status.self, timeout: 15))?.blockbook.bestHeight,
+              tip > 2 else { return nil }
         var estBlockSec = 235.0
         var probes: [ChainSample] = []
         let probeFrom = max(1, tip - 1000)
@@ -211,18 +214,14 @@ final class ChainHistory: ObservableObject {
     }
 
     nonisolated private static func fetchBlock(_ h: Int) async -> ChainSample? {
-        guard let url = URL(string: "https://blockbook.pearlresearch.ai/api/v2/block/\(h)") else { return nil }
-        var req = URLRequest(url: url)
-        req.timeoutInterval = 20
-        req.setValue("prl-monitor/1.0", forHTTPHeaderField: "User-Agent")
-        guard let (d, r) = try? await session.data(for: req),
-              (r as? HTTPURLResponse)?.statusCode == 200,
-              let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
-              let t = o["time"] as? Int,
-              let diff = num(o["difficulty"]), diff > 0 else { return nil }
-        return ChainSample(height: (o["height"] as? Int) ?? h,
-                           time: Date(timeIntervalSince1970: TimeInterval(t)),
-                           difficulty: diff)
+        try? await indexers.get("/api/v2/block/\(h)", timeout: 20, session: session) { d in
+            guard let o = try JSONSerialization.jsonObject(with: d) as? [String: Any],
+                  let t = o["time"] as? Int,
+                  let diff = num(o["difficulty"]), diff > 0 else { throw URLError(.cannotParseResponse) }
+            return ChainSample(height: (o["height"] as? Int) ?? h,
+                               time: Date(timeIntervalSince1970: TimeInterval(t)),
+                               difficulty: diff)
+        }
     }
 }
 

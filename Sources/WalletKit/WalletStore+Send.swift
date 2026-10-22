@@ -4,32 +4,34 @@ import Foundation
 // report a send the network may have accepted as a plain failure.
 extension WalletStore {
 
-    /// Build + sign (on-device) a payment WITHOUT broadcasting it, so the confirmation can
-    /// show the real network fee. `isMax` carries the caller's EXPLICIT "send everything"
-    /// intent (the MAX button); only then do we sweep to a single output. It is never
-    /// inferred from the live balance — see the isSweep note below.
-    func prepareSend(to recipient: String, amountPRL: Decimal, isMax: Bool = false) async throws -> PreparedSend {
-        let recipient = recipient.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard PRLAddress.isValid(recipient, network: network) else { throw WalletError(Loc("收款地址格式不正确")) }
-        guard let mnemonic, let xp = xpub, let walletID = activeWalletID else { throw WalletError(Loc("钱包未就绪")) }
-        guard unverifiedSends.isEmpty else { throw WalletError(Loc("上一笔转账是否发出尚未确认，请先查看交易记录，稍后再试")) }
-        // Everything this send uses is captured now; if the wallet, network or lock state
-        // changes during the network round-trips below, the send is abandoned.
+    /// What MAX sends: every spendable input minus the fee for a one-output sweep at the
+    /// current fee rate (not the fixed `sendFeeReserve`, which a fee spike can exceed many
+    /// times over). `totalSat` goes back into `prepareSend` as the sweep intent.
+    func maxSendQuote() async throws -> MaxSendQuote {
+        guard let xp = xpub else { throw WalletError(Loc("钱包未就绪")) }
         let session = chainLoadToken
-        let sendNetwork = network
-        let changeSets = recoverable
-        guard amountPRL + Self.sendFeeReserve <= balance.available else {
-            throw WalletError(Loc("余额不足：请预留至少 %@ PRL 作为手续费", "\(Self.sendFeeReserve)"))
-        }
-        let dir = walletDataDir
-        let net = sendNetwork.rawValue
-        let bb = BlockbookClient(network: sendNetwork)
-        guard let amountSat = RawTx.satoshis(from: amountPRL) else {
-            throw WalletError(Loc("金额无效：最多支持 %@ 位小数", "\(BlockbookClient.decimals)"))
-        }
-        let locked = Set(sendLocks.values.flatMap(\.keys))
+        // The index the balance on screen came from (another if it's down).
+        let bb = BlockbookClient(network: network).pinned(to: chainReadBase, strict: false)
+        async let feeRequest = bb.estimateFeePerKB()
+        let inputs = try await spendableInputs(bb: bb, xpub: xp, changeSets: recoverable)
+        let fee = await feeRequest
+        guard chainLoadToken == session else { throw WalletError(Loc("钱包或网络已切换，已取消本次转账")) }
+        let totalSat = inputs.values.values.reduce(Int64(0), +)
+        // Two outputs although the sweep has one: oyster sizes its fee with the change output
+        // still counted, and so this lands within ~20 sat of what the confirmation shows
+        // (measured on a 12-input sweep at 81 and 1 955 sat/vB).
+        let feeSat = RawTx.estimateFeeSat(inputs: inputs.objects.count, outputs: 2, feePerKB: fee)
+        return MaxSendQuote(amount: RawTx.prl(fromSat: max(0, totalSat - feeSat)), totalSat: totalSat)
+    }
+
+    /// The confirmed, unlocked UTXOs a send may spend: the xpub's plus the internal-chain
+    /// change it can't see (address injected — oyster signs them like any other).
+    private func spendableInputs(bb: BlockbookClient, xpub xp: String,
+                                 changeSets: [RecoverableUTXOSet]) async throws -> (objects: [[String: Any]], values: [String: Int64]) {
         let utxos: [BlockbookClient.UTXO]
         do { utxos = try await bb.utxos(xpub: xp) } catch { throw WalletError(error.localizedDescription) }
+        // Read after the await: a send broadcast meanwhile has locked its inputs by now.
+        let locked = Set(sendLocks.values.flatMap(\.keys))
         var utxoObjs: [[String: Any]] = []
         var inputValues: [String: Int64] = [:]
         for u in utxos where !locked.contains(u.outpoint) {
@@ -41,8 +43,6 @@ extension WalletStore {
             utxoObjs.append(["txid": u.txid, "vout": u.vout, "value": value, "address": u.address ?? ""])
             inputValues[u.outpoint] = value
         }
-        // Also offer internal-chain change UTXOs (invisible to the xpub scan) to coin
-        // selection, with their address injected — oyster signs them like any other.
         for s in changeSets {
             for u in s.utxos where !locked.contains(u.outpoint) {
                 guard let value = Int64(u.value) else { continue }
@@ -50,8 +50,39 @@ extension WalletStore {
                 inputValues[u.outpoint] = value
             }
         }
+        return (utxoObjs, inputValues)
+    }
+
+    /// Build + sign (on-device) a payment WITHOUT broadcasting it, so the confirmation can
+    /// show the real network fee. `sweepTotalSat` carries the caller's EXPLICIT "send
+    /// everything" intent (the MAX button's `MaxSendQuote.totalSat`); only then do we sweep
+    /// to a single output. It is never inferred from the live balance — see the isSweep
+    /// note below.
+    func prepareSend(to recipient: String, amountPRL: Decimal, sweepTotalSat: Int64? = nil) async throws -> PreparedSend {
+        let recipient = recipient.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard PRLAddress.isValid(recipient, network: network) else { throw WalletError(Loc("收款地址格式不正确")) }
+        guard let mnemonic, let xp = xpub, let walletID = activeWalletID else { throw WalletError(Loc("钱包未就绪")) }
+        guard unverifiedSends.isEmpty else { throw WalletError(Loc("上一笔转账是否发出尚未确认，请先查看交易记录，稍后再试")) }
+        // Everything this send uses is captured now; if the wallet, network or lock state
+        // changes during the network round-trips below, the send is abandoned.
+        let session = chainLoadToken
+        let sendNetwork = network
+        let changeSets = recoverable
+        // A sweep's amount already has the real fee taken off, so it may come closer to the
+        // balance than the reserve; whether the inputs still match is checked below.
+        guard sweepTotalSat != nil || amountPRL + Self.sendFeeReserve <= balance.available else {
+            throw WalletError(Loc("余额不足：请预留至少 %@ PRL 作为手续费", "\(Self.sendFeeReserve)"))
+        }
+        let dir = walletDataDir
+        let net = sendNetwork.rawValue
+        let bb = BlockbookClient(network: sendNetwork).pinned(to: chainReadBase, strict: false)
+        guard let amountSat = RawTx.satoshis(from: amountPRL) else {
+            throw WalletError(Loc("金额无效：最多支持 %@ 位小数", "\(BlockbookClient.decimals)"))
+        }
+        async let feeRequest = bb.estimateFeePerKB()
+        let (utxoObjs, inputValues) = try await spendableInputs(bb: bb, xpub: xp, changeSets: changeSets)
+        let fee = await feeRequest
         guard !utxoObjs.isEmpty else { throw WalletError(Loc("没有可用的 UTXO（余额不足或未确认）")) }
-        let fee = (try? await bb.estimateFeePerKB()) ?? 50_000
         guard chainLoadToken == session else { throw WalletError(Loc("钱包或网络已切换，已取消本次转账")) }
         let utxosJSON = String(data: try JSONSerialization.data(withJSONObject: utxoObjs), encoding: .utf8) ?? "[]"
         // Full-balance ("MAX") send → true single-output sweep. Otherwise the fixed
@@ -70,18 +101,20 @@ extension WalletStore {
         let hex: String
         let paidSat: Int64
         do {
-            if isMax {
+            if let sweepTotalSat {
                 let totalInputSat = inputValues.values.reduce(Int64(0), +)
+                // The sweep pays out everything the inputs hold. That must still be what MAX
+                // quoted — unless funds arrived, were spent, or the wallet changed since it
+                // was tapped. Refuse rather than send an amount the user never saw. (Totals,
+                // not amounts: the fee rate may have moved since the quote, which only shifts
+                // the fee the confirmation shows.)
+                guard abs(totalInputSat - sweepTotalSat) <= Self.maxSweepSlackSat else {
+                    throw WalletError(Loc("余额已变化，请重新点 MAX 后再发送"))
+                }
                 let startSat = totalInputSat - RawTx.estimateFeeSat(inputs: utxoObjs.count, outputs: 2, feePerKB: fee)
                 guard startSat > 0 else {
-                    throw WalletError(Loc("余额不足：请预留至少 %@ PRL 作为手续费", "\(Self.sendFeeReserve)"))
-                }
-                // The user confirmed `amountPRL`. The sweep pays out everything the inputs
-                // hold, which is only ever the fee reserve more than that — unless funds
-                // arrived, were spent, or the wallet changed since MAX was tapped. Refuse
-                // rather than send an amount the user never saw.
-                guard startSat <= amountSat + Self.maxSweepSlackSat, startSat + Self.maxSweepSlackSat >= amountSat else {
-                    throw WalletError(Loc("余额已变化，请重新点 MAX 后再发送"))
+                    let needSat = RawTx.estimateFeeSat(inputs: utxoObjs.count, outputs: 2, feePerKB: fee)
+                    throw WalletError(Loc("余额不足：请预留至少 %@ PRL 作为手续费", "\(RawTx.prl(fromSat: needSat))"))
                 }
                 let sweep = try await sweepConverge(mnemonic: mnemonic, dir: dir, net: net, to: recipient,
                                                     amountSat: startSat, totalSat: totalInputSat,
@@ -89,9 +122,17 @@ extension WalletStore {
                 hex = sweep.hex
                 paidSat = sweep.amountSat
             } else {
-                hex = try await WalletDBQueue.shared.run {
-                    try OysterBridge.buildSignedTx(mnemonic: mnemonic, dataDir: dir, network: net,
-                                                   to: recipient, amountSat: amountSat, feeSatPerKB: fee, utxosJSON: utxosJSON)
+                do {
+                    hex = try await WalletDBQueue.shared.run {
+                        try OysterBridge.buildSignedTx(mnemonic: mnemonic, dataDir: dir, network: net,
+                                                       to: recipient, amountSat: amountSat, feeSatPerKB: fee, utxosJSON: utxosJSON)
+                    }
+                } catch {
+                    // The amount fits under the fixed reserve but not under today's real fee.
+                    if let feeSat = Self.shortfallFeeSat(error.localizedDescription, amountSat: amountSat) {
+                        throw WalletError(Loc("余额不足：请预留至少 %@ PRL 作为手续费", "\(RawTx.prl(fromSat: feeSat))"))
+                    }
+                    throw error
                 }
                 paidSat = amountSat
             }
@@ -112,8 +153,18 @@ extension WalletStore {
         }
         return PreparedSend(hex: hex, txid: raw?.txid, inputs: spent, recipient: recipient,
                             amount: RawTx.prl(fromSat: paidSat), fee: feeSat.map(RawTx.prl(fromSat:)),
-                            isSweep: isMax, walletID: walletID, network: sendNetwork,
+                            isSweep: sweepTotalSat != nil, walletID: walletID, network: sendNetwork,
                             session: session, createdAt: Date())
+    }
+
+    /// The fee oyster wanted when coin selection came up short — its error reads
+    /// "insufficient funds: have <sat>, need <sat>", need = amount + fee. nil for any other error.
+    nonisolated static func shortfallFeeSat(_ message: String, amountSat: Int64) -> Int64? {
+        guard message.localizedCaseInsensitiveContains("insufficient funds"),
+              let r = message.range(of: #"need (\d+)"#, options: .regularExpression),
+              let need = Int64(message[r].dropFirst("need ".count)) else { return nil }
+        let fee = need - amountSat
+        return fee > 0 ? fee : nil
     }
 
     enum SendOutcome: Equatable {
@@ -149,13 +200,18 @@ extension WalletStore {
         } catch {
             guard let txid = p.txid else { return .failed(error.localizedDescription) }
             let message = error.localizedDescription
+            // No node ever saw it (every indexer turned the request away): certainly not sent.
+            if let be = error as? BlockbookClient.BroadcastError, case .notDelivered(let m) = be {
+                releaseLock(txid, of: p)
+                return .failed(Loc("操作未完成，请重试。") + " (\(m))")
+            }
             if let be = error as? BlockbookClient.BroadcastError, case .rejected(let m) = be {
                 if BlockbookClient.isAlreadyKnown(m) {
                     recordSent(p, txid: txid, verified: true)
                     return .sent(txid: txid)
                 }
-                // The node's own verdict ("-26: …", "-25: …"): nothing was relayed.
-                if m.range(of: #"^-\d+:"#, options: .regularExpression) != nil {
+                // Every node's own verdict ("-26: …", "-25: …"): nothing was relayed.
+                if BlockbookClient.isVerdict(m) {
                     releaseLock(txid, of: p)
                     return .failed(m)
                 }
@@ -233,6 +289,14 @@ extension WalletStore {
             }
         }
     }
+}
+
+/// What the MAX button fills in (see `maxSendQuote`).
+struct MaxSendQuote: Equatable, Sendable {
+    /// Everything spendable minus the estimated fee — what the recipient would get.
+    let amount: Decimal
+    /// The inputs' total the quote was made from; `prepareSend` checks the sweep against it.
+    let totalSat: Int64
 }
 
 /// A signed payment awaiting the user's final confirmation (see `prepareSend`).

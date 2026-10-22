@@ -89,3 +89,381 @@ struct WalletTxTests {
     /// schnorr signature: item count (1) + length (1) + 64 bytes.
     private func witnessHexLength(_ hex: String) -> Int { (1 + 1 + 64) * 2 }
 }
+
+/// Send fee choice and the shortfall message (2026-10-20: the official node's 2-block
+/// estimate was ~1 955 sat/vB while recent blocks were including 1–81 sat/vB txs).
+struct WalletFeeTests {
+    @Test func skewedFastEstimateIsCappedByRecentBlocks() {
+        // The real numbers from 2026-10-20: fast 1 954 566, slow 1 708, block medians up to 81 441.
+        let rate = BlockbookClient.chooseFeePerKB(fast: 1_954_566, slow: 1_708,
+                                                  recentMedians: [1_004, 10_047, 81_441, 1_007])
+        #expect(rate == 81_441)
+    }
+
+    @Test func realCongestionKeepsTheFastEstimate() {
+        // Blocks themselves are paying more than the 2-block estimate → it isn't skewed.
+        #expect(BlockbookClient.chooseFeePerKB(fast: 200_000, slow: 150_000, recentMedians: [250_000]) == 200_000)
+        #expect(BlockbookClient.chooseFeePerKB(fast: 200_000, slow: 300_000, recentMedians: []) == 200_000)
+    }
+
+    @Test func quietNetworkStaysAtTheFloor() {
+        #expect(BlockbookClient.chooseFeePerKB(fast: 1_000, slow: 1_000, recentMedians: [1_000, 1_002]) == 1_000)
+        #expect(BlockbookClient.chooseFeePerKB(fast: 500, slow: nil, recentMedians: []) == BlockbookClient.minFeePerKB)
+    }
+
+    @Test func missingDataFallsBackStepByStep() {
+        // No block stats or slow estimate → the fast estimate as before.
+        #expect(BlockbookClient.chooseFeePerKB(fast: 1_954_566, slow: nil, recentMedians: []) == 1_954_566)
+        // No fast estimate → the cap alone.
+        #expect(BlockbookClient.chooseFeePerKB(fast: nil, slow: 3_000, recentMedians: [2_000]) == 3_000)
+        // Nothing at all → the old 50 sat/vB default.
+        #expect(BlockbookClient.chooseFeePerKB(fast: nil, slow: nil, recentMedians: []) == BlockbookClient.fallbackFeePerKB)
+        // An absurd backend value stays bounded.
+        #expect(BlockbookClient.chooseFeePerKB(fast: .max, slow: nil, recentMedians: []) == BlockbookClient.maxFeePerKB)
+    }
+
+    @Test func shortfallFeeIsReadFromOysterError() {
+        // Captured from OysterMobile: 5 PRL input, 4.999 PRL payment at 1 954 566 sat/kB.
+        let m = "insufficient funds: have 500000000, need 500118911"
+        #expect(WalletStore.shortfallFeeSat(m, amountSat: 499_900_000) == 218_911)
+        #expect(WalletStore.shortfallFeeSat("the passed output does not belong to the wallet", amountSat: 1) == nil)
+        #expect(WalletStore.shortfallFeeSat("insufficient funds", amountSat: 1) == nil)
+    }
+}
+
+/// Two indexers (own + official): how their broadcast answers combine, and the read order.
+struct WalletBackendTests {
+    private typealias E = BlockbookClient.BroadcastError
+    private func outcome(_ results: [Result<String, E>]) -> String {
+        do { return "sent \(try BlockbookClient.combine(results))" } catch let e as E {
+            switch e { case .rejected(let m): return "rejected \(m)"; case .transport: return "unknown"; case .notDelivered: return "not sent" }
+        } catch { return "?" }
+    }
+
+    @Test func acceptedByEitherNodeIsSent() {
+        #expect(outcome([.failure(.transport("timeout")), .success("ab")]) == "sent ab")
+        #expect(outcome([.success("ab"), .failure(.rejected("-26: mempool min fee not met"))]) == "sent ab")
+    }
+
+    @Test func onlyAUnanimousRefusalIsAVerdict() {
+        #expect(outcome([.failure(.rejected("-26: x")), .failure(.rejected("-25: y"))]) == "rejected -26: x")
+        #expect(outcome([.failure(.rejected("-26: x"))]) == "rejected -26: x")
+        // One node refused, the other didn't answer: it may have relayed it.
+        #expect(outcome([.failure(.rejected("-26: x")), .failure(.transport("timeout"))]) == "unknown")
+        // A gateway's complaint is not a node's verdict.
+        #expect(outcome([.failure(.rejected("node unhealthy")), .failure(.rejected("-26: x"))]) == "unknown")
+    }
+
+    @Test func aRequestNoNodeSawLeavesTheVerdictToTheOthers() {
+        // Our gateway refused the old app key; the official node's refusal stands.
+        #expect(outcome([.failure(.notDelivered("unauthorized (HTTP 401)")), .failure(.rejected("-26: x"))]) == "rejected -26: x")
+        #expect(outcome([.failure(.notDelivered("rate limited (HTTP 429)")), .success("ab")]) == "sent ab")
+        // The other may have relayed it.
+        #expect(outcome([.failure(.notDelivered("HTTP 401")), .failure(.transport("timeout"))]) == "unknown")
+        // No node saw it at all: certainly not sent.
+        do { _ = try BlockbookClient.combine([.failure(.notDelivered("HTTP 401")), .failure(.notDelivered("HTTP 429"))]); Issue.record("no throw") }
+        catch BlockbookClient.BroadcastError.notDelivered {} catch { Issue.record("\(error)") }
+    }
+
+    @Test func aNodeHavingTheTxEndsTheWait() {
+        #expect(BlockbookClient.wentOut(.success("ab")))
+        #expect(BlockbookClient.wentOut(.failure(.rejected("-26: txn-already-known"))))
+        #expect(!BlockbookClient.wentOut(.failure(.rejected("-26: mempool min fee not met"))))
+        #expect(!BlockbookClient.wentOut(.failure(.transport("timeout"))))
+    }
+
+    @Test func onlyTroubleBenchesAnIndexer() {
+        #expect(BlockbookClient.benchTime(URLError(.timedOut)) == nil)   // a slow query
+        #expect(BlockbookClient.benchTime(URLError(.cannotConnectToHost)) == BackendHealth.bench)
+        #expect(BlockbookClient.benchTime(BlockbookClient.httpStatusError(503)) == BackendHealth.bench)
+        #expect(BlockbookClient.benchTime(BlockbookClient.httpStatusError(429)) == BackendHealth.bench)
+        #expect(BlockbookClient.benchTime(BlockbookClient.httpStatusError(401)) == BackendHealth.keyRefusedBench)
+        #expect(BlockbookClient.benchTime(BlockbookClient.httpStatusError(400)) == nil)
+        #expect(BlockbookClient.benchTime(DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: ""))) == nil)
+    }
+
+    @Test func aPinnedRefreshReadsOneIndex() {
+        let c = BlockbookClient(bases: ["https://a.test", "https://b.test"])
+        #expect(c.pinned(to: "https://b.test", strict: true).bases == ["https://b.test"])
+        #expect(c.pinned(to: "https://b.test", strict: false).bases == ["https://b.test", "https://a.test"])
+        // Broadcasts and lookups still go everywhere.
+        #expect(c.pinned(to: "https://b.test", strict: true).allBases == ["https://a.test", "https://b.test"])
+        #expect(c.pinned(to: nil, strict: true).bases == c.bases)
+        #expect(c.pinned(to: "https://elsewhere.test", strict: true).bases == c.bases)
+    }
+
+    @Test func alreadyKnownAnywhereMeansItWentOut() {
+        #expect(outcome([.failure(.rejected("-26: x")), .failure(.rejected("-27: transaction already exists"))])
+                == "rejected -27: transaction already exists")
+    }
+
+    @Test func mainnetPrefersOwnIndexerTestnetOnlyOfficial() {
+        // A build without the app key (the public repo) never tries our own indexer.
+        #expect(BlockbookClient(network: .mainnet).bases == (NodeAccess.enabled
+            ? [BlockbookClient.ownMainnet, BlockbookClient.officialMainnet] : [BlockbookClient.officialMainnet]))
+        #expect(BlockbookClient(network: .testnet).bases == [BlockbookClient.officialTestnet])
+    }
+
+    @Test func onlyOurIndexerGetsTheAppKey() {
+        var own = URLRequest(url: URL(string: BlockbookClient.ownMainnet + "/api/v2/")!)
+        BlockbookClient.authorize(&own)
+        #expect(own.value(forHTTPHeaderField: NodeAccess.header) == NodeAccess.key)
+        var official = URLRequest(url: URL(string: BlockbookClient.officialMainnet + "/api/v2/")!)
+        BlockbookClient.authorize(&official)
+        #expect(official.value(forHTTPHeaderField: NodeAccess.header) == nil)
+        // A look-alike host must not get it either.
+        var lookalike = URLRequest(url: URL(string: "https://node.pearlhub.net.evil.example/api/v2/")!)
+        BlockbookClient.authorize(&lookalike)
+        #expect(lookalike.value(forHTTPHeaderField: NodeAccess.header) == nil)
+    }
+
+    @Test func aFailedIndexerMovesToTheBack() async {
+        let health = BackendHealth()
+        #expect(await health.order(["a", "b"]) == ["a", "b"])
+        await health.failed("a")
+        #expect(await health.order(["a", "b"]) == ["b", "a"])
+        await health.failed("b", for: -1)   // already over
+        #expect(await health.order(["a", "b"]) == ["b", "a"])
+    }
+
+    @Test func concurrentFeeAsksShareOneEstimateAndOnlyCompleteOnesStay() async {
+        let cache = FeeRateCache()
+        final class Count: @unchecked Sendable { var n = 0; let lock = NSLock()
+            func bump() { lock.lock(); n += 1; lock.unlock() } }
+        let count = Count()
+        let compute: @Sendable () async -> (rate: Int64, keep: Bool) = {
+            count.bump(); try? await Task.sleep(for: .milliseconds(200)); return (81_000, true)
+        }
+        async let a = cache.rate(for: "k", compute: compute)
+        async let b = cache.rate(for: "k", compute: compute)
+        #expect(await [a, b] == [81_000, 81_000])
+        #expect(count.n == 1)
+        #expect(await cache.rate(for: "k", compute: compute) == 81_000 && count.n == 1)   // cached
+        // The fallback rate (nothing learned) is used but not kept.
+        #expect(await cache.rate(for: "f") { (BlockbookClient.fallbackFeePerKB, false) } == BlockbookClient.fallbackFeePerKB)
+        #expect(await cache.rate(for: "f") { (2_000, true) } == 2_000)
+        #expect(BlockbookClient.feeDataComplete(fast: 1, slow: nil, recentMedians: [5]))
+        #expect(!BlockbookClient.feeDataComplete(fast: 1, slow: nil, recentMedians: []))
+        #expect(!BlockbookClient.feeDataComplete(fast: nil, slow: 1, recentMedians: [5]))
+    }
+}
+
+/// Reads through `BlockbookClient.get` (wallet, network chart, pool chain income): the next
+/// indexer answers when the first is down or sends something unreadable.
+struct BlockbookFallbackTests {
+    /// Answers by host: down.* → 503 (the gateway while our index lags), junk.* → 200 with a
+    /// body that isn't the expected JSON, anything else → a Blockbook status.
+    final class HostStub: URLProtocol, @unchecked Sendable {
+        override class func canInit(with request: URLRequest) -> Bool { request.url?.host?.hasSuffix(".fallback.test") == true }
+        override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+        override func startLoading() {
+            let host = request.url?.host ?? ""
+            let (status, body): (Int, String) = host.hasPrefix("down.") ? (503, #"{"error":"node unhealthy"}"#)
+                : host.hasPrefix("junk.") ? (200, "<html>maintenance</html>")
+                : (200, #"{"blockbook":{"bestHeight":\#(host.hasPrefix("own.") ? 130651 : 130650)}}"#)
+            let resp = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil)!
+            client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data(body.utf8))
+            client?.urlProtocolDidFinishLoading(self)
+        }
+        override func stopLoading() {}
+    }
+
+    private struct Status: Decodable { struct BB: Decodable { let bestHeight: Int }; let blockbook: BB }
+    private let session: URLSession = {
+        let c = URLSessionConfiguration.ephemeral
+        c.protocolClasses = [HostStub.self]
+        return URLSession(configuration: c)
+    }()
+    private func tip(_ bases: [String]) async throws -> Int {
+        try await BlockbookClient(bases: bases).get("/api/v2/", session: session) {
+            try JSONDecoder().decode(Status.self, from: $0).blockbook.bestHeight
+        }
+    }
+
+    @Test func firstChoiceAnswersWhenUp() async throws {
+        #expect(try await tip(["https://own.a.fallback.test", "https://official.a.fallback.test"]) == 130651)
+    }
+
+    @Test func aLaggingOwnIndexFallsBackAndIsBenched() async throws {
+        let down = "https://down.b.fallback.test", up = "https://official.b.fallback.test"
+        #expect(try await tip([down, up]) == 130650)
+        // The 503 benches it: the next reads go to the official one first.
+        #expect(await BackendHealth.shared.order([down, up]) == [up, down])
+    }
+
+    @Test func anUnreadableAnswerFallsBackButIsNotBenched() async throws {
+        let junk = "https://junk.c.fallback.test", up = "https://official.c.fallback.test"
+        #expect(try await tip([junk, up]) == 130650)
+        #expect(await BackendHealth.shared.order([junk, up]) == [junk, up])
+    }
+
+    @Test func aParseRejectionFallsBackButIsNotBenched() async throws {
+        // The chart and chain income throw their own errors (even URLError) for a body they
+        // can't use; the indexer still answered, so it must stay first in line.
+        let picky = "https://own.f.fallback.test", up = "https://official.f.fallback.test"
+        let tip = try await BlockbookClient(bases: [picky, up]).get("/api/v2/", session: session) { d -> Int in
+            let t = try JSONDecoder().decode(Status.self, from: d).blockbook.bestHeight
+            if t == 130651 { throw URLError(.cannotParseResponse) }
+            return t
+        }
+        #expect(tip == 130650)
+        #expect(await BackendHealth.shared.order([picky, up]) == [picky, up])
+    }
+
+    @Test func allDownIsAnError() async {
+        await #expect(throws: (any Error).self) {
+            try await tip(["https://down.d.fallback.test", "https://down.e.fallback.test"])
+        }
+    }
+}
+
+/// 交易详情 / 交易查询: reading Blockbook's tx JSON, and which indexer's copy is shown.
+struct TxDetailTests {
+    /// Trimmed from node.pearlhub.net's /api/v2/tx/ for block 119565's tx (2026-10-20).
+    static let spendJSON = #"""
+    {"txid":"998578dbea941fbe90fbc5335c314300bf07af568230d0239f29127688ad4e3e","version":1,
+     "vin":[{"txid":"f5485c65df7be27b89b812291adccc150f8b5c713f86dfc0a807ce8fd94710e8","vout":323,"n":0,
+             "addresses":["prl1pv3put8fvt4z5uq54sj9lt6vk40ya3c60sph75gwjl3qxyfsk06ysl8yyve"],"isAddress":true,"value":"299051973"}],
+     "vout":[{"value":"9108041","n":0,"hex":"51208a9f","addresses":["prl1p320jfqcr3d4xg7uway6djlq73a25j6rlatfwprx5nk088aguyv0sw5at54"],"isAddress":true},
+             {"value":"289849563","n":1,"hex":"512053e7","addresses":["prl1p20n3ysh8uq97v5vhsvtqrp2txaw0jtl3cuc9y7aqkfkj3svnc5qs6gu3u3"],"isAddress":true}],
+     "blockHash":"1d3b6ebcd854ee2a3ddcb33168a9d9f65a4a75570753ea9a386131c548856c84","blockHeight":119565,
+     "confirmations":11094,"blockTime":1790474020,"size":205,"vsize":154,
+     "value":"298957604","valueIn":"299051973","fees":"94369","hex":"\#(TxFixtures.oneInputHex)"}
+    """#
+    /// Block 130600's coinbase: a payout plus the OP_RETURN witness commitment.
+    static let coinbaseJSON = #"""
+    {"txid":"c30dee257593b1acc114d82090902fa60ef9f5270f7b04d2e24f3e3ef4adf43c","version":2,
+     "vin":[{"sequence":4294967295,"n":0,"isAddress":false,"coinbase":"0328fe01"}],
+     "vout":[{"value":"223962677061","n":0,"hex":"5120e31e","addresses":["prl1puv0gqv4x0wd0ylwz086y3sqrg4a6umza9r08aecehjrmdqq7mctsmqaqsh"],"isAddress":true},
+             {"value":"0","n":1,"hex":"6a24aa21a9ed","addresses":[],"isAddress":false}],
+     "blockHeight":130600,"confirmations":59,"blockTime":1792474569,"value":"223962677061","valueIn":"0","fees":"0"}
+    """#
+    static let mempoolJSON = #"""
+    {"txid":"998578dbea941fbe90fbc5335c314300bf07af568230d0239f29127688ad4e3e","vin":[],"vout":[],
+     "blockHeight":-1,"confirmations":0,"blockTime":1792480000,"value":"0","fees":"94369"}
+    """#
+    private static let spendTxid = "998578dbea941fbe90fbc5335c314300bf07af568230d0239f29127688ad4e3e"
+    private static let sender = "prl1pv3put8fvt4z5uq54sj9lt6vk40ya3c60sph75gwjl3qxyfsk06ysl8yyve"
+    private static let change = "prl1p20n3ysh8uq97v5vhsvtqrp2txaw0jtl3cuc9y7aqkfkj3svnc5qs6gu3u3"
+
+    private func spend() throws -> TxDetail {
+        try #require(TxDetail.parse(Data(Self.spendJSON.utf8), txid: Self.spendTxid))
+    }
+
+    @Test func txidFromInputOrExplorerLink() {
+        let id = Self.spendTxid
+        #expect(TxDetail.parseTxid(id) == id)
+        #expect(TxDetail.parseTxid("  \(id.uppercased())\n") == id)
+        #expect(TxDetail.parseTxid("https://blockbook.pearlresearch.ai/tx/\(id)") == id)
+        #expect(TxDetail.parseTxid("https://blockbook.pearlresearch.ai/tx/\(id)?x=1") == id)
+        #expect(TxDetail.parseTxid(String(id.dropLast())) == nil)
+        #expect(TxDetail.parseTxid(id + "0") == nil)
+        #expect(TxDetail.parseTxid("https://example.com/tx/\(id)ff") == nil)
+        #expect(TxDetail.parseTxid(String(repeating: "g", count: 64)) == nil)
+        // Fullwidth digits are hex digits to Character.isHexDigit; not to a txid.
+        #expect(TxDetail.parseTxid(String(repeating: "１", count: 64)) == nil)
+    }
+
+    @Test func readsASpend() throws {
+        let tx = try spend()
+        #expect(tx.confirmations == 11094 && tx.confirmed && tx.height == 119565)
+        #expect(tx.time == Date(timeIntervalSince1970: 1790474020))
+        #expect(tx.valueSat == 298_957_604 && tx.feeSat == 94_369 && !tx.coinbase)
+        #expect(tx.inputs == [.init(address: Self.sender, sat: 299_051_973, isData: false)])
+        #expect(tx.outputs.map(\.sat) == [9_108_041, 289_849_563])
+        // The signed hex is this very tx, so 重新广播 may send it.
+        #expect(RawTx(hex: try #require(tx.hex))?.txid == tx.txid)
+    }
+
+    @Test func readsACoinbase() throws {
+        let id = "c30dee257593b1acc114d82090902fa60ef9f5270f7b04d2e24f3e3ef4adf43c"
+        let tx = try #require(TxDetail.parse(Data(Self.coinbaseJSON.utf8), txid: id))
+        #expect(tx.coinbase && tx.inputs.isEmpty && tx.hex == nil)
+        #expect(tx.outputs[1] == .init(address: nil, sat: 0, isData: true))
+    }
+
+    @Test func aMempoolTxHasNoBlock() throws {
+        let tx = try #require(TxDetail.parse(Data(Self.mempoolJSON.utf8), txid: Self.spendTxid))
+        #expect(!tx.confirmed && tx.height == nil && tx.time != nil)
+    }
+
+    @Test func anotherTxidOrGarbageIsNoAnswer() {
+        #expect(TxDetail.parse(Data(Self.spendJSON.utf8), txid: String(repeating: "0", count: 64)) == nil)
+        #expect(TxDetail.parse(Data("<html>".utf8), txid: Self.spendTxid) == nil)
+    }
+
+    @Test func ownRowsFirstAndTheNet() throws {
+        let tx = try spend()
+        let own: Set = [Self.sender, Self.change]
+        #expect(TxDetail.ownFirst(tx.outputs, own: own).map(\.address) == [Self.change, tx.outputs[0].address])
+        // Paid 299 051 973 in, got 289 849 563 change back: −(payment + fee).
+        #expect(tx.net(for: own) == 289_849_563 - 299_051_973)
+        #expect(tx.net(for: ["prl1someoneelse"]) == nil)
+    }
+
+    @Test func theCopyFurthestAlongWinsTiesGoToOurs() throws {
+        let mined = try spend()
+        let pending = try #require(TxDetail.parse(Data(Self.mempoolJSON.utf8), txid: Self.spendTxid))
+        typealias C = BlockbookClient.TxCopy
+        // 2026-10-20: the official indexer kept a mined tx at 0 confirmations.
+        #expect(BlockbookClient.outcome([C.found(pending), C.found(mined)]) == .found(mined))
+        #expect(BlockbookClient.outcome([C.unknown, C.found(pending)]) == .found(pending))
+        // One saying "not found" while the other is down (ours 503s while it catches up).
+        #expect(BlockbookClient.outcome([C.unknown, C.missing]) == .notFound)
+        #expect(BlockbookClient.outcome([C.unknown, C.unknown]) == .failed)
+        let other = TxDetail(txid: mined.txid, confirmations: mined.confirmations, height: 1, time: nil, valueSat: 0,
+                             feeSat: 0, coinbase: false, inputs: [], outputs: [], hex: nil)
+        #expect(TxDetail.best([mined, other]) == mined)
+    }
+}
+
+/// Broadcast through stubbed indexers: who answers first, and what a refusal before any node means.
+struct BroadcastStubTests {
+    /// By host: slow.* accepts after 3 s, ok.* accepts at once, key.* is our gateway refusing
+    /// the app key, nope.* is a node's verdict.
+    final class SendStub: URLProtocol, @unchecked Sendable {
+        override class func canInit(with request: URLRequest) -> Bool { request.url?.host?.hasSuffix(".send.test") == true }
+        override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+        private var cancelled = false
+        override func startLoading() {
+            let host = request.url?.host ?? ""
+            let txid = String(repeating: "ab", count: 32)
+            let (delay, status, body): (Double, Int, String) =
+                host.hasPrefix("slow.") ? (3, 200, #"{"result":"\#(txid)"}"#)
+                : host.hasPrefix("ok.") ? (0, 200, #"{"result":"\#(txid)"}"#)
+                : host.hasPrefix("key.") ? (0, 401, #"{"error":"unauthorized"}"#)
+                : (0, 400, #"{"error":"-26: mempool min fee not met"}"#)
+            DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [self] in
+                guard !cancelled else { return }
+                let resp = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil)!
+                client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
+                client?.urlProtocol(self, didLoad: Data(body.utf8))
+                client?.urlProtocolDidFinishLoading(self)
+            }
+        }
+        override func stopLoading() { cancelled = true }
+    }
+    private let session: URLSession = {
+        let c = URLSessionConfiguration.ephemeral
+        c.protocolClasses = [SendStub.self]
+        return URLSession(configuration: c)
+    }()
+
+    @Test func theFirstAcceptanceIsTheAnswer() async throws {
+        let start = Date()
+        let txid = try await BlockbookClient(bases: ["https://slow.a.send.test", "https://ok.a.send.test"], session: session).broadcast("00")
+        #expect(txid == String(repeating: "ab", count: 32))
+        // Not held up by the slow one (3 s).
+        #expect(Date().timeIntervalSince(start) < 2)
+    }
+
+    @Test func aRefusedKeyDoesNotHideTheOtherNodesVerdict() async {
+        do {
+            _ = try await BlockbookClient(bases: ["https://key.b.send.test", "https://nope.b.send.test"], session: session).broadcast("00")
+            Issue.record("expected a refusal")
+        } catch BlockbookClient.BroadcastError.rejected(let m) {
+            #expect(m.hasPrefix("-26:"))
+        } catch { Issue.record("\(error)") }
+    }
+}

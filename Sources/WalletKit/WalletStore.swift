@@ -56,8 +56,10 @@ final class WalletStore: ObservableObject {
     nonisolated static let sendFeeReserve = Decimal(string: "0.001")!
     /// A fee above this many reserves is called out in the send confirmation.
     nonisolated static let highFeeReserveMultiple: Decimal = 5
-    /// How far a MAX sweep may differ from the amount the user confirmed (0.01 PRL): the unused
-    /// fee reserve fits comfortably, newly arrived funds or a different wallet do not.
+    /// How far the inputs a MAX sweep spends may differ in total from the ones MAX quoted
+    /// (0.01 PRL). A tiny payout confirming in between is swept along — the confirmation shows
+    /// the amount actually sent — while a real change in funds, or another wallet, has the user
+    /// tap MAX again.
     nonisolated static let maxSweepSlackSat: Int64 = 1_000_000
     /// Fee rate (sat/kB) used for the ownership-oracle trial-sign. Deliberately the
     /// relay floor, not a realistic spend fee: the trial only needs to BUILD, so a low
@@ -164,6 +166,9 @@ final class WalletStore: ObservableObject {
     /// The xpub summary the current history page + UTXO read belongs to. While a fresh
     /// summary still matches it, nothing on-chain moved and the heavy reads are skipped.
     private var lastSummary: BlockbookClient.XpubSummary?
+    /// The indexer the last balance summary came from. The rest of that refresh reads from it
+    /// alone, and sends prefer it, so balance, history and UTXOs come from one index.
+    var chainReadBase: String?
     var serverTxs: [WalletTx] = []
     /// History pages beyond the first (「加载更多」). Refreshed only when reloaded, so their
     /// confirmation counts are recomputed from the current tip on publish.
@@ -698,13 +703,20 @@ final class WalletStore: ObservableObject {
         }
         guard isCurrentChainLoad(token, mnemonic: mnemonic, network: expectedNetwork) else { return }
         guard let xp = xpub else { return }
-        let bb = BlockbookClient(network: expectedNetwork)
         // 1. The balance, from the tiny `details=basic` summary — on screen in well under
         //    a second. The history page (megabytes of pool payouts) and the UTXO set are
-        //    re-read below only when the summary moved.
+        //    re-read below only when the summary moved. Whichever indexer answers it serves
+        //    the whole refresh (`strict`): a read that fails there fails this refresh, and the
+        //    next one starts over, rather than mixing two indexes that may disagree.
         let summary: BlockbookClient.XpubSummary
+        let bb: BlockbookClient
+        let switchedIndex: Bool
         do {
-            summary = try await bb.summary(xpub: xp)
+            let answer = try await BlockbookClient(network: expectedNetwork).summaryFrom(xpub: xp)
+            summary = answer.summary
+            switchedIndex = answer.base != chainReadBase
+            chainReadBase = answer.base
+            bb = BlockbookClient(network: expectedNetwork).pinned(to: answer.base, strict: true)
         } catch {
             guard isCurrentChainLoad(token, mnemonic: mnemonic, network: expectedNetwork) else { return }
             // Backend unreachable: keep the last good figures and say so. The change-chain
@@ -714,7 +726,8 @@ final class WalletStore: ObservableObject {
             return
         }
         guard isCurrentChainLoad(token, mnemonic: mnemonic, network: expectedNetwork) else { return }
-        let moved = summary != lastSummary || !historyReady
+        // Another index than last time: re-read the page and UTXOs from it too.
+        let moved = switchedIndex || summary != lastSummary || !historyReady
         // With a send pending, a summary that already counts it would be subtracted again
         // by the pending overlay until the history page shows the tx — so then the balance
         // waits for the page (below), which settles both together.
@@ -787,7 +800,8 @@ final class WalletStore: ObservableObject {
         let page = historyPagesLoaded + 1
         loadingMoreHistory = true
         defer { loadingMoreHistory = false }
-        guard let more = try? await BlockbookClient(network: net)
+        // From the index page 1 came from.
+        guard let more = try? await BlockbookClient(network: net).pinned(to: chainReadBase, strict: true)
                 .account(xpub: xp, page: page, knownChange: change.owned.union(xpubAddresses)),
               chainLoadToken == token, network == net else { return }
         let known = Set(serverTxs.map(\.txid)).union(olderTxs.map(\.txid))
@@ -1007,7 +1021,7 @@ final class WalletStore: ObservableObject {
         backendReady = false; historyReady = false
         historyHasMore = false; historyPagesLoaded = 1; olderTxs = []
         lastSyncedAt = nil; syncError = nil; lastChainLoadAt = nil
-        serverBalance = .zero; serverTxs = []; xpubAddresses = []; lastSummary = nil
+        serverBalance = .zero; serverTxs = []; xpubAddresses = []; lastSummary = nil; chainReadBase = nil
         balanceIsCached = false
         pendingSends.removeAll(); sendLocks.removeAll(); unverifiedSends.removeAll()
         clearChangeChainState()

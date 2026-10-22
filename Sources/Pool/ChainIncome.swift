@@ -118,16 +118,20 @@ final class ChainIncome {
 
     // MARK: Blockbook
 
+    /// Mainnet indexers in the wallet's order: Pearl Hub's own first, the official one as the
+    /// fallback (and while ours lags).
+    private nonisolated static let indexers = BlockbookClient(network: .mainnet)
+
     private nonisolated static func balanceHistory(_ addr: String, from: Int, to: Int,
                                                    groupBy: Int) async -> [[String: Any]]? {
-        guard var comps = URLComponents(string: "https://blockbook.pearlresearch.ai/api/v2/balancehistory/\(addr)")
-        else { return nil }
-        comps.queryItems = [.init(name: "from", value: String(from)),
-                            .init(name: "to", value: String(to)),
-                            .init(name: "groupBy", value: String(groupBy))]
-        guard let url = comps.url,
-              let d = try? await PoolHTTP.get(url, timeout: 25) else { return nil }
-        return (try? JSONSerialization.jsonObject(with: d)) as? [[String: Any]]
+        guard let enc = addr.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else { return nil }
+        let path = "/api/v2/balancehistory/\(enc)?from=\(from)&to=\(to)&groupBy=\(groupBy)"
+        return try? await indexers.get(path, timeout: 25) { d in
+            guard let arr = try JSONSerialization.jsonObject(with: d) as? [[String: Any]] else {
+                throw URLError(.cannotParseResponse)
+            }
+            return arr
+        }
     }
 
     /// Per-tx legs over the trailing `days`; nil when the lookup failed (≠ an empty history).
