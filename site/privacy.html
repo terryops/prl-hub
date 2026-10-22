@@ -26,7 +26,7 @@
 <body>
 <header><div class="in"><img src="/logo.png" alt="Pearl Hub"><div><h1>Privacy Policy</h1><a href="/">← Pearl Hub</a></div></div></header>
 <main>
-  <p class="muted">Last updated: October 10, 2026</p>
+  <p class="muted">Last updated: October 15, 2026</p>
 
   <p><strong>Pearl Hub</strong> provides a native self-custody cryptocurrency wallet and mining
   monitor for the Pearl ($PRL) network, a Chrome wallet extension, and a web mining companion. We do not sell your
@@ -89,7 +89,10 @@
   on the same page contains the Chrome extension download and installation guide.</p>
   <p>USD exchange rates come from ExchangeRate-API's public USD feed; extended price
   history comes from BigONE's public PRL/USDT daily candles. These requests contain
-  no wallet address or identity. Network charts use public Blockbook samples retained
+  no wallet address or identity. The candlestick chart on the Market page is the one
+  exception that does not pass through our service: your browser loads it directly from
+  SafeTrade's public PRL/USDT market data (<code>safetrade.com</code>), without an address,
+  account or cookies, so SafeTrade receives your IP address. Network charts use public Blockbook samples retained
   by our service. Device lists, rental costs and calculator preferences remain in your
   browser and, if enabled, your encrypted settings sync. Synchronizing pool workers
   into your device list queries only the monitors you have enabled.</p>
@@ -155,7 +158,8 @@
     <li><strong>Mining pool public APIs</strong> (AlphaPool, Lucky Pool, HeroMiners, Pearl Fortune, PearlHash, Kryptex, F2Pool) — to show stats for a mining address you choose to monitor.</li>
   </ul>
   <p>We do not control these services. Native app queries go directly to them; web queries
-  pass through our service as described in the Web version section.</p>
+  pass through our service as described in the Web version section, except the SafeTrade
+  candlestick chart, which the browser loads directly.</p>
 
   <h2>iCloud sync (optional, Apple-encrypted)</h2>
   <p>While signed out of the email account, iCloud can sync your preferences (language, currency, pool setup) across your own
