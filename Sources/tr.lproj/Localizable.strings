@@ -576,6 +576,8 @@
 "独立/未知" = "Solo / bilinmeyen";
 "全部 Pearl 矿池对比：费率 · 出块 · 每 PH 收益 · 算力（无需地址）" = "Tüm Pearl havuzlarının karşılaştırması: ücret · blok · PH başına PRL · hashrate (adres gerekmez)";
 "收益/PH·天 = 该池实际挖到的块 × 单块奖励 ÷ 算力（PRL，未扣手续费）；绿色 = 最高。" = "PRL/PH·gün = havuzun gerçekte bulduğu blok sayısı × blok ödülü ÷ havuzun hashrate değeri (ücretler düşülmeden); yeşil = en yüksek.";
+"预估收益 = 当前理论收益 × 该池近 7 天出块运气（实际出块 ÷ 按其算力应出的块，每 5 分钟采样）；PRL/PH·天，未扣手续费；绿色 = 最高。" = "Tahmini getiri = bugünkü teorik getiri × havuzun son 7 günlük blok şansı (bulunan bloklar ÷ hashrate'inin bulması gereken bloklar, 5 dakikada bir ölçülür); ücretler düşülmeden PRL/PH·gün; yeşil = en yüksek.";
+"未标「7 天」的矿池不足 7 天样本，按实际挖到的块 × 单块奖励 ÷ 算力计算。" = "“7 gün” işareti olmayan havuzlarda bir haftalık ölçüm yok: bulunan bloklar × blok ödülü ÷ hashrate.";
 "出块与收益按最近 1000 个区块（≈%@ 天）实测，比 24h 更抗运气波动。" = "Blok ve kazanç verileri ağdaki son 1000 blok (≈%@ gün) üzerinden ölçülür; 24 saatlik aralığa göre daha istikrarlıdır.";
 "「~」= 样本区块太少（<20），该数字运气成分大，仅供参考。" = "“~” = örneklemde 20'den az blok var; sonuç büyük ölçüde şansa bağlıdır, yalnızca fikir vermesi içindir.";
 "SOLO 池为「彩票式」收益，不参与最高收益的比较。" = "SOLO havuzlar piyango gibi öder; bu yüzden “en yüksek getiri” rozetini almazlar.";
@@ -1111,6 +1113,7 @@
 "7 天均值 %@" = "7 günlük ort. %@";
 
 "每 PH/天" = "PH/gün başına";
+"每 PH/天 · 7 天" = "PH/gün başına · 7 gün";
 
 "%@ 的理论值" = "Beklenenin %@ kadarı";
 

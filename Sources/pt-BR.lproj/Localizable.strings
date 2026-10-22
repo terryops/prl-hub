@@ -576,6 +576,8 @@
 "独立/未知" = "Solo / desconhecido";
 "全部 Pearl 矿池对比：费率 · 出块 · 每 PH 收益 · 算力（无需地址）" = "Todos os pools de Pearl comparados: taxa · blocos · PRL por PH · hashrate (sem precisar de endereço)";
 "收益/PH·天 = 该池实际挖到的块 × 单块奖励 ÷ 算力（PRL，未扣手续费）；绿色 = 最高。" = "PRL/PH·dia = blocos que o pool realmente encontrou × recompensa por bloco ÷ hashrate dele (antes das taxas); verde = o maior.";
+"预估收益 = 当前理论收益 × 该池近 7 天出块运气（实际出块 ÷ 按其算力应出的块，每 5 分钟采样）；PRL/PH·天，未扣手续费；绿色 = 最高。" = "Rendimento estimado = rendimento teórico atual × sorte de blocos do pool nos últimos 7 dias (blocos encontrados ÷ blocos que o hashrate dele deveria ter encontrado, medido a cada 5 minutos); PRL/PH·dia antes das taxas; verde = o maior.";
+"未标「7 天」的矿池不足 7 天样本，按实际挖到的块 × 单块奖励 ÷ 算力计算。" = "Pools sem “7 dias” têm menos de uma semana de amostras: blocos encontrados × recompensa por bloco ÷ hashrate.";
 "出块与收益按最近 1000 个区块（≈%@ 天）实测，比 24h 更抗运气波动。" = "Blocos e ganhos são medidos nos últimos 1000 blocos da rede (≈%@ dias) — mais estável que uma janela de 24h.";
 "「~」= 样本区块太少（<20），该数字运气成分大，仅供参考。" = "“~” = menos de 20 blocos na amostra — quase tudo sorte, use só como indicação.";
 "SOLO 池为「彩票式」收益，不参与最高收益的比较。" = "Pools SOLO pagam como uma loteria, por isso nunca recebem o selo de “maior rendimento”.";
@@ -1111,6 +1113,7 @@
 "7 天均值 %@" = "Média de 7 dias %@";
 
 "每 PH/天" = "por PH/dia";
+"每 PH/天 · 7 天" = "por PH/dia · 7 dias";
 
 "%@ 的理论值" = "%@ do esperado";
 

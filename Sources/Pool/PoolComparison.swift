@@ -37,6 +37,37 @@ struct SharedOverview: Decodable, Sendable {
         let lifetimeBlocks: Int?
         let payouts: [Payout]?
         var realFeeMeasurement: PPSFeeMeasurement? = nil
+        /// Block luck the service measured from five-minute samples, by window: "24h", "7d", "14d".
+        let luck: [String: Luck]?
+    }
+    /// One window of block luck: the pool's blocks ÷ the blocks its reported work should have
+    /// found. Lossy on purpose — a window the app can't read is dropped, never the snapshot.
+    struct Luck: Decodable, Sendable {
+        let ratio, expectedBlocks, grossPerPH, theoreticalPerPH: Double?
+        let blocks: Int?
+
+        private enum CodingKeys: String, CodingKey { case ratio, expectedBlocks, grossPerPH, theoreticalPerPH, blocks }
+
+        init(ratio: Double?, expectedBlocks: Double?, blocks: Int?, grossPerPH: Double? = nil, theoreticalPerPH: Double? = nil) {
+            self.ratio = ratio; self.expectedBlocks = expectedBlocks; self.blocks = blocks
+            self.grossPerPH = grossPerPH; self.theoreticalPerPH = theoreticalPerPH
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try? decoder.container(keyedBy: CodingKeys.self)
+            ratio = try? c?.decodeIfPresent(Double.self, forKey: .ratio)
+            expectedBlocks = try? c?.decodeIfPresent(Double.self, forKey: .expectedBlocks)
+            grossPerPH = try? c?.decodeIfPresent(Double.self, forKey: .grossPerPH)
+            theoreticalPerPH = try? c?.decodeIfPresent(Double.self, forKey: .theoreticalPerPH)
+            blocks = try? c?.decodeIfPresent(Int.self, forKey: .blocks)
+        }
+
+        /// Usable as a luck figure: a finite, non-negative ratio over some expected work.
+        var isUsable: Bool {
+            guard let ratio, ratio.isFinite, ratio >= 0, ratio < 100,
+                  let expectedBlocks, expectedBlocks.isFinite, expectedBlocks > 0 else { return false }
+            return true
+        }
     }
     let ok: Bool
     let ts: Double

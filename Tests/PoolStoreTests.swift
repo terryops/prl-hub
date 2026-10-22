@@ -80,6 +80,59 @@ struct SharedPublicDataTests {
         #expect(PoolsOverviewStore.applyMeasurements([pool]).first?.realFeePercent == pool.realFeePercent)
     }
 
+    private func snapshot(luck: Any, forPool name: String = "Pearl Fortune") throws -> SharedOverview {
+        var document = try #require(try JSONSerialization.jsonObject(with: Fixture.data("shared_overview.json")) as? [String: Any])
+        var value = try #require(document["snapshot"] as? [String: Any])
+        var rows = try #require(value["rows"] as? [[String: Any]])
+        let index = try #require(rows.firstIndex { $0["name"] as? String == name })
+        rows[index]["luck"] = luck
+        value["rows"] = rows; document["snapshot"] = value
+        return try JSONDecoder().decode(SharedOverviewContract.self, from: JSONSerialization.data(withJSONObject: document)).snapshot
+    }
+
+    /// 预估收益 for a shared-reward pool = today's theory × its 7-day luck; the PPS contract
+    /// beside it keeps the network's figure, and one day's blocks no longer decide the rank.
+    @Test func aWeekOfLuckPricesSharedRewardPoolsAtTodaysTheory() throws {
+        let week: [String: Any] = ["ratio": 0.98, "expectedBlocks": 190.5, "blocks": 187,
+                                   "grossPerPH": 99, "theoreticalPerPH": 101, "start": 1, "end": 2, "covered": 1]
+        let rows = PoolsOverviewStore.build(try snapshot(luck: ["24h": ["ratio": 0.8, "expectedBlocks": 25, "blocks": 20], "7d": week]))
+        let fortune = try #require(rows.first { $0.name == "Pearl Fortune" })
+        #expect(fortune.usesWeekLuck)
+        #expect(close(try #require(fortune.estimatedEarningsPerPH), 98))   // 0.98 × theory 100
+        #expect(fortune.earningsPerPH == 80)                               // the 24h figure is kept
+        #expect(close(try #require(fortune.yieldRatio), 0.8))              // and so is its column
+        let payouts = fortune.payoutComparisons
+        #expect(payouts.map(\.scheme) == ["PPS", "PPLNS"])
+        #expect(payouts.map(\.weekly) == [false, true])
+        #expect(payouts[0].grossPerPH == 100)
+        #expect(close(try #require(payouts[1].grossPerPH), 98))
+        #expect(payouts[1].estimated == false)
+        #expect(fortune.yieldTrustworthy)
+
+        // A week in which the pool's work should have found only a few blocks stays a "~" guess.
+        let small = PoolsOverviewStore.build(try snapshot(luck: ["7d": ["ratio": 2.4, "expectedBlocks": 3.2, "blocks": 8]]))
+        let lucky = try #require(small.first { $0.name == "Pearl Fortune" })
+        #expect(close(try #require(lucky.estimatedEarningsPerPH), 240))
+        #expect(!lucky.yieldTrustworthy)
+        #expect(lucky.payoutComparisons.last?.estimated == true)
+    }
+
+    /// The window is optional and lossy: an unreadable one leaves the 24h figure in place and
+    /// never costs the rest of the snapshot.
+    @Test func anUnreadableWeekFallsBackToTheDay() throws {
+        let unreadable: [Any] = [NSNull(), ["24h": ["ratio": 0.8, "expectedBlocks": 25]],
+                                 ["7d": ["ratio": "high", "expectedBlocks": 190]], ["7d": ["ratio": 0.9, "expectedBlocks": 0]],
+                                 ["7d": ["ratio": -1, "expectedBlocks": 190]], ["7d": NSNull()], ["7d": "week"]]
+        for luck in unreadable {
+            let rows = PoolsOverviewStore.build(try snapshot(luck: luck))
+            let fortune = try #require(rows.first { $0.name == "Pearl Fortune" })
+            #expect(!fortune.usesWeekLuck)
+            #expect(fortune.estimatedEarningsPerPH == 80)
+            #expect(fortune.payoutComparisons.map(\.grossPerPH) == [100, 80])
+            #expect(fortune.payoutComparisons.map(\.weekly) == [false, false])
+        }
+    }
+
     @Test func simultaneousConsumersShareOneLoadAndRefreshOnlyWhenNeeded() async throws {
         let snapshot = try snapshot()
         let loader = SharedOverviewTestLoader(snapshot)

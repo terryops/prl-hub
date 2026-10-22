@@ -51,6 +51,24 @@ struct PoolOverview: Identifiable {
     var ppsMeasurement: PPSFeeMeasurement?
     var sharedPayouts: [PoolPayoutComparison]?
     var sharedTrustworthy: Bool?
+    /// The service's 7-day block luck: the pool's blocks ÷ the blocks its reported work should
+    /// have found, from five-minute samples. Nil until a week has been observed.
+    var luck7d: SharedOverview.Luck?
+
+    /// True when 预估收益 rests on the week rather than on one day of blocks.
+    var usesWeekLuck: Bool {
+        guard !isPPS, !isSolo, luck7d?.isUsable == true, let theory = theoreticalEarningsPerPH else { return false }
+        return theory.isFinite && theory > 0
+    }
+
+    /// 预估收益 per PH·day, gross of fee. With a week of samples: today's theoretical yield ×
+    /// the pool's 7-day luck — the luck is the pool's (a PPLNS miner gets it), the price is
+    /// today's difficulty, the one PPS rows are quoted at. A day of ~20 blocks swings ±20% on
+    /// luck alone, a week ~8%. Without the week, the 24h measurement.
+    var estimatedEarningsPerPH: Double? {
+        guard usesWeekLuck, let ratio = luck7d?.ratio, let theory = theoreticalEarningsPerPH else { return earningsPerPH }
+        return ratio * theory
+    }
 
     /// Observed block yield relative to the expected yield over the same window.
     /// A PPS contract's payout is independent of pool luck, so leave that comparison blank.
@@ -72,7 +90,12 @@ struct PoolOverview: Identifiable {
     var isPPS: Bool { (feeType ?? "").uppercased().hasPrefix("PPS") || (feeType ?? "").uppercased().hasPrefix("FPPS") }
     /// True when the measured yield rests on enough blocks to mean something. A PPS row's
     /// figure isn't measured at all, so it can't take the "best measured yield" badge either.
-    var yieldTrustworthy: Bool { sharedTrustworthy ?? (!isSolo && !isPPS && blocksSample >= 20 && earningsPerPH != nil) }
+    var yieldTrustworthy: Bool {
+        // The week's sample is the blocks its work should have found: a small pool that
+        // found many by luck is still a small sample.
+        if usesWeekLuck { return (luck7d?.expectedBlocks ?? 0) >= 20 }
+        return sharedTrustworthy ?? (!isSolo && !isPPS && blocksSample >= 20 && earningsPerPH != nil)
+    }
 
     /// Only PPS contracts participate in the real-cost column and its sorting.
     var realFeePercent: Double? {
@@ -85,6 +108,11 @@ struct PoolOverview: Identifiable {
             return sharedPayouts.map { original in
                 var value = original
                 if value.isPPS { value.measurement = ppsMeasurement }
+                else if !value.solo, usesWeekLuck {
+                    value.grossPerPH = estimatedEarningsPerPH
+                    value.estimated = !yieldTrustworthy
+                    value.weekly = true
+                }
                 return value
             }
         }
@@ -137,11 +165,13 @@ struct PPSFeeMeasurement: Codable, Sendable {
 struct PoolPayoutComparison {
     let scheme: String
     let feePercent: Double?
-    let grossPerPH: Double?
+    var grossPerPH: Double?
     let theoreticalPerPH: Double?
-    let estimated: Bool
+    var estimated: Bool
     var solo = false
     var measurement: PPSFeeMeasurement?
+    /// `grossPerPH` is today's theory × the pool's 7-day luck, not one day's blocks.
+    var weekly = false
 
     var isPPS: Bool { scheme.uppercased().hasPrefix("PPS") || scheme.uppercased().hasPrefix("FPPS") }
 
@@ -294,6 +324,7 @@ final class PoolsOverviewStore: ObservableObject {
             pool.lastBlockDate = row.lastBlockTime.map { Date(timeIntervalSince1970: $0) }
             pool.lifetimeBlocks = row.lifetimeBlocks
             pool.sharedTrustworthy = row.trustworthy
+            pool.luck7d = row.luck?["7d"]
             pool.sharedPayouts = row.payouts?.map {
                 PoolPayoutComparison(scheme: $0.scheme ?? "—", feePercent: $0.fee,
                                      grossPerPH: $0.grossPerPH, theoreticalPerPH: row.theoreticalEarningsPerPH,
@@ -876,7 +907,7 @@ private struct PoolComparisonTable: View {
     /// row stays short and the eye can run down a column.
     private var compact: Bool { availableWidth < 720 }
     private var lineGap: CGFloat { compact ? 3 : 8 }
-    private var best: Double { pools.filter(\.yieldTrustworthy).compactMap(\.earningsPerPH).max() ?? -1 }
+    private var best: Double { pools.filter(\.yieldTrustworthy).compactMap(\.estimatedEarningsPerPH).max() ?? -1 }
     private var sortedPools: [PoolOverview] {
         let selectedColumn = sortColumn
         let ascending = ascending
@@ -887,7 +918,7 @@ private struct PoolComparisonTable: View {
             func value(_ pool: PoolOverview) -> Double? {
                 switch selectedColumn {
                 case .hashrate: pool.poolHashrate
-                case .earnings: pool.isSolo ? nil : pool.earningsPerPH
+                case .earnings: pool.isSolo ? nil : pool.estimatedEarningsPerPH
                 case .blocks: pool.blocksPerDay
                 case .fee: pool.feePercent
                 case .realFee: pool.realFeePercent
@@ -1088,10 +1119,10 @@ private struct PoolComparisonTable: View {
                     let contract = comparison.scheme.hasPrefix("PPS") || comparison.scheme.hasPrefix("FPPS")
                     value(comparison.solo ? nil : comparison.grossPerPH.map {
                         (contract ? "≈" : (comparison.estimated ? "~" : "")) + f($0, 1) + " PRL"
-                    }, color: pool.yieldTrustworthy && pool.earningsPerPH == best && !contract ? .green : .primary)
+                    }, color: pool.yieldTrustworthy && pool.estimatedEarningsPerPH == best && !contract ? .green : .primary)
                     if pool.payoutComparisons.count > 1 { secondary(comparison.scheme) }
                 }
-                secondary(Loc("每 PH/天"))
+                secondary(pool.usesWeekLuck ? Loc("每 PH/天 · 7 天") : Loc("每 PH/天"))
             }
         case .blocks:
             VStack(alignment: .trailing, spacing: lineGap) {
@@ -1292,7 +1323,14 @@ private struct PoolComparisonNotes: View {
     let source: PoolsSource
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(Loc("收益/PH·天 = 该池实际挖到的块 × 单块奖励 ÷ 算力（PRL，未扣手续费）；绿色 = 最高。"))
+            if pools.contains(where: \.usesWeekLuck) {
+                Text(Loc("预估收益 = 当前理论收益 × 该池近 7 天出块运气（实际出块 ÷ 按其算力应出的块，每 5 分钟采样）；PRL/PH·天，未扣手续费；绿色 = 最高。"))
+                if pools.contains(where: { !$0.usesWeekLuck && !$0.isPPS && !$0.isSolo && $0.earningsPerPH != nil }) {
+                    Text(Loc("未标「7 天」的矿池不足 7 天样本，按实际挖到的块 × 单块奖励 ÷ 算力计算。"))
+                }
+            } else {
+                Text(Loc("收益/PH·天 = 该池实际挖到的块 × 单块奖励 ÷ 算力（PRL，未扣手续费）；绿色 = 最高。"))
+            }
             Text(Loc("真实费用 =（1 − 实际结算收益 ÷ 同期理论收益）× 100%；负值表示收益高于理论。"))
             Text(Loc("真实费用仅计算 PPS、PPS+ 与 FPPS；其他方案或数据不足显示「—」。不含矿工软件抽水及转账费。"))
             if pools.contains(where: { $0.name == "Pearl Fortune" }) {
@@ -1304,7 +1342,7 @@ private struct PoolComparisonNotes: View {
             if source == .miningPoolStats {
                 Text(Loc("出块与收益按最近 1000 个区块（≈%@ 天）实测，比 24h 更抗运气波动。", f(sampleDays, 1)))
             }
-            if pools.contains(where: \.blocksEstimated) {
+            if pools.contains(where: { $0.blocksEstimated || $0.payoutComparisons.contains { !$0.isPPS && !$0.solo && $0.estimated } }) {
                 Text(Loc("「~」= 样本区块太少（<20），该数字运气成分大，仅供参考。"))
             }
             if pools.contains(where: \.isSolo) {
