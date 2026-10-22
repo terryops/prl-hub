@@ -1283,3 +1283,11 @@
 "金额 (NOCK)" = "Số tiền (NOCK)";
 "链上数据在变化，请稍后重试" = "Dữ liệu chuỗi đang thay đổi, hãy thử lại sau ít phút";
 "（估算）" = "(ước tính)";
+
+/* 价格提醒：到达目标价 */
+"到达 %@" = "Chạm %@";
+"涨破或跌破" = "Tăng hoặc giảm";
+"触发条件" = "Điều kiện";
+"涨到 / 跌到" = "Tăng / Giảm đến";
+"到达目标价" = "Chạm giá mục tiêu";
+"价格涨破或跌破 %@ 时都会通知你" = "Bạn sẽ được thông báo khi giá vượt lên hoặc xuống qua %@.";

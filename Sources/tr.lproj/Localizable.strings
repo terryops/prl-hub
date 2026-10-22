@@ -1283,3 +1283,11 @@
 "金额 (NOCK)" = "Miktar (NOCK)";
 "链上数据在变化，请稍后重试" = "Zincir verisi değişiyor, birazdan tekrar deneyin";
 "（估算）" = "(tahmini)";
+
+/* 价格提醒：到达目标价 */
+"到达 %@" = "%@ seviyesine gelince";
+"涨破或跌破" = "Yükselişte veya düşüşte";
+"触发条件" = "Koşul";
+"涨到 / 跌到" = "Yükselince / Düşünce";
+"到达目标价" = "Hedefe ulaşınca";
+"价格涨破或跌破 %@ 时都会通知你" = "Fiyat %@ seviyesini yukarı ya da aşağı geçtiğinde bildirim alırsınız.";

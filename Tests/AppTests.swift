@@ -206,6 +206,39 @@ struct PriceAlertEditorTests {
         #expect(AlertEditorSheet.priceRule(for: 1.50, current: 1.50, existing: old) == nil)
     }
 
+    /// 到达目标价: no direction, either side of the price; switching to or from it is a new alert.
+    @Test func reachTargetsHaveNoDirection() throws {
+        for target in [1.504, 0.904] {
+            let r = try #require(AlertEditorSheet.priceRule(for: target, reach: true, current: 1.20, existing: nil))
+            #expect(r.kind == .reach && r.value == PriceAlertFormat.cents(target))
+            #expect(r.wire.kind == .reach && r.cloud.kind == .reach)
+        }
+        #expect(AlertEditorSheet.priceRule(for: 1.20, reach: true, current: 1.204, existing: nil) == nil)   // already there
+        #expect(try #require(AlertEditorSheet.priceRule(for: 1.20, reach: true, current: nil, existing: nil)).kind == .reach)
+
+        var old = PriceAlertRule(kind: .reach, value: 1.20)
+        old.fired = 1_700_000_000
+        old.lastFired = Date(timeIntervalSince1970: 1_700_000_000)
+        let same = try #require(AlertEditorSheet.priceRule(for: 1.20, reach: true, current: 1.20, existing: old))
+        #expect(old.applyingEdit(same) == old)                          // unchanged: keeps its firing
+
+        let oneWay = try #require(AlertEditorSheet.priceRule(for: 1.20, reach: false, current: 1.50, existing: old))
+        #expect(oneWay.kind == .below)                                   // direction from the price again
+        let saved = old.applyingEdit(oneWay)
+        #expect(saved.id == old.id && saved.kind == .below && saved.fired == nil && saved.isOn)
+
+        let above = PriceAlertRule(kind: .above, value: 1.20)
+        let both = try #require(AlertEditorSheet.priceRule(for: 1.20, reach: true, current: 1.50, existing: above))
+        #expect(above.applyingEdit(both).kind == .reach)
+    }
+
+    @Test func reachRulesReadInTheList() {
+        let r = PriceAlertRule(kind: .reach, value: 0.6)
+        #expect(PriceAlertFormat.title(r).contains("$0.60"))
+        #expect(PriceAlertFormat.icon(r) == "arrow.up.and.down")
+        #expect(PriceAlertFormat.gradient(r) == nil)
+    }
+
     @Test func newPriceRulesStillInferDirectionAndRoundTargets() throws {
         let up = try #require(AlertEditorSheet.priceRule(for: 1.504, current: 1.20, existing: nil))
         #expect(up.kind == .above && up.value == 1.50)

@@ -10,6 +10,9 @@ struct AlertEditorSheet: View {
 
     private enum Mode: Hashable { case price, move }
     @State private var mode: Mode
+    /// 到价提醒's condition: one direction (涨到 or 跌到, from the current price),
+    /// or 到达目标价 — either way.
+    @State private var reach: Bool
     @State private var priceText: String
     @State private var pctText: String
     @State private var window: Int
@@ -21,6 +24,7 @@ struct AlertEditorSheet: View {
         self.existing = existing; self.current = current; self.onSave = onSave; self.onDelete = onDelete
         let isMove = existing?.kind == .move
         _mode = State(initialValue: isMove ? .move : .price)
+        _reach = State(initialValue: existing?.kind == .reach)
         _priceText = State(initialValue: existing.flatMap { $0.kind == .move ? nil : String(format: "%.2f", $0.value) } ?? "")
         _pctText = State(initialValue: existing.flatMap { $0.kind == .move ? String(format: "%g", $0.value) : nil } ?? "10")
         _window = State(initialValue: isMove ? (existing?.window ?? 86400) : 86400)
@@ -49,19 +53,22 @@ struct AlertEditorSheet: View {
     /// The price rule to save, or nil while the input is invalid.
     private var priceRule: PriceAlertRule? {
         guard let raw = Self.number(priceText) else { return nil }
-        return Self.priceRule(for: raw, current: current, existing: existing)
+        return Self.priceRule(for: raw, reach: reach, current: current, existing: existing)
     }
 
     /// Keep an existing threshold's direction when its target is unchanged,
     /// even if the market crossed it (or the quote is unavailable). Only new or
     /// changed targets infer their direction from the current price.
-    static func priceRule(for target: Double, current: Double?, existing: PriceAlertRule?) -> PriceAlertRule? {
+    /// `reach` (到达目标价) has no direction: it fires on the way up or down.
+    static func priceRule(for target: Double, reach: Bool = false, current: Double?, existing: PriceAlertRule?) -> PriceAlertRule? {
         let t = PriceAlertFormat.cents(target)
         guard t >= 0.01, t < 1_000_000 else { return nil }
-        if let existing, existing.kind != .move, t == existing.value {
+        let kept: Set<PriceAlertRule.Kind> = reach ? [.reach] : [.above, .below]
+        if let existing, kept.contains(existing.kind), t == existing.value {
             return PriceAlertRule(kind: existing.kind, value: t)
         }
         if let current, t == PriceAlertFormat.cents(current) { return nil }   // already there
+        if reach { return PriceAlertRule(kind: .reach, value: t) }
         let up = current.map { t > $0 } ?? true
         return PriceAlertRule(kind: up ? .above : .below, value: t)
     }
@@ -113,11 +120,18 @@ struct AlertEditorSheet: View {
                         if let current {
                             LabeledContent(Loc("当前价格"), value: PriceAlertFormat.usd(current))
                         }
+                        Picker(Loc("触发条件"), selection: $reach) {
+                            Text(Loc("涨到 / 跌到")).tag(false)
+                            Text(Loc("到达目标价")).tag(true)
+                        }
+                        .accessibilityIdentifier("price-alert-condition")
                     } footer: {
                         if let r = priceRule {
-                            Text(r.kind == .above
-                                 ? Loc("价格涨到 %@ 时通知你", PriceAlertFormat.usd(r.value))
-                                 : Loc("价格跌到 %@ 时通知你", PriceAlertFormat.usd(r.value)))
+                            switch r.kind {
+                            case .above: Text(Loc("价格涨到 %@ 时通知你", PriceAlertFormat.usd(r.value)))
+                            case .reach: Text(Loc("价格涨破或跌破 %@ 时都会通知你", PriceAlertFormat.usd(r.value)))
+                            default:     Text(Loc("价格跌到 %@ 时通知你", PriceAlertFormat.usd(r.value)))
+                            }
                         } else {
                             Text(Loc("输入一个与当前价格不同的目标价。"))
                         }

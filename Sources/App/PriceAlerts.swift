@@ -58,11 +58,12 @@ struct PushWindow: Codable, Equatable {
 }
 
 struct PriceAlertRule: Codable, Identifiable, Equatable {
-    enum Kind: String, Codable { case above, below, move }
+    /// reach = 到达目标价: the price gets to `value` from either side (涨破 or 跌破).
+    enum Kind: String, Codable { case above, below, reach, move }
 
     var id = UUID().uuidString
     var kind: Kind
-    /// USD for above/below, percent for move.
+    /// USD for above/below/reach, percent for move.
     var value: Double
     /// move only: 300, 3600 or 86400 seconds.
     var window: Int = 0

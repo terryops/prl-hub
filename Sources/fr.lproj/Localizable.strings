@@ -1283,3 +1283,11 @@
 "金额 (NOCK)" = "Montant (NOCK)";
 "链上数据在变化，请稍后重试" = "Les données de la chaîne changent ; réessayez dans un instant";
 "（估算）" = "(estimé)";
+
+/* 价格提醒：到达目标价 */
+"到达 %@" = "Atteint %@";
+"涨破或跌破" = "À la hausse ou à la baisse";
+"触发条件" = "Condition";
+"涨到 / 跌到" = "Monte / Descend à";
+"到达目标价" = "Atteint la cible";
+"价格涨破或跌破 %@ 时都会通知你" = "Vous recevrez une notification lorsque le prix franchira %@, à la hausse comme à la baisse.";

@@ -1283,3 +1283,11 @@
 "金额 (NOCK)" = "Jumlah (NOCK)";
 "链上数据在变化，请稍后重试" = "Data blockchain sedang berubah, coba lagi sebentar lagi";
 "（估算）" = "(perkiraan)";
+
+/* 价格提醒：到达目标价 */
+"到达 %@" = "Mencapai %@";
+"涨破或跌破" = "Naik atau turun";
+"触发条件" = "Kondisi";
+"涨到 / 跌到" = "Naik / Turun ke";
+"到达目标价" = "Mencapai target";
+"价格涨破或跌破 %@ 时都会通知你" = "Anda akan diberi tahu saat harga menembus %@, naik maupun turun.";

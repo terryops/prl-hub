@@ -516,6 +516,16 @@ struct WebLinkAlertTests {
         #expect(got.rules[0].changedAt == 200)
     }
 
+    /// 到达目标价 goes both ways: up to the web as "reach", and back as one.
+    @Test func reachAlertsRoundTrip() throws {
+        let up = WebLinkMerge.rules(local: CloudAlerts(rules: [rule("r9", .reach, 0.6)]), remote: [], now: 900_000)
+        #expect(up.changed && up.remote.first?["kind"] as? String == "reach")
+        #expect(up.remote.first?["window"] as? Int == 0)
+        let down = WebLinkMerge.rules(local: CloudAlerts(), remote: [entry("w9", kind: "reach", value: 0.6, updated: 200_000)], now: 900_000)
+        let got = adopted([], down.incoming)
+        #expect(got.rules.count == 1 && got.rules[0].kind == .reach && got.rules[0].value == 0.6 && got.rules[0].isOn)
+    }
+
     @Test func switchedBackOnThereIsOnHere() throws {
         let off = rule(fired: 250, ack: 0)                           // fired, so off
         let out = WebLinkMerge.rules(local: CloudAlerts(rules: [off]),

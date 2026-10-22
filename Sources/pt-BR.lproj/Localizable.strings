@@ -1283,3 +1283,11 @@
 "金额 (NOCK)" = "Valor (NOCK)";
 "链上数据在变化，请稍后重试" = "Os dados da blockchain estão mudando; tente de novo em instantes";
 "（估算）" = "(estimado)";
+
+/* 价格提醒：到达目标价 */
+"到达 %@" = "Chega a %@";
+"涨破或跌破" = "Subindo ou caindo";
+"触发条件" = "Condição";
+"涨到 / 跌到" = "Sobe / Cai até";
+"到达目标价" = "Chega ao alvo";
+"价格涨破或跌破 %@ 时都会通知你" = "Você receberá uma notificação quando o preço cruzar %@, subindo ou caindo.";

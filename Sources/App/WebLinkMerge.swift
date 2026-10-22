@@ -690,7 +690,7 @@ enum WebLinkMerge {
         guard r.id.range(of: #"^[A-Za-z0-9-]{1,64}$"#, options: .regularExpression) != nil, r.value.isFinite else { return false }
         switch r.kind {
         case .move: return r.value >= 0.5 && r.value < 1000.01 && [300, 3600, 86400].contains(r.window)
-        case .above, .below: return r.value >= 0.01 && r.value < 1e6 && r.window == 0
+        case .above, .below, .reach: return r.value >= 0.01 && r.value < 1e6 && r.window == 0
         }
     }
 

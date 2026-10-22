@@ -20,6 +20,7 @@ enum PriceAlertFormat {
         switch r.kind {
         case .above: return Loc("涨到 %@", usd(r.value))
         case .below: return Loc("跌到 %@", usd(r.value))
+        case .reach: return Loc("到达 %@", usd(r.value))
         case .move:  return Loc("涨跌超过 %@", pct(r.value))
         }
     }
@@ -28,6 +29,7 @@ enum PriceAlertFormat {
         let what: String
         switch r.kind {
         case .above, .below: what = Loc("到价提醒")
+        case .reach: what = Loc("涨破或跌破")
         case .move:
             switch r.window {
             case 300:  what = Loc("5 分钟内")
@@ -44,6 +46,7 @@ enum PriceAlertFormat {
         switch r.kind {
         case .above: return "arrow.up.right"
         case .below: return "arrow.down.right"
+        case .reach: return "arrow.up.and.down"
         case .move:  return "waveform.path.ecg"
         }
     }
@@ -53,7 +56,7 @@ enum PriceAlertFormat {
         switch r.kind {
         case .above: return Pearl.positive
         case .below: return Pearl.negative
-        case .move:  return nil
+        case .reach, .move: return nil
         }
     }
 }
