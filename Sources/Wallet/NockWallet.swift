@@ -142,6 +142,7 @@ struct NockWalletView: View {
     @EnvironmentObject private var currency: CurrencyManager
     @Environment(\.scenePhase) private var scenePhase
     @State private var toast: String?
+    @ScaledMetric(relativeTo: .subheadline) private var badge: CGFloat = 20
     /// DEBUG: SHOT_NOCK=receive|send|history pushes that screen (verification runs).
     @State private var shotPage: String? = {
         #if DEBUG
@@ -159,7 +160,7 @@ struct NockWalletView: View {
                     Label(Loc("NOCK 钱包组件缺失，无法使用"), systemImage: "exclamationmark.triangle")
                         .font(.footnote).foregroundStyle(.red)
                 }
-                hero
+                summary
                 if let problem = nock.syncError {
                     Label(nock.lastSyncedAt.map { Loc("%@，显示的是 %@ 的数据", problem, $0.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(LocBundleHolder.shared.locale))) }
                           ?? Loc("%@，稍后自动重试", problem),
@@ -167,20 +168,25 @@ struct NockWalletView: View {
                         .font(.caption).foregroundStyle(.orange)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                if nock.balance.locked > 0 { lockedNote }
 
-                HStack(spacing: Pearl.Space.md) {
-                    action(Loc("收款"), "qrcode") { NockReceiveView(nock: nock) }
-                    action(Loc("转账"), "paperplane") { NockSendView(nock: nock) { toast = $0 } }
-                    action(Loc("记录"), "clock.arrow.circlepath") { NockActivityView(nock: nock) }
-                }
+                actions
 
                 recent
 
-                PearlInfoRow(Loc("用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。"),
-                             title: Loc("和 PRL 共用助记词"), systemImage: "key.horizontal")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
+                // A page footer in caption grey, not a PearlInfoRow: anything bigger was the
+                // loudest text on this deliberately quiet page.
+                VStack(spacing: 2) {
+                    Label(Loc("和 PRL 共用助记词"), systemImage: "key.horizontal")
+                        .font(.caption.weight(.medium))
+                    Text(Loc("用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。"))
+                        .font(.caption2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, Pearl.Space.md)
+                .accessibilityElement(children: .combine)
             }
             .padding(Pearl.Space.screen)
             .frame(maxWidth: 560)
@@ -188,6 +194,10 @@ struct NockWalletView: View {
         }
         .pearlScreenBackground()
         .navigationTitle(Loc("NOCK 钱包"))
+        #if os(iOS)
+        // A small title: this is a page inside the wallet, not a second wallet tab.
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .refreshable { await nock.load(); await price.refreshIfStale() }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
@@ -220,64 +230,88 @@ struct NockWalletView: View {
         }
     }
 
-    private var hero: some View {
-        PearlHero(gradient: Pearl.brandVivid, minHeight: 0, padding: Pearl.Space.md, showSparkle: false) {
-            VStack(spacing: Pearl.Space.xs) {
-                HStack {
-                    Spacer()
-                    HStack(spacing: 6) {
-                        Text(verbatim: "NOCK").font(.footnote.weight(.bold)).foregroundStyle(Pearl.onHeroChip.opacity(0.75))
-                        Text(price.usd.map(nockPrice) ?? "—").font(.body.weight(.bold)).monospacedDigit()
-                            .foregroundStyle(Pearl.heroChipPrice)
-                    }
-                    .padding(.horizontal, 12).padding(.vertical, 5)
-                    .background(Pearl.heroChip, in: Capsule())
-                }
-                Group {
-                    if nock.hasBalance {
-                        (Text(NockCore.format(nicks: nock.balance.total, decimals: 4))
-                            .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                         + Text(verbatim: " NOCK")
-                            .font(.system(.callout, design: .rounded).weight(.semibold))
-                            .foregroundStyle(Pearl.onHero.opacity(0.85)))
-                        .foregroundStyle(Pearl.onHero)
-                        .opacity(nock.balanceIsCached ? 0.7 : 1)
-                        .contentTransition(.numericText())
-                    } else {
-                        Text(verbatim: "—— NOCK")
-                            .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                            .foregroundStyle(Pearl.onHero.opacity(0.45))
-                    }
-                }
-                .monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
-                .padding(.top, -6)
-                Group {
-                    if nock.hasBalance, let usd = price.value(ofNicks: nock.balance.total) {
-                        Text(verbatim: "≈ " + currency.dual(usd))
-                    } else {
-                        Text(Loc("同步余额…"))
-                    }
-                }
-                .font(.callout.weight(.medium)).monospacedDigit()
-                .foregroundStyle(Pearl.onHero.opacity(0.85))
+    /// The balance, deliberately not the PRL wallet's hero: a flat card, left-aligned,
+    /// smaller figures and no colour fill, so NOCK reads as a side account of this wallet.
+    private var summary: some View {
+        VStack(alignment: .leading, spacing: Pearl.Space.xs) {
+            HStack(spacing: 6) {
+                NockBadge(size: badge, muted: true)
+                Text(verbatim: "NOCK").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                Spacer(minLength: Pearl.Space.sm)
+                Text(price.usd.map(nockPrice) ?? "—")
+                    .font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity)
-        }
-    }
+            .accessibilityElement(children: .combine)
+            Group {
+                if nock.hasBalance {
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        Text(NockCore.format(nicks: nock.balance.total, decimals: 4))
+                            .font(.system(.title2, design: .rounded).weight(.semibold))
+                            .contentTransition(.numericText())
+                        Text(verbatim: "NOCK").font(.footnote.weight(.medium)).foregroundStyle(.secondary)
+                    }
+                    .opacity(nock.balanceIsCached ? 0.6 : 1)
+                } else {
+                    Text(verbatim: "——").font(.system(.title2, design: .rounded).weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
+            .padding(.top, 2)
+            Group {
+                if nock.hasBalance, let usd = price.value(ofNicks: nock.balance.total) {
+                    Text(verbatim: "≈ " + currency.dual(usd))
+                } else {
+                    Text(Loc("同步余额…"))
+                }
+            }
+            .font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
+            .lineLimit(1).minimumScaleFactor(0.7)
 
-    /// Mining rewards wait 100 blocks (~4 hours) before they can be spent.
-    private var lockedNote: some View {
-        let wait = nock.blocksUntilNextUnlock.map { blocks -> String in
-            let minutes = Int(Double(blocks) * NockWalletStore.blockSeconds / 60)
-            return minutes >= 90 ? Loc("约 %@ 小时", "\(Int((Double(minutes) / 60).rounded()))") : Loc("约 %@ 分钟", "\(max(1, minutes))")
+            if nock.balance.locked > 0 {
+                Divider().padding(.vertical, Pearl.Space.xxs)
+                lockedNote
+            }
         }
-        return PearlInfoRow(
-            wait.map { Loc("其中 %@ 是挖矿收入，要等 100 个区块才能使用。下一笔解锁还要%@。", nockText(nock.balance.locked, decimals: 4), $0) }
-                ?? Loc("其中 %@ 是挖矿收入，要等 100 个区块才能使用。", nockText(nock.balance.locked, decimals: 4)),
-            title: Loc("可用 %@", nockText(nock.balance.available, decimals: 4)),
-            systemImage: "lock.circle")
         .frame(maxWidth: .infinity, alignment: .leading)
         .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
+        .animation(.snappy, value: nock.balance)
+    }
+
+    /// Two plain rows under the balance: what can be sent now, and the mining rewards still
+    /// inside their 100-block lock (~4 hours at 150 s a block).
+    private var lockedNote: some View {
+        let hours = Int((100 * NockWalletStore.blockSeconds / 3600).rounded())
+        return VStack(spacing: Pearl.Space.xxs) {
+            HStack(alignment: .firstTextBaseline, spacing: Pearl.Space.sm) {
+                Text(Loc("可用"))
+                Spacer(minLength: 0)
+                Text(nockText(nock.balance.available, decimals: 2)).monospacedDigit()
+                    .fixedSize()
+            }
+            .font(.subheadline.weight(.medium))
+            HStack(alignment: .firstTextBaseline, spacing: Pearl.Space.sm) {
+                Text(Loc("锁定 · 挖矿收入约 %@ 小时后可用", "\(hours)"))
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Text(nockText(nock.balance.locked, decimals: 2)).monospacedDigit()
+                    .fixedSize()
+            }
+            .font(.footnote).foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// 收款 · 转账 · 记录 as one slim bar — not the PRL wallet's three big tiles.
+    private var actions: some View {
+        HStack(spacing: 0) {
+            action(Loc("收款"), "qrcode") { NockReceiveView(nock: nock) }
+            Divider().frame(height: 20)
+            action(Loc("转账"), "paperplane") { NockSendView(nock: nock) { toast = $0 } }
+            Divider().frame(height: 20)
+            action(Loc("记录"), "clock.arrow.circlepath") { NockActivityView(nock: nock) }
+        }
+        .pearlCard(padding: 0, radius: Pearl.Radius.sm)
     }
 
     private var recent: some View {
@@ -307,17 +341,18 @@ struct NockWalletView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md, frosted: true)
+        .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
     }
 
     private func action<Dest: View>(_ title: String, _ icon: String, @ViewBuilder dest: () -> Dest) -> some View {
         NavigationLink(destination: dest()) {
-            VStack(spacing: Pearl.Space.sm) {
-                PearlIconBadge(systemImage: icon)
-                Text(title).font(.callout.weight(.medium)).lineLimit(1).minimumScaleFactor(0.7)
+            HStack(spacing: 6) {
+                Image(systemName: icon).font(.subheadline.weight(.medium)).foregroundStyle(Pearl.accent)
+                Text(title).font(.subheadline.weight(.medium)).lineLimit(1).minimumScaleFactor(0.7)
             }
             .frame(maxWidth: .infinity)
-            .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md, frosted: true)
+            .padding(.vertical, Pearl.Space.sm)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -341,15 +376,17 @@ struct NockTxRow: View {
 
     var body: some View {
         HStack(spacing: Pearl.Space.sm) {
+            // Grey glyphs and plain amounts: NOCK is the quiet side of the wallet, so its
+            // rows leave the green / orange to the PRL ones. Only 待确认 keeps its colour.
             ZStack {
-                Circle().fill((incoming ? Color.green : Color.orange).opacity(0.16))
+                Circle().fill(Color.secondary.opacity(0.12))
                     .frame(width: compact ? 22 : 36, height: compact ? 22 : 36)
-                Image(systemName: tx.kind == .mined ? "cube.fill" : incoming ? "arrow.down" : "arrow.up")
-                    .font(compact ? .system(size: 10, weight: .bold) : .callout.weight(.bold))
-                    .foregroundStyle(incoming ? .green : .orange)
+                Image(systemName: tx.kind == .mined ? "cube" : incoming ? "arrow.down" : "arrow.up")
+                    .font(compact ? .system(size: 10, weight: .semibold) : .callout.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(compact ? .caption.weight(.semibold) : .body)
+                Text(title).font(compact ? .caption.weight(.medium) : .body)
                 if !compact {
                     Text(tx.time.formatted(.dateTime.month().day().hour().minute().locale(LocBundleHolder.shared.locale)))
                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -359,8 +396,8 @@ struct NockTxRow: View {
             VStack(alignment: .trailing, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text((incoming ? "+" : "-") + NockCore.format(nicks: tx.amount, decimals: 4))
-                        .font((compact ? Font.caption : .callout).monospacedDigit().bold())
-                        .foregroundStyle(tx.status == .failed ? Color.secondary : incoming ? Color.green : Color.primary)
+                        .font((compact ? Font.caption : .callout).monospacedDigit().weight(.semibold))
+                        .foregroundStyle(tx.status == .failed ? Color.secondary : Color.primary)
                         .strikethrough(tx.status == .failed)
                     Text(verbatim: "NOCK").font(.caption2).foregroundStyle(.secondary)
                 }
@@ -754,7 +791,7 @@ struct NockTxDetailView: View {
                     VStack(spacing: Pearl.Space.xs) {
                         Text(verbatim: (tx.kind == .sent ? "-" : "+") + NockCore.format(nicks: tx.amount) + " NOCK")
                             .font(.system(size: 34, weight: .bold, design: .rounded).monospacedDigit())
-                            .foregroundStyle(tx.kind == .sent ? Color.primary : Color.green)
+                            .foregroundStyle(.primary)
                             .lineLimit(1).minimumScaleFactor(0.5)
                         Text(statusText(tx)).font(.subheadline).foregroundStyle(tx.status == .pending ? .orange : .secondary)
                     }

@@ -1250,11 +1250,10 @@
 "Nockchain 节点返回错误：%@" = "Node Nockchain mengembalikan galat: %@";
 "交易在本机签名（私钥不离开设备），经 Nockchain 公共节点广播。手续费按交易大小计算，确认前会显示。" = "Transaksi ditandatangani di perangkat ini (kunci privat tidak pernah keluar) dan disiarkan lewat node publik Nockchain. Biaya bergantung pada ukuran transaksi dan ditampilkan sebelum Anda mengonfirmasi.";
 "余额不足以支付金额和手续费" = "Saldo tidak cukup untuk jumlah ditambah biaya";
-"其中 %@ 是挖矿收入，要等 100 个区块才能使用。" = "Sebanyak %@ di antaranya hadiah blok, bisa dipakai setelah 100 blok.";
-"其中 %@ 是挖矿收入，要等 100 个区块才能使用。下一笔解锁还要%@。" = "Sebanyak %@ di antaranya hadiah blok, bisa dipakai setelah 100 blok. Berikutnya terbuka dalam %@.";
+"锁定 · 挖矿收入约 %@ 小时后可用" = "Terkunci · hadiah blok, bisa dipakai setelah ~%@ jam";
 "助记词无效" = "Frasa pemulihan tidak valid";
 "区块高度" = "Tinggi blok";
-"可用 %@" = "Tersedia %@";
+"可用" = "Tersedia";
 "可用余额 %@" = "Saldo Tersedia %@";
 "和 PRL 共用助记词" = "Frasa pemulihan yang sama dengan PRL";
 "在浏览器中查看" = "Lihat di penjelajah";
@@ -1268,8 +1267,6 @@
 "没有可用的 NOCK（挖矿收入要过 100 个区块才能使用）" = "Tidak ada NOCK yang bisa dipakai (hadiah blok terbuka setelah 100 blok)";
 "用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。" = "Memakai frasa pemulihan yang sama: impor ke dompet resmi Nockchain atau Iris dan Anda akan melihat alamat NOCK yang sama.";
 "确认发送 %@" = "Konfirmasi Kirim %@";
-"约 %@ 分钟" = "sekitar %@ menit";
-"约 %@ 小时" = "sekitar %@ jam";
 "节点拒绝了请求：%@" = "Node menolak permintaan: %@";
 "记录由本机保存：收到的每一笔从本机第一次看到它时算起，换手机或重装后只能看到当前持有的部分。" = "Riwayat disimpan di perangkat ini: setiap penerimaan dicatat saat perangkat ini pertama kali melihatnya. Di ponsel baru atau setelah instal ulang, hanya yang Anda pegang sekarang yang tampil.";
 "详情" = "Detail";

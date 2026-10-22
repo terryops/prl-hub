@@ -1250,11 +1250,10 @@
 "Nockchain 节点返回错误：%@" = "Nockchain düğümü hata döndürdü: %@";
 "交易在本机签名（私钥不离开设备），经 Nockchain 公共节点广播。手续费按交易大小计算，确认前会显示。" = "İşlem bu cihazda imzalanır (özel anahtar cihazdan çıkmaz) ve herkese açık bir Nockchain düğümü üzerinden yayınlanır. Ücret işlemin boyutuna göre belirlenir ve onaylamadan önce gösterilir.";
 "余额不足以支付金额和手续费" = "Bakiye, tutar ve ücret için yetersiz";
-"其中 %@ 是挖矿收入，要等 100 个区块才能使用。" = "Bunun %@ kadarı blok ödülüdür, 100 bloktan sonra kullanılabilir.";
-"其中 %@ 是挖矿收入，要等 100 个区块才能使用。下一笔解锁还要%@。" = "Bunun %@ kadarı blok ödülüdür, 100 bloktan sonra kullanılabilir. Sonrakinin açılmasına %@ var.";
+"锁定 · 挖矿收入约 %@ 小时后可用" = "Kilitli · blok ödülleri, ~%@ saat sonra kullanılabilir";
 "助记词无效" = "Kurtarma ifadesi geçersiz";
 "区块高度" = "Blok yüksekliği";
-"可用 %@" = "Kullanılabilir %@";
+"可用" = "Kullanılabilir";
 "可用余额 %@" = "Kullanılabilir Bakiye %@";
 "和 PRL 共用助记词" = "PRL ile aynı kurtarma ifadesi";
 "在浏览器中查看" = "Gezginde görüntüle";
@@ -1268,8 +1267,6 @@
 "没有可用的 NOCK（挖矿收入要过 100 个区块才能使用）" = "Kullanılabilir NOCK yok (blok ödülleri 100 bloktan sonra açılır)";
 "用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。" = "Aynı kurtarma ifadesi kullanılır: resmi Nockchain cüzdanına veya Iris’e içe aktarırsanız aynı NOCK adresini görürsünüz.";
 "确认发送 %@" = "%@ Gönderimini Onayla";
-"约 %@ 分钟" = "yaklaşık %@ dk";
-"约 %@ 小时" = "yaklaşık %@ sa";
 "节点拒绝了请求：%@" = "Düğüm isteği reddetti: %@";
 "记录由本机保存：收到的每一笔从本机第一次看到它时算起，换手机或重装后只能看到当前持有的部分。" = "Geçmiş bu cihazda tutulur: gelen her ödeme, bu cihaz onu ilk gördüğünde kaydedilir. Yeni telefonda veya yeniden kurulumdan sonra yalnızca şu an sahip olduklarınız görünür.";
 "详情" = "Ayrıntılar";

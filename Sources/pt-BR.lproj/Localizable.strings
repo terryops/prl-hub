@@ -1250,11 +1250,10 @@
 "Nockchain 节点返回错误：%@" = "O nó da Nockchain retornou um erro: %@";
 "交易在本机签名（私钥不离开设备），经 Nockchain 公共节点广播。手续费按交易大小计算，确认前会显示。" = "A transação é assinada neste dispositivo (a chave privada nunca sai dele) e transmitida por um nó público da Nockchain. A taxa depende do tamanho da transação e aparece antes de você confirmar.";
 "余额不足以支付金额和手续费" = "Saldo insuficiente para o valor mais a taxa";
-"其中 %@ 是挖矿收入，要等 100 个区块才能使用。" = "%@ são recompensas de bloco, disponíveis após 100 blocos.";
-"其中 %@ 是挖矿收入，要等 100 个区块才能使用。下一笔解锁还要%@。" = "%@ são recompensas de bloco, disponíveis após 100 blocos. A próxima é liberada em %@.";
+"锁定 · 挖矿收入约 %@ 小时后可用" = "Bloqueado · recompensas de bloco, disponíveis após ~%@ h";
 "助记词无效" = "Frase de recuperação inválida";
 "区块高度" = "Altura do bloco";
-"可用 %@" = "Disponível %@";
+"可用" = "Disponível";
 "可用余额 %@" = "Saldo disponível %@";
 "和 PRL 共用助记词" = "Mesma frase de recuperação do PRL";
 "在浏览器中查看" = "Ver no explorador";
@@ -1268,8 +1267,6 @@
 "没有可用的 NOCK（挖矿收入要过 100 个区块才能使用）" = "Nenhum NOCK disponível (recompensas de bloco liberam após 100 blocos)";
 "用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。" = "Usa a mesma frase de recuperação: importe-a na carteira oficial da Nockchain ou na Iris e você verá este mesmo endereço NOCK.";
 "确认发送 %@" = "Confirmar envio de %@";
-"约 %@ 分钟" = "cerca de %@ min";
-"约 %@ 小时" = "cerca de %@ h";
 "节点拒绝了请求：%@" = "O nó recusou a solicitação: %@";
 "记录由本机保存：收到的每一笔从本机第一次看到它时算起，换手机或重装后只能看到当前持有的部分。" = "O histórico fica neste dispositivo: cada recebimento é registrado quando este dispositivo o vê pela primeira vez. Em um celular novo ou após reinstalar, só aparece o que você tem agora.";
 "详情" = "Detalhes";

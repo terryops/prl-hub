@@ -1250,11 +1250,10 @@
 "Nockchain 节点返回错误：%@" = "Le nœud Nockchain a renvoyé une erreur : %@";
 "交易在本机签名（私钥不离开设备），经 Nockchain 公共节点广播。手续费按交易大小计算，确认前会显示。" = "La transaction est signée sur cet appareil (la clé privée ne le quitte jamais) et diffusée par un nœud public Nockchain. Les frais dépendent de la taille de la transaction et s’affichent avant la confirmation.";
 "余额不足以支付金额和手续费" = "Solde insuffisant pour le montant et les frais";
-"其中 %@ 是挖矿收入，要等 100 个区块才能使用。" = "Dont %@ de récompenses de bloc, utilisables après 100 blocs.";
-"其中 %@ 是挖矿收入，要等 100 个区块才能使用。下一笔解锁还要%@。" = "Dont %@ de récompenses de bloc, utilisables après 100 blocs. La prochaine se débloque dans %@.";
+"锁定 · 挖矿收入约 %@ 小时后可用" = "Bloqué · récompenses de bloc, utilisables après ~%@ h";
 "助记词无效" = "Phrase de récupération invalide";
 "区块高度" = "Hauteur de bloc";
-"可用 %@" = "Disponible %@";
+"可用" = "Disponible";
 "可用余额 %@" = "Solde disponible %@";
 "和 PRL 共用助记词" = "Même phrase de récupération que PRL";
 "在浏览器中查看" = "Voir dans l’explorateur";
@@ -1268,8 +1267,6 @@
 "没有可用的 NOCK（挖矿收入要过 100 个区块才能使用）" = "Aucun NOCK utilisable (les récompenses de bloc se débloquent après 100 blocs)";
 "用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。" = "La même phrase de récupération est utilisée : importez-la dans le portefeuille officiel Nockchain ou dans Iris et vous verrez cette même adresse NOCK.";
 "确认发送 %@" = "Confirmer l’envoi de %@";
-"约 %@ 分钟" = "environ %@ min";
-"约 %@ 小时" = "environ %@ h";
 "节点拒绝了请求：%@" = "Le nœud a refusé la requête : %@";
 "记录由本机保存：收到的每一笔从本机第一次看到它时算起，换手机或重装后只能看到当前持有的部分。" = "L’historique est conservé sur cet appareil : chaque paiement reçu est enregistré quand cet appareil le voit pour la première fois. Sur un nouveau téléphone ou après réinstallation, seul ce que vous détenez actuellement apparaît.";
 "详情" = "Détails";

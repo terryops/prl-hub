@@ -1250,11 +1250,10 @@
 "Nockchain 节点返回错误：%@" = "Nút Nockchain trả về lỗi: %@";
 "交易在本机签名（私钥不离开设备），经 Nockchain 公共节点广播。手续费按交易大小计算，确认前会显示。" = "Giao dịch được ký trên thiết bị này (khóa riêng không rời thiết bị) và phát qua nút công khai của Nockchain. Phí tính theo kích thước giao dịch và hiển thị trước khi bạn xác nhận.";
 "余额不足以支付金额和手续费" = "Số dư không đủ cho số tiền và phí";
-"其中 %@ 是挖矿收入，要等 100 个区块才能使用。" = "Trong đó %@ là phần thưởng khối, dùng được sau 100 khối.";
-"其中 %@ 是挖矿收入，要等 100 个区块才能使用。下一笔解锁还要%@。" = "Trong đó %@ là phần thưởng khối, dùng được sau 100 khối. Khoản tiếp theo mở khóa sau %@.";
+"锁定 · 挖矿收入约 %@ 小时后可用" = "Đang khóa · phần thưởng khối, dùng được sau ~%@ giờ";
 "助记词无效" = "Cụm từ khôi phục không hợp lệ";
 "区块高度" = "Chiều cao khối";
-"可用 %@" = "Khả dụng %@";
+"可用" = "Khả dụng";
 "可用余额 %@" = "Số dư khả dụng %@";
 "和 PRL 共用助记词" = "Dùng chung cụm từ khôi phục với PRL";
 "在浏览器中查看" = "Xem trên trình khám phá";
@@ -1268,8 +1267,6 @@
 "没有可用的 NOCK（挖矿收入要过 100 个区块才能使用）" = "Không có NOCK dùng được (phần thưởng khối mở khóa sau 100 khối)";
 "用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。" = "Dùng chung cụm từ khôi phục: nhập nó vào ví chính thức của Nockchain hoặc Iris, bạn sẽ thấy cùng địa chỉ NOCK này.";
 "确认发送 %@" = "Xác nhận gửi %@";
-"约 %@ 分钟" = "khoảng %@ phút";
-"约 %@ 小时" = "khoảng %@ giờ";
 "节点拒绝了请求：%@" = "Nút đã từ chối yêu cầu: %@";
 "记录由本机保存：收到的每一笔从本机第一次看到它时算起，换手机或重装后只能看到当前持有的部分。" = "Lịch sử được lưu trên thiết bị này: mỗi khoản nhận được ghi lại khi thiết bị thấy nó lần đầu. Trên điện thoại mới hoặc sau khi cài lại, chỉ thấy phần bạn đang giữ.";
 "详情" = "Chi tiết";
