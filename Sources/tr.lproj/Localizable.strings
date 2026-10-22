@@ -588,6 +588,7 @@
 "出块为最近 24 小时链上实测（按 coinbase 归属统计），算力取自各矿池自身 API。" = "Bloklar son 24 saat için zincir üzerinde sayılır (coinbase atfına göre); hashrate her havuzun kendi API'sinden alınır.";
 "HeroMiners 的算力数据源未收录，改取矿池自身 API。" = "Kaynakta HeroMiners için hashrate yok; bu yüzden havuzun kendi API'sinden okunur.";
 "Kryptex 的费率与结算方式取自矿池自身 API（数据源记录有误）。" = "Kryptex için ücret ve ödeme yöntemi havuzun kendi API'sinden alınır (kaynaktaki bilgiler hatalı).";
+"HeroMiners 的费率与结算方式取自矿池自身 API（数据源记录有误）。" = "HeroMiners için ücret ve ödeme yöntemi havuzun kendi API'sinden alınır (kaynaktaki bilgiler hatalı).";
 "数据来源：lordofpearls.xyz" = "Kaynak: lordofpearls.xyz";
 "F2Pool 数据源未收录，该行取自 miningpoolstats（出块按其最近 1000 个区块口径）。" = "Kaynakta F2Pool yer almıyor; bu satır miningpoolstats verisidir (blok sayısı o kaynağın son 1000 bloğu üzerinden ölçülür).";
 "行情数据源无响应" = "Piyasa veri kaynağı yanıt vermiyor";
@@ -1098,8 +1099,7 @@
 // Pool income comparison
 "真实费用" = "Gerçek maliyet";
 "真实费用 =（1 − 实际结算收益 ÷ 同期理论收益）× 100%；负值表示收益高于理论。" = "Gerçek maliyet = (1 − gerçekten kredilendirilen gelir ÷ aynı dönemin teorik geliri) × 100%; negatif değer teoriyi aşan geliri gösterir.";
-"真实费用仅计算 PPS、PPS+ 与 FPPS；其他方案或数据不足显示「—」。不含矿工软件抽水及转账费。" = "Gerçek maliyet yalnızca PPS, PPS+ ve FPPS için hesaplanır; diğer yöntemler veya yetersiz veri için “—” gösterilir. Madenci yazılımı ve transfer ücretleri hariçtir.";
-"PF 保留两种方案的公示费率，仅计算 PPS 的真实费用。" = "PF her iki yöntemin duyurulan ücretlerini korur; gerçek maliyet yalnızca PPS için hesaplanır.";
+"PPS、PPS+ 与 FPPS 使用有统计区间的结算样本。PPLNS、PROP 根据统计期内的矿池产出和公示池费估算；PearlHash 未公布方案，但链上核实其按出块分配收益，同样估算。估算包含出块运气的影响。数据不足或其他方案显示「—」。不含矿工软件抽水及转账费。PF 分别展示 PPS 与 PPLNS。PPLNS、PROP 与 PearlHash 需要最近 7 天内至少 5 天的数据，且这段时间按矿池算力应出至少 100 个块；否则显示「—」。" = "PPS, PPS+ ve FPPS, belirli bir döneme ait kesinleşmiş gelir ölçümlerini kullanır. PPLNS ve PROP, örneklem dönemindeki havuz üretimi ve duyurulan havuz ücretiyle tahmin edilir; yöntemini açıklamayan ancak zincir verilerine göre bulduğu blokları dağıtan PearlHash de aynı şekilde tahmin edilir. Tahmin blok bulma şansını içerir. Yetersiz veri ve diğer yöntemler için “—” gösterilir. Yazılım ve transfer ücretleri hariçtir. PF, PPS ve PPLNS’yi ayrı gösterir. PPLNS, PROP ve PearlHash için son 7 gün içinde en az 5 günlük veri gerekir ve havuzun hashrate değeri bu sürede en az 100 blok beklenmesine yetmelidir; aksi halde “—” gösterilir.";
 "真实费用取自有日期的结算样本；「≈」表示网络历史插值估算，含统计误差，不等同于矿池额外抽水。" = "Gerçek maliyet tarihli hesaplaşma örneklerinden gelir. “≈” ağ geçmişinin enterpolasyonunu belirtir; sonuç ölçüm hatası içerir ve ek havuz komisyonunu kanıtlamaz.";
 
 "数据说明" = "Veri açıklaması";
@@ -1134,6 +1134,7 @@
 // Short real-cost explanation
 "这是按各矿池标注的样本时间段，计算的实际结算收益相对理论收益的折损率。" = "Bu, her havuzda gösterilen örneklem döneminde hesaplanan kesinleşmiş gelirin teorik gelire göre eksik kalan yüzdesidir.";
 "这是 %@ 期间，实际结算收益相对理论收益的折损率。" = "Bu, %@ döneminde kesinleşmiş gelirin teorik gelire göre eksik kalan yüzdesidir.";
+"这是 %@ 期间按矿池产出和公示池费估算的折损率，包含出块运气的影响。" = "Bu, %@ döneminde havuz üretimi ve duyurulan havuz ücretiyle tahmin edilen gelir eksikliği yüzdesidir; blok bulma şansını içerir.";
 
 "左右滑动查看完整对比" = "Tüm sütunları karşılaştırmak için yana kaydırın";
 "提醒频率" = "Uyarı sıklığı";

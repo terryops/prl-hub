@@ -588,6 +588,7 @@
 "出块为最近 24 小时链上实测（按 coinbase 归属统计），算力取自各矿池自身 API。" = "Os blocos são contados on-chain nas últimas 24h (pela atribuição da coinbase); o hashrate vem da API de cada pool.";
 "HeroMiners 的算力数据源未收录，改取矿池自身 API。" = "A fonte não lista o hashrate do HeroMiners, então ele é lido da API do próprio pool.";
 "Kryptex 的费率与结算方式取自矿池自身 API（数据源记录有误）。" = "A taxa e o esquema de pagamento do Kryptex vêm da API do próprio pool (a fonte traz esses dados errados).";
+"HeroMiners 的费率与结算方式取自矿池自身 API（数据源记录有误）。" = "A taxa e o esquema de pagamento do HeroMiners vêm da API do próprio pool (a fonte traz esses dados errados).";
 "数据来源：lordofpearls.xyz" = "Fonte: lordofpearls.xyz";
 "F2Pool 数据源未收录，该行取自 miningpoolstats（出块按其最近 1000 个区块口径）。" = "A fonte não lista o F2Pool; essa linha vem do miningpoolstats (blocos medidos nos últimos 1000 blocos daquela fonte).";
 "行情数据源无响应" = "A fonte de dados de mercado não responde";
@@ -1098,8 +1099,7 @@
 // Pool income comparison
 "真实费用" = "Custo real";
 "真实费用 =（1 − 实际结算收益 ÷ 同期理论收益）× 100%；负值表示收益高于理论。" = "Custo real = (1 − receita efetivamente creditada ÷ receita teórica do mesmo período) × 100%; negativo indica receita acima da teoria.";
-"真实费用仅计算 PPS、PPS+ 与 FPPS；其他方案或数据不足显示「—」。不含矿工软件抽水及转账费。" = "O custo real é calculado apenas para PPS, PPS+ e FPPS; outros métodos ou dados insuficientes mostram “—”. Taxas do software e de transferência não estão incluídas.";
-"PF 保留两种方案的公示费率，仅计算 PPS 的真实费用。" = "PF mantém as taxas anunciadas dos dois métodos; o custo real é calculado apenas para PPS.";
+"PPS、PPS+ 与 FPPS 使用有统计区间的结算样本。PPLNS、PROP 根据统计期内的矿池产出和公示池费估算；PearlHash 未公布方案，但链上核实其按出块分配收益，同样估算。估算包含出块运气的影响。数据不足或其他方案显示「—」。不含矿工软件抽水及转账费。PF 分别展示 PPS 与 PPLNS。PPLNS、PROP 与 PearlHash 需要最近 7 天内至少 5 天的数据，且这段时间按矿池算力应出至少 100 个块；否则显示「—」。" = "PPS, PPS+ e FPPS usam medições de receitas liquidadas em um período definido. PPLNS e PROP são estimados pela produção do pool e pela taxa publicada durante o período da amostra, assim como o PearlHash, que não divulga seu método mas, segundo a blockchain, distribui os blocos que encontra; a estimativa inclui a sorte ao encontrar blocos. Dados insuficientes e outros métodos mostram “—”. Taxas do software e de transferência não estão incluídas. PF mostra PPS e PPLNS separadamente. PPLNS, PROP e PearlHash exigem pelo menos 5 dias de dados nos últimos 7 dias e hashrate do pool suficiente para esperar pelo menos 100 blocos nesse período; caso contrário, mostra “—”.";
 "真实费用取自有日期的结算样本；「≈」表示网络历史插值估算，含统计误差，不等同于矿池额外抽水。" = "O custo real usa amostras de liquidação datadas. “≈” indica interpolação do histórico da rede; inclui erros de medição e não comprova comissões adicionais do pool.";
 
 "数据说明" = "Notas dos dados";
@@ -1134,6 +1134,7 @@
 // Short real-cost explanation
 "这是按各矿池标注的样本时间段，计算的实际结算收益相对理论收益的折损率。" = "É a diferença percentual entre a receita liquidada e a receita teórica no período da amostra indicado para cada pool.";
 "这是 %@ 期间，实际结算收益相对理论收益的折损率。" = "É a diferença percentual entre a receita liquidada e a receita teórica durante %@.";
+"这是 %@ 期间按矿池产出和公示池费估算的折损率，包含出块运气的影响。" = "É a diferença percentual estimada pela produção do pool e pela taxa publicada durante %@; inclui a sorte ao encontrar blocos.";
 
 "左右滑动查看完整对比" = "Deslize para comparar todas as colunas";
 "提醒频率" = "Frequência dos alertas";

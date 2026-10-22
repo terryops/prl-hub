@@ -80,6 +80,105 @@ struct SharedPublicDataTests {
         #expect(PoolsOverviewStore.applyMeasurements([pool]).first?.realFeePercent == pool.realFeePercent)
     }
 
+    private func snapshot(editing edit: (inout [[String: Any]]) throws -> Void) throws -> SharedOverview {
+        var document = try #require(try JSONSerialization.jsonObject(with: Fixture.data("shared_overview.json")) as? [String: Any])
+        var value = try #require(document["snapshot"] as? [String: Any])
+        var rows = try #require(value["rows"] as? [[String: Any]])
+        try edit(&rows)
+        value["rows"] = rows; document["snapshot"] = value
+        return try JSONDecoder().decode(SharedOverviewContract.self, from: JSONSerialization.data(withJSONObject: document)).snapshot
+    }
+
+    /// PF's PPLNS payout with the given fields merged in (the fixture's second payout).
+    private func fortune(pplns fields: [String: Any], measured: Bool = false) throws -> PoolOverview {
+        let decoded = try snapshot { rows in
+            let i = try #require(rows.firstIndex { $0["name"] as? String == "Pearl Fortune" })
+            var payouts = try #require(rows[i]["payouts"] as? [[String: Any]])
+            payouts[1].merge(fields) { $1 }
+            payouts[0]["realFeePercent"] = 5.01                    // a PPS figure without its measurement
+            rows[i]["payouts"] = payouts
+            if measured {
+                rows[i]["realFeeMeasurement"] = ["pool": "Pearl Fortune", "scheme": "PPS", "netPRL": 95, "expectedPRL": 100,
+                    "start": 100, "end": 200, "measuredAt": 250, "estimated": true, "sampleCount": 5, "theoryBasis": "hashrate_chain"] as [String: Any]
+            }
+        }
+        return try #require(PoolsOverviewStore.build(decoded).first { $0.name == "Pearl Fortune" })
+    }
+
+    /// The service's shared-reward estimate (PPLNS, PROP, and PearlHash's unnamed scheme) reaches
+    /// its payout as on the Web: shown with "≈" over its own window, the cost a miner keeps
+    /// stays the fee, and the row sorts by its first Real Cost.
+    @Test func sharedRewardPayoutsShowTheServicesRealCostEstimate() throws {
+        let period: [String: Any] = ["start": 1_791_935_707, "end": 1_792_463_498]
+        let estimate: [String: Any] = ["realFeePercent": 10.52, "realFeeEstimated": true, "realFeePeriod": period]
+        let pf = try fortune(pplns: estimate)
+        let pplns = pf.payoutComparisons[1]
+        #expect(pplns.scheme == "PPLNS")
+        #expect(close(try #require(pplns.realFeePercent), 10.52))
+        #expect(pplns.realFeeEstimated)
+        #expect(pplns.realFeePeriod?.start == 1_791_935_707 && pplns.realFeePeriod?.end == 1_792_463_498)
+        #expect(pplns.costPercent == 2)                                   // luck is already in the gross
+        #expect(close(try #require(pplns.netPerPH), 80 * 0.98))
+        // A PPS payout's Real Cost comes only from its dated settlement measurement.
+        #expect(pf.payoutComparisons[0].realFeePercent == nil)
+        #expect(close(try #require(pf.realFeePercent), 10.52))
+        let measured = try fortune(pplns: estimate, measured: true)
+        #expect(close(try #require(measured.payoutComparisons[0].realFeePercent), 5))
+        #expect(close(try #require(measured.realFeePercent), 5))         // PF sorts by PPS first, as on the Web
+        #expect(close(try #require(measured.payoutComparisons[1].realFeePercent), 10.52))
+
+        let decoded = try snapshot { rows in
+            let base = try #require(rows.first { $0["name"] as? String == "Pearl Fortune" })
+            func row(_ id: String, _ name: String, scheme: Any, fee: Double, cost: Double, solo: Bool = false) -> [String: Any] {
+                var r = base; r["id"] = id; r["name"] = name; r["scheme"] = scheme; r["fee"] = fee; r["solo"] = solo
+                r["realFeeMeasurement"] = NSNull()
+                r["payouts"] = [["scheme": scheme, "fee": fee, "grossPerPH": 80, "estimated": false, "solo": solo,
+                                 "realFeePercent": cost, "realFeeEstimated": true, "realFeePeriod": period] as [String: Any]]
+                return r
+            }
+            rows += [row("https://pearl.herominers.com/", "HeroMiners", scheme: "PROP", fee: 0, cost: -0.77),
+                     row("https://pearlhash.xyz/", "PearlHash", scheme: NSNull(), fee: 1, cost: 3.5),
+                     row("https://solo.example/", "Solo", scheme: "SOLO", fee: 1, cost: 40, solo: true)]
+        }
+        let pools = PoolsOverviewStore.build(decoded)
+        let hero = try #require(pools.first { $0.name == "HeroMiners" })
+        #expect(hero.feeType == "PROP" && !hero.isPPS)
+        #expect(close(try #require(hero.realFeePercent), -0.77))           // negative is kept
+        let pearlhash = try #require(pools.first { $0.name == "PearlHash" })
+        #expect(pearlhash.payoutComparisons.map(\.scheme) == ["—"])
+        #expect(close(try #require(pearlhash.realFeePercent), 3.5))
+        let solo = try #require(pools.first { $0.name == "Solo" })
+        #expect(solo.realFeePercent == nil)
+        #expect(!solo.payoutComparisons[0].realFeeEstimated)
+    }
+
+    /// The estimate is optional and lossy: whatever the app can't read leaves that payout
+    /// without one and never costs the snapshot.
+    @Test func anUnreadableRealCostEstimateIsDroppedAlone() throws {
+        let good: [String: Any] = ["start": 100, "end": 200]
+        let unreadable: [[String: Any]] = [
+            ["realFeePercent": "high", "realFeePeriod": good],
+            ["realFeePercent": 10, "realFeePeriod": "week"],
+            ["realFeePercent": 10, "realFeePeriod": ["start": 200, "end": 100]],
+            ["realFeePercent": 10, "realFeePeriod": ["start": 0, "end": 100]],
+            ["realFeePercent": 10, "realFeePeriod": ["start": "a", "end": 100]],
+            ["realFeePercent": 10],
+            ["realFeePercent": NSNull(), "realFeePeriod": good],
+            ["realFeePercent": 10, "realFeePeriod": NSNull(), "realFeeEstimated": "yes"],
+        ]
+        for fields in unreadable {
+            let pf = try fortune(pplns: fields)
+            #expect(pf.payoutComparisons.count == 2)
+            #expect(pf.payoutComparisons[1].realFeePercent == nil, "\(fields)")
+            #expect(pf.payoutComparisons[1].realFeePeriod == nil)
+            #expect(pf.payoutComparisons.map(\.grossPerPH) == [100, 80])
+        }
+        // A readable one beside an unreadable flag still counts: "≈" is implied for estimates.
+        let pf = try fortune(pplns: ["realFeePercent": 10, "realFeePeriod": good, "realFeeEstimated": "yes"])
+        #expect(pf.payoutComparisons[1].realFeePercent == 10)
+        #expect(pf.payoutComparisons[1].realFeeEstimated)
+    }
+
     private func snapshot(luck: Any, forPool name: String = "Pearl Fortune") throws -> SharedOverview {
         var document = try #require(try JSONSerialization.jsonObject(with: Fixture.data("shared_overview.json")) as? [String: Any])
         var value = try #require(document["snapshot"] as? [String: Any])
@@ -443,6 +542,27 @@ struct PoolsOverviewTests {
         let real = try JSONDecoder().decode(HeroPoolStats.self,
                                             from: Data(#"{"pool":{"hashrate":803000000,"realHashrate":3.45e18}}"#.utf8))
         #expect(real.poolHashrate == 3.45e18)
+    }
+
+    /// Without the service, HeroMiners still reads its scheme and fee from its own config: the
+    /// aggregators list it as PPLNS, it pays PROP. An unreadable scheme keeps the rest.
+    @Test func heroMinersOwnConfigNamesItsSchemeAndFee() throws {
+        let cases: [(String, String?)] = [(#"{"config":{"fee":0,"rewardScheme":"prop"}}"#, "PROP"),
+                                          (#"{"config":{"fee":0,"rewardScheme":" PROP%0|SOLO%0 "}}"#, "PROP"),
+                                          (#"{"config":{"fee":0,"rewardScheme":7}}"#, nil),
+                                          (#"{"config":{"fee":0,"rewardScheme":"—"}}"#, nil),
+                                          (#"{"config":{"fee":0}}"#, nil)]
+        for (json, scheme) in cases {
+            let stats = try JSONDecoder().decode(HeroPoolStats.self, from: Data(json.utf8))
+            #expect(stats.config?.scheme == scheme, "\(json)")
+            #expect(stats.config?.fee?.value == 0)
+        }
+        let rows = [LOPPool(name: "HeroMiners", url: "https://pearl.herominers.com", feePercent: 1, payout: "PPLNS", hashrate: 1e18)]
+        let own = try #require(PoolsOverviewStore.build(rows, chain: nil, heroHashrate: nil, mps: nil,
+                                                       heroFeePercent: 0, heroScheme: "PROP").first)
+        #expect(own.feeType == "PROP" && own.feePercent == 0 && own.feeFromPoolAPI && !own.isPPS)
+        let table = try #require(PoolsOverviewStore.build(rows, chain: nil, heroHashrate: nil, mps: nil).first)
+        #expect(table.feeType == "PPLNS" && table.feePercent == 1 && !table.feeFromPoolAPI)
     }
 }
 

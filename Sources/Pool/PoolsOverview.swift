@@ -97,9 +97,10 @@ struct PoolOverview: Identifiable {
         return sharedTrustworthy ?? (!isSolo && !isPPS && blocksSample >= 20 && earningsPerPH != nil)
     }
 
-    /// Only PPS contracts participate in the real-cost column and its sorting.
+    /// The row's Real Cost for sorting: its first payout that has one (PF: PPS, then PPLNS),
+    /// as on the Web.
     var realFeePercent: Double? {
-        payoutComparisons.first(where: \.isPPS)?.realFeePercent
+        payoutComparisons.lazy.compactMap(\.realFeePercent).first
     }
 
     /// The row's best take-home yield across its payout schemes — what 预估收益 sorts by.
@@ -176,7 +177,24 @@ struct PPSFeeMeasurement: Codable, Sendable {
     }
 }
 
-/// PPS income shortfall against theory. Shared and SOLO contracts leave real cost blank.
+/// The service's Real Cost estimate for a shared-reward payout (PPLNS, PROP, or PearlHash,
+/// which names no scheme but pays out the blocks it finds): 1 − pool output after its
+/// published fee ÷ theory over the window, so block luck is part of it. The service shows
+/// one only with 5 days of data in the last 7 and work worth at least 100 blocks.
+struct SharedRealFee: Sendable, Equatable {
+    let percent: Double
+    let start: Double
+    let end: Double
+
+    init?(percent: Double?, period: SharedOverview.Row.Payout.Period?) {
+        guard let percent, percent.isFinite, let period, period.start.isFinite, period.end.isFinite,
+              period.start > 0, period.end > period.start else { return nil }
+        self.percent = percent; self.start = period.start; self.end = period.end
+    }
+}
+
+/// Income shortfall against theory: a PPS settlement measurement, or the service's estimate
+/// for a shared-reward payout. SOLO leaves real cost blank.
 struct PoolPayoutComparison {
     let scheme: String
     let feePercent: Double?
@@ -187,6 +205,8 @@ struct PoolPayoutComparison {
     var measurement: PPSFeeMeasurement?
     /// `grossPerPH` is today's theory × the pool's 7-day luck, not one day's blocks.
     var weekly = false
+    /// Shared-reward payouts only; a PPS payout's Real Cost is its `measurement`.
+    var sharedEstimate: SharedRealFee? = nil
 
     var isPPS: Bool { scheme.uppercased().hasPrefix("PPS") || scheme.uppercased().hasPrefix("FPPS") }
 
@@ -207,9 +227,22 @@ struct PoolPayoutComparison {
     }
 
     var realFeePercent: Double? {
-        guard isPPS, !solo, let measurement,
-              measurement.scheme.uppercased() == scheme.uppercased() else { return nil }
+        guard !solo else { return nil }
+        guard isPPS else { return sharedEstimate?.percent }
+        guard let measurement, measurement.scheme.uppercased() == scheme.uppercased() else { return nil }
         return measurement.realFeePercent
+    }
+
+    /// Shown with "≈": every shared-reward estimate, and a PPS measurement that interpolated.
+    var realFeeEstimated: Bool {
+        realFeePercent != nil && (isPPS ? measurement?.estimated == true : true)
+    }
+
+    /// The window the Real Cost was measured over.
+    var realFeePeriod: (start: Double, end: Double)? {
+        guard realFeePercent != nil else { return nil }
+        if isPPS, let measurement { return (measurement.start, measurement.end) }
+        return sharedEstimate.map { ($0.start, $0.end) }
     }
 }
 
@@ -355,9 +388,15 @@ final class PoolsOverviewStore: ObservableObject {
             let rowScheme = pool.isPPS ? pool.feeType : nil
             pool.sharedPayouts = row.payouts?.map {
                 let own = $0.scheme?.trimmingCharacters(in: .whitespaces).isEmpty == false ? $0.scheme : nil
-                return PoolPayoutComparison(scheme: own ?? rowScheme ?? "—", feePercent: $0.fee,
+                var payout = PoolPayoutComparison(scheme: own ?? rowScheme ?? "—", feePercent: $0.fee,
                                      grossPerPH: $0.grossPerPH, theoreticalPerPH: row.theoreticalEarningsPerPH,
                                      estimated: $0.estimated, solo: $0.solo)
+                // A shared-reward payout's Real Cost is the service's estimate; a PPS one keeps
+                // coming from the dated settlement measurement below.
+                if !payout.isPPS, !payout.solo, !row.solo {
+                    payout.sharedEstimate = SharedRealFee(percent: $0.realFeePercent, period: $0.realFeePeriod)
+                }
+                return payout
             }
             if let observation = row.realFeeMeasurement, observation.pool == row.name,
                observation.realFeePercent != nil,
@@ -388,12 +427,14 @@ final class PoolsOverviewStore: ObservableObject {
                      mps: try? await mpsTask,
                      kryptex: try? await kryptexTask,
                      fortune: try? await fortuneTask,
-                     heroFeePercent: hero?.config?.fee?.value)
+                     heroFeePercent: hero?.config?.fee?.value,
+                     heroScheme: hero?.config?.scheme)
     }
 
     static func build(_ rows: [LOPPool], chain: LOPPublic?, heroHashrate: Double?,
                       mps: MPSCoin?, kryptex: KryptexPoolStats? = nil,
-                      fortune: PFSummary? = nil, heroFeePercent: Double? = nil) -> [PoolOverview] {
+                      fortune: PFSummary? = nil, heroFeePercent: Double? = nil,
+                      heroScheme: String? = nil) -> [PoolOverview] {
         // The 24h chain-identity figure, the same one the monitor's dashboard shows: the
         // site's own 60-block `networkhashps` ran ~10% high, understating every pool's 占比.
         let network = chain?.networkHashrate24h ?? chain?.networkHashrate
@@ -432,7 +473,11 @@ final class PoolsOverviewStore: ObservableObject {
             if name == "Kryptex", let k = kryptex { applyKryptex(&o, k) }
             if name == "Pearl Fortune" { o.feeType = "PPLNS"; o.feePercent = 2 }
             if name == "PearlHash" { o.feePercent = PearlHashClient.fee }
-            if name == "HeroMiners", let heroFeePercent { o.feePercent = heroFeePercent }
+            if name == "HeroMiners" {
+                // The pool's own config: the aggregators list it as PPLNS, it pays PROP.
+                if let heroScheme { o.feeType = heroScheme; o.feeFromPoolAPI = true }
+                if let heroFeePercent { o.feePercent = heroFeePercent; o.feeFromPoolAPI = true }
+            }
             if o.isPPS {
                 o.earningsPerPH = theoretical      // a fixed rate per share — see isPPS
             } else if reward > 0, let h = hps, h > 0, let b = r.blocks24h, b >= 0 {
@@ -1178,27 +1223,30 @@ private struct PoolComparisonTable: View {
             }
         case .fee, .realFee:
             VStack(alignment: .trailing, spacing: lineGap) {
+                // Every payout gets its line, as on the Web: PF shows its PPS settlement and
+                // its PPLNS estimate one above the other.
                 ForEach(pool.payoutComparisons.indices, id: \.self) { index in
                     let comparison = pool.payoutComparisons[index]
-                    if column == .fee || comparison.isPPS || !pool.payoutComparisons.contains(where: \.isPPS) {
-                        let amount = column == .fee ? comparison.feePercent : comparison.realFeePercent
-                        HStack(spacing: 4) {
-                            if column == .realFee, amount != nil {
-                                RealFeeHelpButton(observation: comparison.measurement)
-                            }
-                            value(amount.map {
-                                (column == .realFee && comparison.measurement?.estimated == true ? "≈" : "") +
-                                    (column == .realFee ? f($0, 2) + "%" : percent($0))
-                            })
+                    let amount = column == .fee ? comparison.feePercent : comparison.realFeePercent
+                    HStack(spacing: 4) {
+                        if column == .realFee, amount != nil {
+                            RealFeeHelpButton(payout: comparison)
                         }
-                        if pool.payoutComparisons.count > 1 { secondary(comparison.scheme) }
+                        value(amount.map {
+                            (column == .realFee && comparison.realFeeEstimated ? "≈" : "") +
+                                (column == .realFee ? f($0, 2) + "%" : percent($0))
+                        })
                     }
-                }
-                if pool.payoutComparisons.count == 1 { secondary(pool.feeType ?? "—") }
-                // On a phone the sample period is left to the ⓘ beside the figure, which
-                // gives it in full.
-                if column == .realFee, !compact, pool.realFeePercent != nil, let observation = pool.ppsMeasurement {
-                    secondary(Loc("样本 %@", samplePeriod(observation)))
+                    secondary(pool.payoutComparisons.count > 1 ? comparison.scheme : (pool.feeType ?? "—"))
+                    // On a phone, and on a row with two schemes (which has no room for two
+                    // more lines), the sample period is left to the ⓘ beside the figure.
+                    if column == .realFee, !compact, pool.payoutComparisons.count == 1,
+                       let period = comparison.realFeePeriod {
+                        // One line, shrunk if it must: wrapped, it filled the row.
+                        Text(Loc("样本 %@", samplePeriod(period)))
+                            .font(.caption).foregroundStyle(.secondary)
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                    }
                 }
             }
         case .lastBlock:
@@ -1246,13 +1294,14 @@ private struct PoolComparisonTable: View {
         return f(rounded == 0 ? 0 : rounded, rounded == rounded.rounded() ? 0 : 1) + "%"
     }
 
-    private func samplePeriod(_ observation: PPSFeeMeasurement) -> String {
+    /// Month and day only ("10/14 – 10/20"): with the year the column wrapped it onto a
+    /// second line and filled the row. The ⓘ beside the figure gives the full window.
+    private func samplePeriod(_ period: (start: Double, end: Double)) -> String {
         let formatter = DateIntervalFormatter()
         formatter.locale = locale
-        formatter.dateStyle = .short
-        formatter.timeStyle = .none
-        return formatter.string(from: Date(timeIntervalSince1970: observation.start),
-                                to: Date(timeIntervalSince1970: observation.end))
+        formatter.dateTemplate = "Md"
+        return formatter.string(from: Date(timeIntervalSince1970: period.start),
+                                to: Date(timeIntervalSince1970: period.end))
     }
 
     private func relativeDate(_ date: Date) -> String {
@@ -1266,21 +1315,23 @@ private struct PoolComparisonTable: View {
 /// Shared explanation next to the desktop column title and each phone metric.
 /// Its button stays separate from sorting so opening help never reorders pools.
 private struct RealFeeHelpButton: View {
-    var observation: PPSFeeMeasurement? = nil
+    var payout: PoolPayoutComparison? = nil
     @Environment(\.locale) private var locale
     @State private var showingExplanation = false
 
     private var explanation: String {
-        guard let observation, observation.realFeePercent != nil else {
+        guard let payout, let window = payout.realFeePeriod else {
             return Loc("这是按各矿池标注的样本时间段，计算的实际结算收益相对理论收益的折损率。")
         }
         let formatter = DateIntervalFormatter()
         formatter.locale = locale
         formatter.dateStyle = .short
         formatter.timeStyle = .short
-        let period = formatter.string(from: Date(timeIntervalSince1970: observation.start),
-                                      to: Date(timeIntervalSince1970: observation.end))
-        return Loc("这是 %@ 期间，实际结算收益相对理论收益的折损率。", period)
+        let period = formatter.string(from: Date(timeIntervalSince1970: window.start),
+                                      to: Date(timeIntervalSince1970: window.end))
+        return payout.isPPS
+            ? Loc("这是 %@ 期间，实际结算收益相对理论收益的折损率。", period)
+            : Loc("这是 %@ 期间按矿池产出和公示池费估算的折损率，包含出块运气的影响。", period)
     }
 
     var body: some View {
@@ -1373,10 +1424,7 @@ private struct PoolComparisonNotes: View {
                 Text(Loc("收益/PH·天 = 该池实际挖到的块 × 单块奖励 ÷ 算力 ×（1 − 手续费），即到手 PRL；绿色 = 最高。"))
             }
             Text(Loc("真实费用 =（1 − 实际结算收益 ÷ 同期理论收益）× 100%；负值表示收益高于理论。"))
-            Text(Loc("真实费用仅计算 PPS、PPS+ 与 FPPS；其他方案或数据不足显示「—」。不含矿工软件抽水及转账费。"))
-            if pools.contains(where: { $0.name == "Pearl Fortune" }) {
-                Text(Loc("PF 保留两种方案的公示费率，仅计算 PPS 的真实费用。"))
-            }
+            Text(Loc("PPS、PPS+ 与 FPPS 使用有统计区间的结算样本。PPLNS、PROP 根据统计期内的矿池产出和公示池费估算；PearlHash 未公布方案，但链上核实其按出块分配收益，同样估算。估算包含出块运气的影响。数据不足或其他方案显示「—」。不含矿工软件抽水及转账费。PF 分别展示 PPS 与 PPLNS。PPLNS、PROP 与 PearlHash 需要最近 7 天内至少 5 天的数据，且这段时间按矿池算力应出至少 100 个块；否则显示「—」。"))
             if source == .lordOfPearls {
                 Text(Loc("出块为最近 24 小时链上实测（按 coinbase 归属统计），算力取自各矿池自身 API。"))
             }
@@ -1391,6 +1439,8 @@ private struct PoolComparisonNotes: View {
             }
             if pools.contains(where: { $0.payoutComparisons.contains(where: \.isPPS) }) {
                 Text(Loc("PPS 池按份额固定结算，收益/PH·天 = 全网期望值（与该池运气无关）×（1 − 真实费用；尚未测出时用手续费），不参与最高收益的比较。"))
+            }
+            if pools.contains(where: { $0.payoutComparisons.contains(where: \.realFeeEstimated) }) {
                 Text(Loc("「≈」表示估算，可能包含算力统计、观测缺口补估和链上历史插值误差；结果反映样本期收益折损，不等同于矿池公示手续费或额外抽水。"))
             }
             if pools.contains(where: \.hashFromPoolAPI) {
@@ -1400,6 +1450,9 @@ private struct PoolComparisonNotes: View {
             // footnote the moment the pool changed them — the row already shows them.
             if pools.contains(where: { $0.name == "Kryptex" && $0.feeFromPoolAPI }) {
                 Text(Loc("Kryptex 的费率与结算方式取自矿池自身 API（数据源记录有误）。"))
+            }
+            if pools.contains(where: { $0.name == "HeroMiners" && $0.feeFromPoolAPI }) {
+                Text(Loc("HeroMiners 的费率与结算方式取自矿池自身 API（数据源记录有误）。"))
             }
             if source == .lordOfPearls, pools.contains(where: \.fromMiningPoolStats) {
                 Text(Loc("F2Pool 数据源未收录，该行取自 miningpoolstats（出块按其最近 1000 个区块口径）。"))

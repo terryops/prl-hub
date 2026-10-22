@@ -19,9 +19,41 @@ struct SharedOverview: Decodable, Sendable {
     struct Row: Decodable, Sendable {
         struct Point: Decodable, Sendable { let ts: Double; let hashrate: Double? }
         struct Payout: Decodable, Sendable {
+            /// The window the service measured a Real Cost over (unix seconds).
+            struct Period: Decodable, Sendable { let start, end: Double }
             let scheme: String?
             let fee, grossPerPH: Double?
             let estimated, solo: Bool
+            /// The service's Real Cost for this payout: a PPS settlement measurement, or the
+            /// shared-reward estimate from pool output (PPLNS, PROP, PearlHash). Lossy: a field
+            /// the app can't read leaves the payout without one, never drops the snapshot.
+            var realFeePercent: Double? = nil
+            var realFeeEstimated: Bool? = nil
+            var realFeePeriod: Period? = nil
+
+            private enum CodingKeys: String, CodingKey {
+                case scheme, fee, grossPerPH, estimated, solo, realFeePercent, realFeeEstimated, realFeePeriod
+            }
+
+            init(scheme: String?, fee: Double?, grossPerPH: Double?, estimated: Bool, solo: Bool,
+                 realFeePercent: Double? = nil, realFeeEstimated: Bool? = nil, realFeePeriod: Period? = nil) {
+                self.scheme = scheme; self.fee = fee; self.grossPerPH = grossPerPH
+                self.estimated = estimated; self.solo = solo
+                self.realFeePercent = realFeePercent; self.realFeeEstimated = realFeeEstimated
+                self.realFeePeriod = realFeePeriod
+            }
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                scheme = try c.decodeIfPresent(String.self, forKey: .scheme)
+                fee = try c.decodeIfPresent(Double.self, forKey: .fee)
+                grossPerPH = try c.decodeIfPresent(Double.self, forKey: .grossPerPH)
+                estimated = try c.decode(Bool.self, forKey: .estimated)
+                solo = try c.decode(Bool.self, forKey: .solo)
+                realFeePercent = (try? c.decodeIfPresent(Double.self, forKey: .realFeePercent)) ?? nil
+                realFeeEstimated = (try? c.decodeIfPresent(Bool.self, forKey: .realFeeEstimated)) ?? nil
+                realFeePeriod = (try? c.decodeIfPresent(Period.self, forKey: .realFeePeriod)) ?? nil
+            }
         }
         let id, name, url: String
         let hashrate, share, fee: Double?
@@ -168,7 +200,32 @@ struct LuckyPoolClient {
 /// miners/workers are counts; config.fee is the pool抽水 (0). All numeric fields
 /// arrive as numbers here, but stay FlexDouble-tolerant for safety.
 struct HeroPoolStats: Decodable {
-    struct Config: Decodable { let fee: FlexDouble? }
+    struct Config: Decodable {
+        let fee: FlexDouble?
+        /// The pool's own payout scheme ("prop" on 2026-10-20), which the aggregators list as
+        /// PPLNS. Lossy: an unreadable value leaves the fee and the rest of the stats intact.
+        let rewardScheme: String?
+
+        private enum CodingKeys: String, CodingKey { case fee, rewardScheme }
+
+        init(fee: FlexDouble? = nil, rewardScheme: String? = nil) {
+            self.fee = fee; self.rewardScheme = rewardScheme
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            fee = try c.decodeIfPresent(FlexDouble.self, forKey: .fee)
+            rewardScheme = (try? c.decodeIfPresent(String.self, forKey: .rewardScheme)) ?? nil
+        }
+
+        /// The scheme as the table shows it ("PROP"), the same reading as the service's.
+        var scheme: String? {
+            guard let raw = rewardScheme?.trimmingCharacters(in: .whitespaces).uppercased(),
+                  let first = raw.split(separator: "|").first?.split(separator: "%").first.map(String.init),
+                  !first.isEmpty, first != "—", first != "-" else { return nil }
+            return first
+        }
+    }
     struct Pool: Decodable {
         // PRL on HeroMiners reports two fields: `hashrate` is the TRUE value
         // right-shifted by 32 bits (≈803 MH/s — a difficulty-encoding artifact, NOT
