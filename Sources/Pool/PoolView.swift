@@ -37,10 +37,10 @@ struct PoolView: View {
                 VStack(alignment: .leading, spacing: Pearl.Space.lg) {
                     HStack(spacing: Pearl.Space.sm) {
                         PearlSectionHeader(Loc("我的监控"), systemImage: "square.stack.3d.up.fill")
+                        if !store.watches.isEmpty { MonitorLayoutPicker(layout: $layout) }
                         Button { draft = WatchDraft() } label: {
                             Label(Loc("添加"), systemImage: "plus")
                         }.font(.callout)
-                        if !store.watches.isEmpty { MonitorLayoutPicker(layout: $layout) }
                     }
 
                     if store.watches.isEmpty {

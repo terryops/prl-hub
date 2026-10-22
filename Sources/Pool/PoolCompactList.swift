@@ -1,10 +1,9 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-// 我的监控 → 一览: the total hashrate in big type, then one short line per monitor (a
-// phone) or one small tile per monitor (Mac, iPad) — for when the full cards
-// (PoolView's WatchCard) take a screen each. Any line or tile opens that monitor's full
-// card (WatchDetailView).
+// 我的监控 → 一览: the total hashrate in big type, then one small tile per monitor — two
+// across on a phone, more where there is room — for when the full cards (PoolView's
+// WatchCard) take a screen each. A tile opens that monitor's full card (WatchDetailView).
 
 /// 我的监控's two layouts. A per-device preference, so it is not synced.
 enum MonitorLayout: String {
@@ -72,25 +71,53 @@ private struct CompactMonitor: Identifiable {
 
     var loading: Bool { data == nil }
     var found: Bool { data?.found == true }
-    /// Some rigs are down, but not all: the count is worth showing next to the dot.
-    var partlyOffline: Bool { found && total > 0 && up < total }
-
-    /// Green: every rig up. Orange: some down. Red: none up, or the lookup failed.
-    /// A pool that lists no rigs is judged on its hashrate alone.
-    var statusColor: Color {
-        guard let d = data else { return .secondary }
-        guard d.found else { return d.error != nil ? .red : .secondary }
-        if total == 0 { return rate > 0 ? .green : .secondary }
-        return up == total ? .green : up == 0 ? .red : .orange
+    /// How its pill is coloured. A pool that lists no rigs is judged on its hashrate alone.
+    var tone: PillTone {
+        guard let d = data else { return .idle }
+        guard d.found else { return d.error != nil ? .down : .idle }
+        if total == 0 { return rate > 0 ? .ok : .idle }
+        return up == total ? .ok : up == 0 ? .down : .partial
     }
 
     var rateText: String { found && rate > 0 ? formatHashrate(rate) : "—" }
 
-    /// The line under a tile's hashrate: rigs online, or why there is nothing to show.
+    /// What a tile's pill says: rigs online of rigs listed, else a word for the state.
+    var badgeText: String {
+        guard let d = data else { return "" }
+        if d.found { return total > 0 ? "\(up)/\(total)" : (rate > 0 ? Loc("在线") : Loc("离线")) }
+        return d.error != nil ? Loc("失败") : Loc("离线")
+    }
+
+    /// What a tile is read out as: rigs online, or why there is nothing to show.
     var detailText: String {
         guard let d = data else { return " " }
         if d.found { return total > 0 ? Loc("%@ 在线", "\(up)/\(total)") : (rate > 0 ? Loc("在线") : Loc("离线")) }
         return d.error ?? Loc("该地址未在 %@ 挖矿", watch.pool.label)
+    }
+}
+
+/// A pill's colour. Quiet while all is well, so only trouble draws the eye; trouble in
+/// the palette's own warm tones — the hard-hat gold, then rose — not the system's
+/// green / orange / red, which the pearl palettes don't have.
+enum PillTone {
+    case ok, partial, down, idle
+
+    /// The text, on a card.
+    var ink: Color {
+        switch self {
+        case .ok, .idle: .secondary
+        case .partial: Pearl.goldInk
+        case .down: Pearl.roseInk
+        }
+    }
+
+    var fill: Color {
+        switch self {
+        case .ok: Pearl.indigo.opacity(0.09)
+        case .idle: Color.primary.opacity(0.06)
+        case .partial: Pearl.gold.opacity(0.18)
+        case .down: Pearl.rose.opacity(0.14)
+        }
     }
 }
 
@@ -110,22 +137,17 @@ struct WatchCompactList: View {
             CompactMonitor($0, store.watchData[$0.id], choice: speedWindow)
         }
         let paused = store.watches.filter { !$0.isEnabled }
-        VStack(alignment: .leading, spacing: Pearl.Space.md) {
-            // With one monitor the total would only repeat its line.
+        VStack(alignment: .leading, spacing: 12) {
+            // With one monitor the total would only repeat its tile.
             if monitors.count > 1 { total(monitors) }
-            // Tiles where there is room for a few side by side (Mac, iPad); lines on a phone.
-            ViewThatFits(in: .horizontal) {
-                tiles(monitors, paused: paused)
-                    .frame(minWidth: 600, idealWidth: 600, maxWidth: .infinity)
-                lines(monitors, paused: paused)
-            }
+            tiles(monitors, paused: paused)
         }
     }
 
     // MARK: the total
 
-    /// The fleet's hashrate in big type, then rigs online and what reached the payout
-    /// addresses in the last 24h.
+    /// The fleet's hashrate in big type, with rigs online in a pill beside its label and
+    /// what reached the payout addresses in the last 24h under it.
     private func total(_ monitors: [CompactMonitor]) -> some View {
         let reporting = monitors.filter(\.found)
         let rate = reporting.reduce(0) { $0 + $1.rate }
@@ -139,97 +161,69 @@ struct WatchCompactList: View {
         // income can't be in the figure: say so, or it reads as the whole account's.
         let uncounted = Array(Set(monitors.map(\.watch).filter { !$0.pool.isAddressBased }.map(\.pool.label))).sorted()
 
-        var parts: [Text] = []
-        if rigs > 0 {
-            parts.append(Text(Loc("%@ 在线", "\(up)/\(rigs)")).foregroundStyle(up < rigs ? Color.orange : Color.secondary))
-        }
+        var income: String?
         var note: String?
         if !addresses.isEmpty, !chainLoading, !received.isEmpty {
             let sum = received.reduce(0, +)
             var line = Loc("近 24h") + " +" + f(sum, abs(sum) < 0.01 ? 4 : 2) + " PRL"
             if let usd = store.prlUsd, sum > 0 { line += " ≈ " + currency.primaryString(sum * usd) }
-            parts.append(Text(line))
+            income = line
             if !uncounted.isEmpty { note = Loc("不含 %@", uncounted.joined(separator: ", ")) }
         }
-        let status = joined(parts)
 
-        return VStack(alignment: .leading, spacing: 2) {
-            Text(rate > 0 ? formatHashrate(rate) : "—")
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center) {
+                Text(Loc("总算力")).font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                if rigs > 0 {
+                    RigsBadge(text: Loc("%@ 在线", "\(up)/\(rigs)"),
+                              tone: up == rigs ? .ok : up == 0 ? .down : .partial)
+                }
+            }
+            heroRate(rate)
                 .font(.system(size: 34, weight: .bold, design: .rounded)).monospacedDigit()
                 .lineLimit(1).minimumScaleFactor(0.6)
-            if !parts.isEmpty {
+            if let income {
                 // On one line where it fits; else the note drops to a line of its own
                 // rather than the line breaking inside it.
                 ViewThatFits(in: .horizontal) {
-                    joined(parts + (note.map { [Text($0)] } ?? [])).lineLimit(1)
+                    Text(note.map { income + " · " + $0 } ?? income).lineLimit(1)
                     VStack(alignment: .leading, spacing: 1) {
-                        status.fixedSize(horizontal: false, vertical: true)
+                        Text(income).fixedSize(horizontal: false, vertical: true)
                         if let note { Text(note) }
                     }
                 }
-                .font(.subheadline).foregroundStyle(.secondary)
+                .font(.footnote).foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .pearlCard(padding: 18)
         .accessibilityElement(children: .combine)
     }
 
-    /// "a · b · c"
-    private func joined(_ parts: [Text]) -> Text {
-        parts.enumerated().reduce(Text(verbatim: "")) { acc, item in
-            item.offset == 0 ? item.element : acc + Text(verbatim: " · ") + item.element
-        }
+    /// "2.53 PH/s" with the unit a step quieter than the figure.
+    private func heroRate(_ rate: Double) -> Text {
+        guard rate > 0 else { return Text(verbatim: "—") }
+        let s = formatHashrate(rate)
+        guard let space = s.lastIndex(of: " ") else { return Text(verbatim: s) }
+        return Text(verbatim: String(s[..<space]))
+            + Text(verbatim: String(s[space...]))
+                .font(.system(size: 26, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
     }
 
-    // MARK: a phone — one line per monitor
+    /// The paused fold's padding.
+    private static let padH: CGFloat = 18
+    private static let padV: CGFloat = 16
+    private static let lineInset: CGFloat = padH + 28 + 12
 
-    private func lines(_ monitors: [CompactMonitor], paused: [PoolWatch]) -> some View {
-        VStack(spacing: 0) {
-            ForEach(Array(monitors.enumerated()), id: \.element.id) { i, m in
-                if i > 0 { Divider().padding(.leading, Self.lineInset) }
-                Button { onOpen(m.watch) } label: { line(m) }
-                    .buttonStyle(LineButtonStyle())
-                    .modifier(MonitorActions(watch: m.watch, store: store, dragging: $dragging, onEdit: onEdit))
-            }
-            if !paused.isEmpty {
-                if !monitors.isEmpty { Divider() }
-                pausedFold(paused)
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: Pearl.Radius.md, style: .continuous))
-        .pearlCard(padding: 0)
-    }
+    // MARK: the tiles
 
-    private static let lineInset: CGFloat = 14 + 28 + 12
-
-    private func line(_ m: CompactMonitor) -> some View {
-        HStack(spacing: 12) {
-            PoolIcon(pool: m.watch.pool, size: 28)
-            Text(m.watch.displayName).lineLimit(1)
-            Spacer(minLength: 8)
-            if m.loading {
-                ProgressView().controlSize(.small)
-            } else {
-                // Down rigs are the one thing worth a second look: count them, in the dot's colour.
-                if m.partlyOffline {
-                    Text(verbatim: "\(m.up)/\(m.total)")
-                        .font(.subheadline.monospacedDigit()).foregroundStyle(m.statusColor)
-                }
-                Text(m.rateText).font(.body.weight(.medium).monospacedDigit()).lineLimit(1)
-                Circle().fill(m.statusColor).frame(width: 8, height: 8)
-            }
-        }
-        .padding(.horizontal, 14).padding(.vertical, 12)
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(m.detailText)
-    }
-
-    // MARK: Mac / iPad — one tile per monitor
-
+    /// Two across on a phone; as many as fit on an iPad or a Mac.
     private func tiles(_ monitors: [CompactMonitor], paused: [PoolWatch]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             if !monitors.isEmpty {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 12)], spacing: 12) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
                     ForEach(monitors) { m in
                         Button { onOpen(m.watch) } label: { tile(m) }
                             .buttonStyle(TileButtonStyle())
@@ -239,34 +233,39 @@ struct WatchCompactList: View {
             }
             if !paused.isEmpty {
                 VStack(spacing: 0) { pausedFold(paused) }
-                    .clipShape(RoundedRectangle(cornerRadius: Pearl.Radius.sm, style: .continuous))
-                    .pearlCard(padding: 0, radius: Pearl.Radius.sm)
+                    .clipShape(RoundedRectangle(cornerRadius: Pearl.Radius.md, style: .continuous))
+                    .pearlCard(padding: 0)
             }
         }
     }
 
+    /// The pool's icon and the rigs-online pill on top; the name, then the hashrate in
+    /// bold, below.
     private func tile(_ m: CompactMonitor) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                PoolIcon(pool: m.watch.pool, size: 22)
-                Text(m.watch.displayName).font(.subheadline.weight(.semibold)).lineLimit(1)
+                PoolIcon(pool: m.watch.pool, size: 26)
                 Spacer(minLength: 0)
-                Circle().fill(m.statusColor).frame(width: 8, height: 8)
+                // Rigs online: quiet when all are up, gold when some are down, rose when none are.
+                if !m.loading { RigsBadge(text: m.badgeText, tone: m.tone, font: .caption.weight(.semibold)) }
             }
-            Group {
-                if m.loading { ProgressView().controlSize(.small) }
-                else { Text(m.rateText).font(.system(.title3, design: .rounded).weight(.bold)).monospacedDigit() }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(m.watch.displayName).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                Group {
+                    if m.loading { ProgressView().controlSize(.small) }
+                    else {
+                        Text(m.rateText).font(.system(.title3, design: .rounded).weight(.bold)).monospacedDigit()
+                            .foregroundStyle(m.found ? Color.primary : Color.secondary)
+                    }
+                }
+                .frame(height: 26, alignment: .leading)
+                .lineLimit(1).minimumScaleFactor(0.6)
             }
-            .frame(height: 26, alignment: .leading)
-            .lineLimit(1).minimumScaleFactor(0.6)
-            Text(m.detailText)
-                .font(.caption)
-                .foregroundStyle(m.data?.error != nil ? Color.red : m.partlyOffline ? m.statusColor : Color.secondary)
-                .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .pearlCard(padding: 14, radius: Pearl.Radius.sm)
+        .pearlCard(padding: 16)
         .accessibilityElement(children: .combine)
+        .accessibilityValue(m.detailText)
     }
 
     // MARK: paused monitors
@@ -281,7 +280,7 @@ struct WatchCompactList: View {
                 Image(systemName: showPaused ? "chevron.up" : "chevron.down")
                     .font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, 14).padding(.vertical, 12)
+            .padding(.horizontal, Self.padH).padding(.vertical, Self.padV - 2)
         }
         .buttonStyle(LineButtonStyle())
         if showPaused {
@@ -293,7 +292,7 @@ struct WatchCompactList: View {
                         Text(w.displayName).foregroundStyle(.secondary).lineLimit(1)
                         Spacer()
                     }
-                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .padding(.horizontal, Self.padH).padding(.vertical, Self.padV - 4)
                 }
                 .buttonStyle(LineButtonStyle())
                 .modifier(MonitorActions(watch: w, store: store, dragging: $dragging, onEdit: onEdit))
@@ -302,7 +301,25 @@ struct WatchCompactList: View {
     }
 }
 
-/// What a line or tile offers besides opening: the card's ⋯ actions on a long press /
+/// Rigs online as a tinted pill, coloured by its `PillTone`.
+private struct RigsBadge: View {
+    let text: String
+    let tone: PillTone
+    var font: Font = .subheadline.weight(.semibold)
+
+    var body: some View {
+        Text(text)
+            .font(font.monospacedDigit())
+            .lineLimit(1)
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .frame(minWidth: 44)
+            .foregroundStyle(tone.ink)
+            .background(tone.fill, in: Capsule())
+            .fixedSize()
+    }
+}
+
+/// What a tile or a paused line offers besides opening: the card's ⋯ actions on a long press /
 /// right click, and the same drag-to-reorder as the cards, so an order set in either
 /// layout holds in both.
 private struct MonitorActions: ViewModifier {
@@ -364,7 +381,7 @@ private struct TileButtonStyle: ButtonStyle {
         @State private var hovering = false
 
         var body: some View {
-            let shape = RoundedRectangle(cornerRadius: Pearl.Radius.sm, style: .continuous)
+            let shape = RoundedRectangle(cornerRadius: Pearl.Radius.md, style: .continuous)
             label
                 .contentShape(shape)
                 .overlay(shape.fill(Color.primary.opacity(pressed ? 0.07 : hovering ? 0.035 : 0)).allowsHitTesting(false))
@@ -413,3 +430,4 @@ struct WatchDetailView: View {
         .refreshable { await store.refresh(force: true) }
     }
 }
+

@@ -52,6 +52,11 @@ enum Pearl {
     static var gold:   Color { tones.gold }
     static var rose:   Color { tones.rose }
 
+    /// `gold` and `rose` deep enough to read as text on a card (classic's gold is a fill
+    /// colour, too light for words on white). The same in both palettes.
+    static var goldInk: Color { PearlTones.tone(0xB77914, 0xF5CE72) }
+    static var roseInk: Color { PearlTones.tone(0xD64A6C, 0xFF8CA7) }
+
     /// The primary brand accent — used for tint, links, key glyphs.
     static var accent: Color { tones.accent }
     /// Text and glyphs set on a fill of `accent` or `brand`.
@@ -196,7 +201,7 @@ struct PearlTones {
     }()
 
     /// An sRGB colour that is `light` in the light appearance and `dark` in the dark one.
-    private static func tone(_ light: UInt32, _ dark: UInt32, alpha: Double...) -> Color {
+    static func tone(_ light: UInt32, _ dark: UInt32, alpha: Double...) -> Color {
         func parts(_ hex: UInt32) -> (CGFloat, CGFloat, CGFloat) {
             (CGFloat((hex >> 16) & 0xFF) / 255, CGFloat((hex >> 8) & 0xFF) / 255, CGFloat(hex & 0xFF) / 255)
         }
