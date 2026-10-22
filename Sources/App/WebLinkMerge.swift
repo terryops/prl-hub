@@ -26,7 +26,7 @@ enum AccountConfig {
         let fields = ["lang", "monitors", "wallets", "rules", "window", "settingsUpdated", "calculator", "contacts", "autoRefresh", "monitorOrder", "secondary", "theme", "devices", "fleetSettings"]
         func pick(_ value: [String: Any], _ keys: [String]) -> [String: Any] { value.filter { keys.contains($0.key) } }
         var out = pick(config, fields)
-        for (field, keys) in [("monitors", ["pool", "addr", "acct", "label", "alert", "after", "paused"]), ("wallets", ["addr", "label"]), ("rules", ["kind", "value", "window", "enabled", "seen_fired", "repeat"]), ("contacts", ["name", "address", "note"]), ("devices", ["name", "gpu", "count", "rented", "hoursPerDay", "customPearl", "rentDaily", "rentCurrency", "rentFX", "sourceKey"])] {
+        for (field, keys) in [("monitors", ["pool", "addr", "acct", "label", "alert", "after", "again", "paused"]), ("wallets", ["addr", "label"]), ("rules", ["kind", "value", "window", "enabled", "seen_fired", "repeat"]), ("contacts", ["name", "address", "note"]), ("devices", ["name", "gpu", "count", "rented", "hoursPerDay", "customPearl", "rentDaily", "rentCurrency", "rentFX", "sourceKey"])] {
             out[field] = ((out[field] as? [[String: Any]]) ?? []).map { pick($0, $0["deleted"] as? Bool == true ? ["id", "updated", "deleted"] : ["id", "updated", "deleted"] + keys) }
         }
         if let c = out["calculator"] as? [String: Any] { out["calculator"] = pick(c, ["gpu", "count", "th", "watts", "hardware", "hours", "fee", "electricity", "rent", "rented", "rentCoversPower", "growth", "price", "yield", "networkHash"]) }
@@ -99,19 +99,23 @@ struct WebMonitor: Codable, Equatable {
     var alert: Bool
     /// Seconds offline before the push.
     var after: Int
+    /// Seconds after that push to remind once more; nil = no reminder (and always nil
+    /// while the alert is off). Optional so a base saved before reminders still decodes.
+    var again: Int?
     var paused: Bool
 
-    /// The same monitor with the same settings. The threshold only counts while the alert is on.
+    /// The same monitor with the same settings. The threshold and the reminder only count
+    /// while the alert is on.
     func matches(_ o: WebMonitor) -> Bool {
         sameTarget(as: o) && (acct ?? "") == (o.acct ?? "") && label == o.label
-            && alert == o.alert && paused == o.paused && (!alert || after == o.after)
+            && alert == o.alert && paused == o.paused && (!alert || (after == o.after && again == o.again))
     }
 
     func sameTarget(as o: WebMonitor) -> Bool { pool == o.pool && addr == o.addr }
 
     /// What the web gets for one of the app's monitors; nil when the web would refuse it
     /// (it validates every entry and rejects the whole configuration over one bad one).
-    init?(_ w: PoolWatch, minutes: Int?) {
+    init?(_ w: PoolWatch, minutes: Int?, again r: Int? = nil) {
         pool = w.pool.rawValue
         if w.pool.isAddressBased {
             guard let a = normalizeWatchAddress(w.pool, w.address) else { return nil }
@@ -126,6 +130,7 @@ struct WebMonitor: Codable, Equatable {
         let m = minutes.flatMap { OfflineAlertStore.choices.contains($0) ? $0 : nil }
         alert = m != nil
         after = (m ?? OfflineAlertStore.choices[0]) * 60
+        again = alert ? r.flatMap { OfflineAlertStore.againChoices.contains($0) ? $0 * 60 : nil } : nil
         paused = !w.isEnabled
     }
 
@@ -136,6 +141,9 @@ struct WebMonitor: Codable, Equatable {
               let alert = o["alert"] as? Bool else { return nil }
         let after = (o["after"] as? NSNumber)?.intValue ?? OfflineAlertStore.choices[0] * 60
         if alert, !OfflineAlertStore.choices.contains(where: { $0 * 60 == after }) { return nil }
+        let again = (o["again"] as? NSNumber)?.intValue ?? 0
+        if alert, again != 0, !OfflineAlertStore.againChoices.contains(where: { $0 * 60 == again }) { return nil }
+        self.again = alert && again > 0 ? again : nil
         self.pool = pool
         self.addr = addr
         self.acct = (o["acct"] as? String).flatMap { $0.isEmpty ? nil : $0 }
@@ -173,6 +181,9 @@ struct WebMonitor: Codable, Equatable {
     /// Minutes for 掉线提醒, or nil when it is off.
     var minutes: Int? { alert ? after / 60 : nil }
 
+    /// Minutes for its reminder, or nil when there is none.
+    var againMinutes: Int? { alert ? again.map { $0 / 60 } : nil }
+
     fileprivate func write(into o: inout [String: Any]) {
         o["pool"] = pool
         o["addr"] = addr
@@ -180,6 +191,7 @@ struct WebMonitor: Codable, Equatable {
         o["label"] = label
         o["alert"] = alert
         o["after"] = after
+        o["again"] = again
         o["paused"] = paused
     }
 
@@ -195,6 +207,8 @@ struct WebLinkLocal: Equatable {
     var watches: [PoolWatch]
     /// 掉线提醒: monitor → minutes.
     var minutes: [UUID: Int]
+    /// …and its reminder: monitor → minutes after the first push.
+    var again: [UUID: Int] = [:]
     /// The price alerts as iCloud has them; nil when this build can't read the stored copy
     /// (a later version wrote it), and the alerts are then left alone on both sides.
     var alerts: CloudAlerts?
@@ -253,6 +267,7 @@ enum WebLinkMerge {
                          remoteOrder: order(config["monitorOrder"]), now: now)
         out.local.watches = m.watches
         out.local.minutes = m.minutes
+        out.local.again = m.again
         out.base.monitors = m.base
         out.base.order = m.order
         out.base.orderUpdated = m.orderUpdated
@@ -302,6 +317,7 @@ enum WebLinkMerge {
     struct Monitors {
         var watches: [PoolWatch]
         var minutes: [UUID: Int]
+        var again: [UUID: Int]
         var remote: [[String: Any]]
         var changed = false
         var base: [String: WebLinkBase.Monitor] = [:]
@@ -322,7 +338,7 @@ enum WebLinkMerge {
 
     static func monitors(local: WebLinkLocal, base: WebLinkBase, remote: [[String: Any]],
                          remoteOrder: (ids: [String], updated: Int64)?, now: Int64) -> Monitors {
-        var out = Monitors(watches: local.watches, minutes: local.minutes, remote: remote)
+        var out = Monitors(watches: local.watches, minutes: local.minutes, again: local.again, remote: remote)
         var entries: [String: Entry] = [:]
         var position: [String: Int] = [:]
         for (i, o) in remote.enumerated() {
@@ -351,7 +367,7 @@ enum WebLinkMerge {
         // The same monitor set up on both sides before they were linked is one monitor.
         var twins = Set<UUID>()
         for w in local.watches where webID[w.id] == nil {
-            guard let mine = WebMonitor(w, minutes: local.minutes[w.id]) else { continue }
+            guard let mine = WebMonitor(w, minutes: local.minutes[w.id], again: local.again[w.id]) else { continue }
             let twin = remote.compactMap { $0["id"] as? String }.first {
                 !claimed.contains($0) && entries[$0]?.monitor?.sameTarget(as: mine) == true
             }
@@ -391,6 +407,8 @@ enum WebLinkMerge {
             // A monitor that was never paused has no `enabled` key at all: keep it that way.
             if m.paused { out.watches[i].enabled = false } else if out.watches[i].enabled == false { out.watches[i].enabled = nil }
             out.minutes[id] = m.minutes
+            // The web said nothing about a reminder for an alert that is off: keep this side's.
+            if m.alert { out.again[id] = m.againMinutes }
             return true
         }
 
@@ -398,7 +416,7 @@ enum WebLinkMerge {
             guard let id = webID[w.id] else { continue }
             let known = base.monitors[id].flatMap { $0.local == w.id ? $0 : nil }
             let theirs = entries[id]
-            guard var mine = WebMonitor(w, minutes: local.minutes[w.id]), theirs?.opaque != true else {
+            guard var mine = WebMonitor(w, minutes: local.minutes[w.id], again: local.again[w.id]), theirs?.opaque != true else {
                 out.base[id] = known     // nothing to compare: neither changed nor deleted
                 continue
             }
@@ -408,9 +426,15 @@ enum WebLinkMerge {
             } else if twins.contains(w.id), let t = theirs?.monitor, !t.matches(mine) {
                 // Never compared before: keep what either side had set up.
                 if !w.hasAlias { mine.label = t.label }
-                if t.alert, !mine.alert { mine.alert = true; mine.after = t.after }
+                if t.alert, !mine.alert { mine.alert = true; mine.after = t.after; mine.again = t.again }
                 stamp = max(now, (theirs?.updated ?? 0) + 1)
                 _ = adopt(mine, for: w.id)
+            }
+            // Not changed on the web since the last sync, yet not what it was then: an older
+            // build rewrote it without a field it doesn't know (the reminder) — say it again.
+            if let known, let theirs, !theirs.deleted, let t = theirs.monitor, theirs.updated <= known.updated,
+               !t.matches(known.content), !t.matches(mine) {
+                stamp = max(stamp, now, known.updated + 1)
             }
             if let theirs, !theirs.deleted, let t = theirs.monitor {
                 if t.matches(mine) {
@@ -425,6 +449,7 @@ enum WebLinkMerge {
             } else if let theirs, theirs.deleted, stamp <= theirs.updated {
                 out.watches.removeAll { $0.id == w.id }
                 out.minutes[w.id] = nil
+                out.again[w.id] = nil
             } else if put(id, mine, stamp: stamp) {
                 out.base[id] = .init(local: w.id, content: mine, updated: stamp)
             }
@@ -442,6 +467,7 @@ enum WebLinkMerge {
                 // Changed on the web after it was deleted here: it comes back.
                 out.watches.append(w)
                 out.minutes[b.local] = t.minutes
+                out.again[b.local] = t.againMinutes
                 webID[b.local] = id
                 out.base[id] = .init(local: b.local, content: t, updated: theirs.updated)
             }
@@ -455,6 +481,7 @@ enum WebLinkMerge {
             guard let w = t.watch(id: uuid), !taken(w) else { continue }
             out.watches.append(w)
             out.minutes[uuid] = t.minutes
+            out.again[uuid] = t.againMinutes
             webID[uuid] = id
             out.base[id] = .init(local: uuid, content: t, updated: e.updated)
         }

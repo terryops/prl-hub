@@ -122,9 +122,12 @@ struct OfflineAlertsView: View {
             }
             Spacer(minLength: Pearl.Space.xs)
             OfflineAlertPicker(watch: w, store: store) {
-                Text(m.map { Loc("%d 分钟", $0) } ?? Loc("不提醒"))
-                    .font(.subheadline.weight(.medium))
-                    .monospacedDigit()
+                HStack(spacing: 3) {
+                    Text(m.map(OfflineAlertStore.durationText) ?? Loc("不提醒"))
+                        .monospacedDigit()
+                    if store.reminder(for: w.id) != nil { Image(systemName: "repeat").imageScale(.small) }
+                }
+                .font(.subheadline.weight(.medium))
             }
         }
         .padding(.vertical, Pearl.Space.sm)
@@ -138,8 +141,10 @@ struct OfflineAlertsView: View {
             Label(Loc("矿池暂时查询不到，恢复后继续监控"), systemImage: "exclamationmark.triangle.fill")
                 .font(.caption).foregroundStyle(.orange).lineLimit(1).minimumScaleFactor(0.8)
         } else {
-            Text(m.map { Loc("矿机离线满 %d 分钟时通知", $0) } ?? (w.hasAlias ? w.pool.label : shortAddress(w)))
-                .font(.caption).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
+            Text(m.map { OfflineAlertStore.summary(minutes: $0, again: store.reminder(for: w.id)) }
+                 ?? (w.hasAlias ? w.pool.label : shortAddress(w)))
+                .font(.caption).foregroundStyle(.secondary).lineLimit(2).minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -151,8 +156,9 @@ struct OfflineAlertsView: View {
     }
 }
 
-/// The 不提醒 / 10 / 15 / 30 / 60 分钟 choice for one monitor, as a menu. Shared by the
-/// 掉线提醒 page (a labelled button) and the monitor card (the chip beside its name).
+/// The 不提醒 / 10 分钟 … 2 小时 choice for one monitor, and — once it has an alert — the
+/// reminder after it, as one menu. Shared by the 掉线提醒 page (a labelled button) and the
+/// monitor card (the chip beside its name).
 struct OfflineAlertPicker<MenuLabel: View>: View {
     let watch: PoolWatch
     @ObservedObject var store: OfflineAlertStore
@@ -168,15 +174,32 @@ struct OfflineAlertPicker<MenuLabel: View>: View {
                 // At the cap, a monitor without an alert can't get one; the others still can change.
                 if store.threshold(for: watch.id) != nil || store.canAddMore {
                     ForEach(OfflineAlertStore.choices, id: \.self) { m in
-                        item(m, Loc("离线 %d 分钟后", m))
+                        item(m, Loc("离线 %@后", OfflineAlertStore.durationText(m)))
                     }
                 }
             } header: {
                 Text(Loc("掉线提醒：离线多久后通知"))
             }
+            // Only with an alert: a reminder of nothing means nothing.
+            if store.threshold(for: watch.id) != nil {
+                Section {
+                    reminder(nil, Loc("只提醒一次"))
+                    ForEach(OfflineAlertStore.againChoices, id: \.self) { m in
+                        reminder(m, Loc("%@后", OfflineAlertStore.durationText(m)))
+                    }
+                } header: {
+                    Text(Loc("仍未恢复时再提醒一次"))
+                }
+            }
         } label: {
             label()
         }
+    }
+
+    /// One reminder delay, ticked while it is the monitor's.
+    private func reminder(_ minutes: Int?, _ title: String) -> some View {
+        Toggle(title, isOn: Binding(get: { store.reminder(for: watch.id) == minutes },
+                                    set: { if $0 { store.setReminder(watch.id, minutes: minutes) } }))
     }
 
     /// One choice, ticked while it is the monitor's. (Tapping the ticked one changes nothing.)

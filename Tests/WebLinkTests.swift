@@ -110,9 +110,9 @@ struct WebLinkMonitorTests {
     private let addr2 = "prl1pmkyxyht58rzhe7cj9ha7ncpm6r28x6g0htq93ffs5hsh7lqsxj7qw9pyjv"
     private let f2 = "https://www.f2pool.com/mining-user-prl/0123456789abcdef0123456789abcdef?user_name=My%20Rig"
 
-    private func merge(_ watches: [PoolWatch], minutes: [UUID: Int] = [:], base: WebLinkBase = WebLinkBase(),
+    private func merge(_ watches: [PoolWatch], minutes: [UUID: Int] = [:], again: [UUID: Int] = [:], base: WebLinkBase = WebLinkBase(),
                        remote: [String: Any]?, now: Int64 = 5_000) -> WebLinkOutcome {
-        WebLinkMerge.merge(local: WebLinkLocal(watches: watches, minutes: minutes, alerts: CloudAlerts(), window: nil),
+        WebLinkMerge.merge(local: WebLinkLocal(watches: watches, minutes: minutes, again: again, alerts: CloudAlerts(), window: nil),
                            base: base, remote: remote, timeZone: "Asia/Shanghai", lang: "en", now: now)
     }
 
@@ -296,6 +296,69 @@ struct WebLinkMonitorTests {
         #expect(sent[1]["pool"] as? String == "NewPool")
         #expect((out.config["devices"] as? [[String: Any]])?.first?["id"] as? String == "d1")
         #expect(out.local.watches.count == 1)
+    }
+
+    /// 掉线提醒's reminder travels with the monitor, in seconds, only while the alert is on.
+    @Test func theReminderGoesUpAndComesDown() throws {
+        let a = PoolWatch(pool: .kryptex, address: addr)
+        let first = merge([a], minutes: [a.id: 120], again: [a.id: 60], remote: nil)
+        #expect(monitors(first.config)[0]["after"] as? Int == 7200)
+        #expect(monitors(first.config)[0]["again"] as? Int == 3600)
+        #expect(!merge([a], minutes: [a.id: 120], again: [a.id: 60], base: first.base, remote: first.config, now: 9_000).upload)
+
+        // Switched off here: the key goes.
+        let off = merge([a], minutes: [a.id: 120], base: first.base, remote: first.config, now: 9_000)
+        #expect(off.upload)
+        #expect(monitors(off.config)[0]["again"] == nil)
+
+        // Changed on the web: it comes down.
+        var theirs = first.config
+        var m = monitors(theirs)
+        m[0]["again"] = 14400
+        m[0]["updated"] = Int64(12_000)
+        theirs["monitors"] = m
+        let down = merge([a], minutes: [a.id: 120], again: [a.id: 60], base: first.base, remote: theirs, now: 13_000)
+        #expect(!down.upload)
+        #expect(down.local.again == [a.id: 240])
+
+        // The alert switched off on the web: this side keeps its reminder for when it is back on.
+        m[0]["alert"] = false
+        m[0]["again"] = nil
+        m[0]["updated"] = Int64(14_000)
+        theirs["monitors"] = m
+        let quiet = merge([a], minutes: [a.id: 120], again: [a.id: 60], base: first.base, remote: theirs, now: 15_000)
+        #expect(quiet.local.minutes.isEmpty)
+        #expect(quiet.local.again == [a.id: 60])
+
+        // A delay this build doesn't offer: left alone on both sides.
+        m[0]["alert"] = true
+        m[0]["again"] = 999
+        theirs["monitors"] = m
+        let odd = merge([a], minutes: [a.id: 120], again: [a.id: 60], base: first.base, remote: theirs, now: 15_000)
+        #expect(!odd.upload)
+        #expect(odd.local.again == [a.id: 60])
+    }
+
+    /// An older build (2.0, or a browser tab from before reminders) rewrites the monitors
+    /// without the field it doesn't know, leaving their stamps alone: this side says it again.
+    @Test func aReminderAnOlderBuildDroppedIsSentAgain() throws {
+        let a = PoolWatch(pool: .kryptex, address: addr)
+        let first = merge([a], minutes: [a.id: 30], again: [a.id: 120], remote: nil)
+        var theirs = first.config
+        var m = monitors(theirs)
+        m[0]["again"] = nil
+        theirs["monitors"] = m
+        let out = merge([a], minutes: [a.id: 30], again: [a.id: 120], base: first.base, remote: theirs, now: 9_000)
+        #expect(out.upload)
+        #expect(monitors(out.config)[0]["again"] as? Int == 7200)
+        #expect(monitors(out.config)[0]["updated"] as? Int64 == 9_000)
+        #expect(out.local.again == [a.id: 120])
+        // A change the web did make (a newer stamp) still wins.
+        m[0]["updated"] = Int64(8_000)
+        theirs["monitors"] = m
+        let theirsWins = merge([a], minutes: [a.id: 30], again: [a.id: 120], base: first.base, remote: theirs, now: 9_000)
+        #expect(!theirsWins.upload)
+        #expect(theirsWins.local.again.isEmpty)
     }
 
     @Test func theWebsLimitOfTwentyIsNeverPassed() {

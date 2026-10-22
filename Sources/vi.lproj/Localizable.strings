@@ -977,10 +977,15 @@
 "新功能：掉线提醒" = "Mới: Cảnh báo ngoại tuyến";
 "不提醒" = "Tắt";
 "%d 分钟" = "%d phút";
-"离线 %d 分钟后" = "Sau %d phút ngoại tuyến";
-"矿机离线满 %d 分钟时通知" = "Báo sau %d phút ngoại tuyến";
 "最多可为 %d 个监控开启掉线提醒。" = "Có thể bật cảnh báo ngoại tuyến cho tối đa %d mục theo dõi.";
 "掉线提醒：离线多久后通知" = "Cảnh báo ngoại tuyến: báo khi một worker ngoại tuyến";
+"%d 小时" = "%d giờ";
+"离线 %@后" = "Sau %@ ngoại tuyến";
+"矿机离线满 %@时通知" = "Báo sau %@ ngoại tuyến";
+"离线满 %1$@时通知，%2$@后再提醒一次" = "Báo sau %1$@ ngoại tuyến, nhắc lại sau %2$@";
+"仍未恢复时再提醒一次" = "Vẫn ngoại tuyến? Nhắc lại";
+"只提醒一次" = "Chỉ một lần";
+"%@后" = "Sau %@";
 "掉线提醒：矿机离线 10 分钟以上就通知你" = "Cảnh báo ngoại tuyến: biết khi worker ngoại tuyến từ 10 phút";
 "矿机掉线，第一时间知道" = "Biết ngay khi worker ngoại tuyến";
 "矿机离线达到你设定的时长就推送通知，恢复上线后再通知一次，不用打开 App。服务器每 3 分钟向矿池查询一次。" = "Nhận thông báo khi worker ngoại tuyến đủ thời gian bạn chọn, và một thông báo nữa khi nó trực tuyến trở lại — không cần mở ứng dụng. Máy chủ hỏi pool mỗi 3 phút.";

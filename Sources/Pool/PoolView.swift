@@ -351,6 +351,7 @@ private struct CardRow: View {
                   addressHr24hRaw: addr.map { store.addressHashrate24h($0) } ?? 0,
                   prlUsd: store.prlUsd, minBodyHeight: cols > 1 ? rowHeight : 0,
                   alertMinutes: alerts.threshold(for: w.id),
+                  alertAgain: alerts.reminder(for: w.id),
                   onEdit: { onEdit(w) },
                   onDelete: { store.removeWatch(w.id) },
                   onRename: { store.renameWatch(w.id, alias: $0) },
@@ -421,6 +422,8 @@ private struct WatchCard: View {
     var minBodyHeight: CGFloat = 0
     /// 掉线提醒 for this monitor: minutes offline before the push, nil = none.
     var alertMinutes: Int?
+    /// …and its reminder (minutes after the first push), if any.
+    var alertAgain: Int? = nil
     let onEdit: () -> Void
     let onDelete: () -> Void
     let onRename: (String) -> Void
@@ -588,14 +591,18 @@ private struct WatchCard: View {
         .buttonStyle(.plain)
         .fixedSize()
         .accessibilityLabel(Loc("掉线提醒"))
-        .accessibilityValue(alertMinutes.map { Loc("矿机离线满 %d 分钟时通知", $0) } ?? Loc("不提醒"))
+        .accessibilityValue(alertMinutes.map { OfflineAlertStore.summary(minutes: $0, again: alertAgain) } ?? Loc("不提醒"))
     }
 
     private var alertChip: some View {
         let on = alertMinutes != nil && pro.isPro
         return HStack(spacing: 3) {
             Image(systemName: on ? "bell.fill" : "bell.slash")
-            if on, let alertMinutes { Text(Loc("%d 分钟", alertMinutes)).monospacedDigit() }
+            if on, let alertMinutes {
+                Text(OfflineAlertStore.durationText(alertMinutes)).monospacedDigit()
+                // A reminder is set: the chip says so with a glyph, the menu says when.
+                if alertAgain != nil { Image(systemName: "repeat").imageScale(.small) }
+            }
         }
         .font(.caption.weight(.semibold))
         .foregroundStyle(on ? Pearl.accent : Color.secondary)

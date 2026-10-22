@@ -977,10 +977,15 @@
 "新功能：掉线提醒" = "Novo: alertas de offline";
 "不提醒" = "Desativado";
 "%d 分钟" = "%d min";
-"离线 %d 分钟后" = "Após %d min offline";
-"矿机离线满 %d 分钟时通知" = "Alertar após %d min offline";
 "最多可为 %d 个监控开启掉线提醒。" = "Os alertas de offline podem ficar ativados em até %d monitores.";
 "掉线提醒：离线多久后通知" = "Alerta de offline: avisar depois de quanto tempo offline";
+"%d 小时" = "%d h";
+"离线 %@后" = "Após %@ offline";
+"矿机离线满 %@时通知" = "Alertar após %@ offline";
+"离线满 %1$@时通知，%2$@后再提醒一次" = "Alertar após %1$@ offline e de novo %2$@ depois";
+"仍未恢复时再提醒一次" = "Ainda offline? Avisar de novo";
+"只提醒一次" = "Só uma vez";
+"%@后" = "%@ depois";
 "掉线提醒：矿机离线 10 分钟以上就通知你" = "Alertas de offline: saiba quando um worker ficar offline por 10 minutos ou mais";
 "矿机掉线，第一时间知道" = "Saiba quando um worker ficar offline";
 "矿机离线达到你设定的时长就推送通知，恢复上线后再通知一次，不用打开 App。服务器每 3 分钟向矿池查询一次。" = "Receba uma notificação quando um worker ficar offline pelo tempo que você escolher, e outra quando ele voltar a ficar online — sem precisar abrir o app. O servidor consulta o pool a cada 3 minutos.";

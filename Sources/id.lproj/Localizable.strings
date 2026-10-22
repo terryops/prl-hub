@@ -977,10 +977,15 @@
 "新功能：掉线提醒" = "Baru: Peringatan Offline";
 "不提醒" = "Mati";
 "%d 分钟" = "%d mnt";
-"离线 %d 分钟后" = "Setelah %d mnt offline";
-"矿机离线满 %d 分钟时通知" = "Notifikasi setelah %d mnt offline";
 "最多可为 %d 个监控开启掉线提醒。" = "Peringatan offline dapat aktif untuk maksimal %d monitor.";
 "掉线提醒：离线多久后通知" = "Peringatan offline: beri tahu saat sebuah worker offline";
+"%d 小时" = "%d jam";
+"离线 %@后" = "Setelah %@ offline";
+"矿机离线满 %@时通知" = "Notifikasi setelah %@ offline";
+"离线满 %1$@时通知，%2$@后再提醒一次" = "Notifikasi setelah %1$@ offline, diulang %2$@ kemudian";
+"仍未恢复时再提醒一次" = "Masih offline? Ingatkan lagi";
+"只提醒一次" = "Sekali saja";
+"%@后" = "%@ kemudian";
 "掉线提醒：矿机离线 10 分钟以上就通知你" = "Peringatan offline: tahu saat worker offline 10+ menit";
 "矿机掉线，第一时间知道" = "Tahu saat worker offline";
 "矿机离线达到你设定的时长就推送通知，恢复上线后再通知一次，不用打开 App。服务器每 3 分钟向矿池查询一次。" = "Dapatkan notifikasi saat worker offline selama waktu yang Anda pilih, dan satu lagi saat worker kembali online — tanpa membuka aplikasi. Server memeriksa pool setiap 3 menit.";

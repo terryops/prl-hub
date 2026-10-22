@@ -977,10 +977,15 @@
 "新功能：掉线提醒" = "Yeni: Çevrimdışı Alarmları";
 "不提醒" = "Kapalı";
 "%d 分钟" = "%d dk";
-"离线 %d 分钟后" = "%d dk çevrimdışı kalınca";
-"矿机离线满 %d 分钟时通知" = "%d dk çevrimdışı kalınca bildir";
 "最多可为 %d 个监控开启掉线提醒。" = "Çevrimdışı alarmları en fazla %d izleme için açılabilir.";
 "掉线提醒：离线多久后通知" = "Çevrimdışı alarmı: worker şu süre çevrimdışı kalınca bildir";
+"%d 小时" = "%d sa";
+"离线 %@后" = "%@ çevrimdışı kalınca";
+"矿机离线满 %@时通知" = "%@ çevrimdışı kalınca bildir";
+"离线满 %1$@时通知，%2$@后再提醒一次" = "%1$@ çevrimdışı kalınca bildir, %2$@ sonra yine hatırlat";
+"仍未恢复时再提醒一次" = "Hâlâ çevrimdışıysa yine hatırlat";
+"只提醒一次" = "Yalnızca bir kez";
+"%@后" = "%@ sonra";
 "掉线提醒：矿机离线 10 分钟以上就通知你" = "Çevrimdışı alarmları: bir worker 10 dakikadan uzun süre çevrimdışı kalınca haberiniz olsun";
 "矿机掉线，第一时间知道" = "Worker çevrimdışı olunca haberiniz olsun";
 "矿机离线达到你设定的时长就推送通知，恢复上线后再通知一次，不用打开 App。服务器每 3 分钟向矿池查询一次。" = "Bir worker seçtiğiniz süre boyunca çevrimdışı kaldığında bildirim alırsınız, yeniden çevrimiçi olduğunda bir bildirim daha gelir; uygulamayı açmanız gerekmez. Sunucu havuzu 3 dakikada bir sorgular.";

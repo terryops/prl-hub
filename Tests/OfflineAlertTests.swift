@@ -70,7 +70,31 @@ struct OfflineAlertWireTests {
         #expect(item.id.range(of: #"^[A-Za-z0-9-]{1,64}$"#, options: .regularExpression) != nil)
         #expect(item.addr.range(of: #"^prl1[0-9a-z]{20,100}$"#, options: .regularExpression) != nil)
         #expect(item.pool == "Pearl Fortune")
-        #expect(OfflineAlertStore.choices.map { $0 * 60 } == [600, 900, 1800, 3600])
+        #expect(OfflineAlertStore.choices.map { $0 * 60 } == [600, 900, 1800, 3600, 5400, 7200])
+        #expect(OfflineAlertStore.againChoices.map { $0 * 60 } == [1800, 3600, 7200, 14400])
+    }
+
+    /// The reminder goes with its alert, in seconds, and only as one the worker offers;
+    /// without one the key is left out (a worker from before reminders reads that as none).
+    @Test func theReminderIsSentWithItsAlert() throws {
+        let a = PoolWatch(pool: .kryptex, address: addr)
+        let b = PoolWatch(pool: .alphaPool, address: addr)
+        let c = PoolWatch(pool: .heroMiners, address: addr)
+        let list = OfflineAlertWire.list(watches: [a, b, c], minutes: [a.id: 120, b.id: 10, c.id: 90],
+                                         again: [a.id: 60, b.id: 45, PoolWatch(pool: .kryptex, address: addr).id: 30])
+        #expect(list.map(\.after) == [7200, 600, 5400])
+        #expect(list.map(\.again) == [3600, 0, 0])
+        #expect(list[0].payload["again"] as? Int == 3600)
+        #expect(list[1].payload["again"] == nil)
+        // No alert, no reminder: nothing is sent for the monitor at all.
+        #expect(OfflineAlertWire.list(watches: [a], minutes: [:], again: [a.id: 60]).isEmpty)
+    }
+
+    @Test func durationsReadInMinutesOrWholeHours() {
+        #expect(OfflineAlertStore.durationText(10) == Loc("%d 分钟", 10))
+        #expect(OfflineAlertStore.durationText(90) == Loc("%d 分钟", 90))
+        #expect(OfflineAlertStore.durationText(120) == Loc("%d 小时", 2))
+        #expect(OfflineAlertStore.durationText(60) == Loc("%d 小时", 1))
     }
 }
 
@@ -87,10 +111,22 @@ struct OfflineAlertStorageTests {
     /// stored, so the next save writes it back instead of deleting it from iCloud.
     @Test func choicesThisBuildCannotUseAreKeptVerbatim() {
         let mine = UUID(), newer = UUID()
-        let json = #"{"\#(mine.uuidString)":15,"\#(newer.uuidString)":120,"future-key":5}"#
+        let json = #"{"\#(mine.uuidString)":15,"\#(newer.uuidString)":180,"future-key":5}"#
         let (known, foreign) = OfflineAlertStore.split(Data(json.utf8))
         #expect(known == [mine: 15])
-        #expect(foreign == [newer.uuidString: 120, "future-key": 5])
+        #expect(foreign == [newer.uuidString: 180, "future-key": 5])
+    }
+
+    /// The reminders have a key of their own, read against their own choices.
+    @Test func remindersAreReadAgainstTheirOwnChoices() {
+        let id = UUID(), odd = UUID()
+        let json = #"{"\#(id.uuidString)":240,"\#(odd.uuidString)":10}"#
+        let (known, foreign) = OfflineAlertStore.split(Data(json.utf8), choices: OfflineAlertStore.againChoices)
+        #expect(known == [id: 240])
+        #expect(foreign == [odd.uuidString: 10])
+        #expect(OfflineAlertStore.againKey != OfflineAlertStore.key)
+        #expect(CloudSync.syncedKeys.contains(OfflineAlertStore.againKey))
+        #expect(WebLinkStore.watchedKeys.contains(OfflineAlertStore.againKey))
     }
 }
 
@@ -111,7 +147,7 @@ struct DeviceRegistrationBodyTests {
         garage.alias = "Garage"
         let f2 = PoolWatch(id: UUID(uuidString: "6F1B7C2A-1111-4C1C-9C43-000000000002")!, pool: .f2pool,
                            address: "https://www.f2pool.com/mining-user-prl/0123456789abcdef0123456789abcdef?user_name=My%20Rig")
-        let watches = OfflineAlertWire.list(watches: [garage, f2], minutes: [garage.id: 15, f2.id: 60])
+        let watches = OfflineAlertWire.list(watches: [garage, f2], minutes: [garage.id: 15, f2.id: 60], again: [garage.id: 60])
 
         let body = PriceAlertStore.registrationBody(
             rules: [above.wire, move.wire], watches: watches, window: PushWindow(start: 480, end: 1380),

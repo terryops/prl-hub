@@ -36,7 +36,7 @@ final class WebLinkStore: NSObject, ObservableObject, ASWebAuthenticationPresent
 
     /// Derive the shared preference keys from their wire mapping so a mining
     /// field cannot be uploaded yet left outside account/iCloud isolation.
-    nonisolated static let watchedKeys: Set<String> = Set([PoolStore.watchesKey, OfflineAlertStore.key,
+    nonisolated static let watchedKeys: Set<String> = Set([PoolStore.watchesKey, OfflineAlertStore.key, OfflineAlertStore.againKey,
                                                        PriceAlertStore.syncKey, PriceAlertStore.windowKey])
         .union(WebSharedMerge.nativeKeys)
     private static let account = "account.session"
@@ -406,17 +406,20 @@ private struct Stored: Equatable {
     var local: WebLinkLocal
     var foreignWatches: [Data] = []
     var foreignMinutes: [String: Int] = [:]
+    var foreignAgain: [String: Int] = [:]
 
     static func read() -> Stored {
         let d = UserDefaults.standard
         let watches = d.data(forKey: PoolStore.watchesKey).flatMap(PoolStore.decodeStoredWatches)
         let minutes = OfflineAlertStore.split(d.data(forKey: OfflineAlertStore.key))
+        let again = OfflineAlertStore.split(d.data(forKey: OfflineAlertStore.againKey), choices: OfflineAlertStore.againChoices)
         let rules = d.data(forKey: PriceAlertStore.syncKey)
         // No stored copy = no alerts yet; one this build can't read = hands off.
         let alerts = rules == nil ? CloudAlerts() : CloudAlerts.decode(rules)
         let window = d.data(forKey: PriceAlertStore.windowKey).flatMap { try? JSONDecoder().decode(PushWindow.self, from: $0) }
-        return Stored(local: WebLinkLocal(watches: watches?.known ?? [], minutes: minutes.known, alerts: alerts, window: window),
-                      foreignWatches: watches?.foreign ?? [], foreignMinutes: minutes.foreign)
+        return Stored(local: WebLinkLocal(watches: watches?.known ?? [], minutes: minutes.known, again: again.known,
+                                          alerts: alerts, window: window),
+                      foreignWatches: watches?.foreign ?? [], foreignMinutes: minutes.foreign, foreignAgain: again.foreign)
     }
 
     /// Write what the web changed, the way an incoming iCloud change is written: into
@@ -435,11 +438,12 @@ private struct Stored: Equatable {
             changed.append(PoolStore.watchesKey)
         }
         if outcome.local.minutes != local.minutes {
-            var raw = foreignMinutes
-            for (id, m) in outcome.local.minutes { raw[id.uuidString] = m }
-            if raw.isEmpty { d.removeObject(forKey: OfflineAlertStore.key) }
-            else if let data = try? JSONEncoder().encode(raw) { d.set(data, forKey: OfflineAlertStore.key) }
+            OfflineAlertStore.store(outcome.local.minutes, foreign: foreignMinutes, key: OfflineAlertStore.key, defaults: d)
             changed.append(OfflineAlertStore.key)
+        }
+        if outcome.local.again != local.again {
+            OfflineAlertStore.store(outcome.local.again, foreign: foreignAgain, key: OfflineAlertStore.againKey, defaults: d)
+            changed.append(OfflineAlertStore.againKey)
         }
         if let alerts = outcome.alerts, alerts != local.alerts, let data = alerts.encoded() {
             d.set(data, forKey: PriceAlertStore.syncKey)
