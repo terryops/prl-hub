@@ -1098,8 +1098,7 @@
 
 // Pool income comparison
 "真实费用" = "Chi phí thực";
-"真实费用 =（1 − 实际结算收益 ÷ 同期理论收益）× 100%；负值表示收益高于理论。" = "Chi phí thực = (1 − thu nhập đã được ghi có ÷ thu nhập lý thuyết cùng kỳ) × 100%; giá trị âm là thu nhập vượt lý thuyết.";
-"PPS、PPS+ 与 FPPS 使用有统计区间的结算样本。PPLNS、PROP 根据统计期内的矿池产出和公示池费估算；PearlHash 未公布方案，但链上核实其按出块分配收益，同样估算。估算包含出块运气的影响。数据不足或其他方案显示「—」。不含矿工软件抽水及转账费。PF 分别展示 PPS 与 PPLNS。PPLNS、PROP 与 PearlHash 需要最近 7 天内至少 5 天的数据，且这段时间按矿池算力应出至少 100 个块；否则显示「—」。" = "PPS, PPS+ và FPPS dùng số liệu thu nhập đã quyết toán trong khoảng thời gian xác định. PPLNS và PROP được ước tính từ sản lượng pool và phí công bố trong kỳ lấy mẫu, PearlHash cũng vậy: pool này không công bố phương thức nhưng dữ liệu trên chuỗi cho thấy nó chia các khối tìm được; ước tính bao gồm ảnh hưởng của may mắn tìm khối. Thiếu dữ liệu và phương thức khác hiển thị “—”. Không gồm phí phần mềm và chuyển tiền. PF hiển thị PPS và PPLNS riêng biệt. PPLNS, PROP và PearlHash cần ít nhất 5 ngày dữ liệu trong 7 ngày gần nhất và hashrate của pool đủ để kỳ vọng ít nhất 100 khối trong khoảng đó; nếu không sẽ hiển thị “—”.";
+"真实费用 =（1 − 扣池费后收益 ÷ 理论收益）× 100%；负值表示收益高于理论。PPS、PPS+ 与 FPPS 使用有统计区间的结算样本。PPLNS、PROP 根据统计期内的矿池出块和公示池费估算，并扣除出块运气：矿池自己公布的每块工作量（effort）说明这些块用了多少算力，剩下的就是池费和矿池损耗的算力。不公布每块工作量的矿池（如 PearlHash）显示「—」，数据不足或其他方案同样显示「—」。不含矿工软件抽水及转账费。PF 分别展示 PPS 与 PPLNS。PPLNS 与 PROP 需要最近 7 天内至少 5 天的数据、矿池自己公布的这段时间每个块的工作量（effort），且这段时间按矿池算力应出至少 100 个块；否则显示「—」。" = "Chi phí thực = (1 − thu nhập sau phí pool ÷ thu nhập lý thuyết) × 100%; giá trị âm nghĩa là thu nhập vượt lý thuyết. PPS, PPS+ và FPPS dùng số liệu thu nhập đã quyết toán trong khoảng thời gian xác định. PPLNS và PROP được ước tính từ các khối pool tìm được và phí công bố trong kỳ lấy mẫu, đã loại bỏ may mắn tìm khối: effort của từng khối do chính pool công bố cho biết mỗi khối tốn bao nhiêu công, nên chỉ còn lại phí và phần công mà pool làm mất. Các pool không công bố effort theo khối (như PearlHash), thiếu dữ liệu và phương thức khác hiển thị “—”. Không gồm phí phần mềm và chuyển tiền. PF hiển thị PPS và PPLNS riêng biệt. PPLNS và PROP cần ít nhất 5 ngày dữ liệu trong 7 ngày gần nhất, effort của từng khối do chính pool công bố cho khoảng đó, và hashrate của pool đủ để kỳ vọng ít nhất 100 khối; nếu không sẽ hiển thị “—”.";
 "真实费用取自有日期的结算样本；「≈」表示网络历史插值估算，含统计误差，不等同于矿池额外抽水。" = "Chi phí thực dựa trên mẫu quyết toán có ngày. “≈” là nội suy lịch sử mạng, có sai số đo lường và không chứng minh pool thu thêm phí.";
 
 "数据说明" = "Thông tin dữ liệu";
@@ -1134,7 +1133,7 @@
 // Short real-cost explanation
 "这是按各矿池标注的样本时间段，计算的实际结算收益相对理论收益的折损率。" = "Đây là tỷ lệ thu nhập đã quyết toán thiếu hụt so với thu nhập lý thuyết trong kỳ mẫu được ghi cho mỗi pool.";
 "这是 %@ 期间，实际结算收益相对理论收益的折损率。" = "Đây là tỷ lệ thu nhập đã quyết toán thiếu hụt so với thu nhập lý thuyết trong %@.";
-"这是 %@ 期间按矿池产出和公示池费估算的折损率，包含出块运气的影响。" = "Đây là tỷ lệ thu nhập thiếu hụt ước tính từ sản lượng pool và phí công bố trong %@; bao gồm ảnh hưởng của may mắn tìm khối.";
+"这是 %@ 期间按矿池出块和公示池费估算的折损率，已扣除出块运气，剩下的是池费和矿池损耗的算力。" = "Đây là tỷ lệ thu nhập thiếu hụt ước tính từ các khối pool tìm được và phí công bố trong %@, đã loại bỏ may mắn tìm khối: chỉ còn lại phí và phần công mà pool làm mất.";
 
 "左右滑动查看完整对比" = "Vuốt ngang để so sánh tất cả các cột";
 "提醒频率" = "Tần suất cảnh báo";

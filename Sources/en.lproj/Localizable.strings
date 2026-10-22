@@ -1098,8 +1098,7 @@
 
 // Pool income comparison
 "真实费用" = "Real Cost";
-"真实费用 =（1 − 实际结算收益 ÷ 同期理论收益）× 100%；负值表示收益高于理论。" = "Real cost = (1 − actual credited earnings ÷ theoretical earnings for the same period) × 100%; negative means earnings above theory.";
-"PPS、PPS+ 与 FPPS 使用有统计区间的结算样本。PPLNS、PROP 根据统计期内的矿池产出和公示池费估算；PearlHash 未公布方案，但链上核实其按出块分配收益，同样估算。估算包含出块运气的影响。数据不足或其他方案显示「—」。不含矿工软件抽水及转账费。PF 分别展示 PPS 与 PPLNS。PPLNS、PROP 与 PearlHash 需要最近 7 天内至少 5 天的数据，且这段时间按矿池算力应出至少 100 个块；否则显示「—」。" = "PPS, PPS+ and FPPS use dated settlement measurements. PPLNS and PROP use pool output and the published pool fee over the sample window, as does PearlHash, which names no scheme but pays out the blocks it finds (checked on chain); the estimate includes block luck. Missing data and other schemes show “—”. Software and transfer fees are excluded. PF shows PPS and PPLNS separately. PPLNS, PROP and PearlHash require at least 5 days of data within the last 7 days, and enough pool hashrate in that time to expect at least 100 blocks; otherwise “—” is shown.";
+"真实费用 =（1 − 扣池费后收益 ÷ 理论收益）× 100%；负值表示收益高于理论。PPS、PPS+ 与 FPPS 使用有统计区间的结算样本。PPLNS、PROP 根据统计期内的矿池出块和公示池费估算，并扣除出块运气：矿池自己公布的每块工作量（effort）说明这些块用了多少算力，剩下的就是池费和矿池损耗的算力。不公布每块工作量的矿池（如 PearlHash）显示「—」，数据不足或其他方案同样显示「—」。不含矿工软件抽水及转账费。PF 分别展示 PPS 与 PPLNS。PPLNS 与 PROP 需要最近 7 天内至少 5 天的数据、矿池自己公布的这段时间每个块的工作量（effort），且这段时间按矿池算力应出至少 100 个块；否则显示「—」。" = "Real cost = (1 − earnings after pool fee ÷ theoretical earnings) × 100%; negative means earnings above theory. PPS, PPS+ and FPPS use dated settlement measurements. PPLNS and PROP use the pool’s blocks and published pool fee over the sample window with block luck taken out: the pool’s own per-block effort shows how much work its blocks took, so what remains is the fee and the work the pool loses. Pools that publish no per-block effort, such as PearlHash, show “—”, as do missing data and other schemes. Software and transfer fees are excluded. PF shows PPS and PPLNS separately. PPLNS and PROP require at least 5 days of data within the last 7 days, the pool’s own per-block effort for that time, and enough pool hashrate to expect at least 100 blocks; otherwise “—” is shown.";
 "真实费用取自有日期的结算样本；「≈」表示网络历史插值估算，含统计误差，不等同于矿池额外抽水。" = "Real cost uses dated settlement samples. “≈” means network history was interpolated; the result includes measurement error and does not establish extra pool commission.";
 
 "数据说明" = "Data notes";
@@ -1134,7 +1133,7 @@
 // Short real-cost explanation
 "这是按各矿池标注的样本时间段，计算的实际结算收益相对理论收益的折损率。" = "This is the shortfall of settled earnings versus theoretical earnings over each pool’s displayed sample period.";
 "这是 %@ 期间，实际结算收益相对理论收益的折损率。" = "This is the shortfall of settled earnings versus theoretical earnings during %@.";
-"这是 %@ 期间按矿池产出和公示池费估算的折损率，包含出块运气的影响。" = "This is the shortfall estimated from pool output and the published pool fee during %@; it includes block luck.";
+"这是 %@ 期间按矿池出块和公示池费估算的折损率，已扣除出块运气，剩下的是池费和矿池损耗的算力。" = "This is the shortfall estimated from the pool’s blocks and published pool fee during %@, with block luck taken out: what remains is the fee and the work the pool loses.";
 
 "左右滑动查看完整对比" = "Swipe sideways to compare all columns";
 "提醒频率" = "Alert frequency";

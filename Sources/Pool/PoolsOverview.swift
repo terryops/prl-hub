@@ -177,10 +177,11 @@ struct PPSFeeMeasurement: Codable, Sendable {
     }
 }
 
-/// The service's Real Cost estimate for a shared-reward payout (PPLNS, PROP, or PearlHash,
-/// which names no scheme but pays out the blocks it finds): 1 − pool output after its
-/// published fee ÷ theory over the window, so block luck is part of it. The service shows
-/// one only with 5 days of data in the last 7 and work worth at least 100 blocks.
+/// The service's Real Cost estimate for a shared-reward payout (PPLNS, PROP): 1 − pool output
+/// after its published fee ÷ theory over the window, with block luck taken out by the pool's
+/// own per-block effort, so what remains is the fee and the work the pool loses. The service
+/// shows one only for pools that publish that effort, with 5 days of data in the last 7 and
+/// work worth at least 100 blocks; PearlHash, which publishes none, gets none.
 struct SharedRealFee: Sendable, Equatable {
     let percent: Double
     let start: Double
@@ -1331,7 +1332,7 @@ private struct RealFeeHelpButton: View {
                                       to: Date(timeIntervalSince1970: window.end))
         return payout.isPPS
             ? Loc("这是 %@ 期间，实际结算收益相对理论收益的折损率。", period)
-            : Loc("这是 %@ 期间按矿池产出和公示池费估算的折损率，包含出块运气的影响。", period)
+            : Loc("这是 %@ 期间按矿池出块和公示池费估算的折损率，已扣除出块运气，剩下的是池费和矿池损耗的算力。", period)
     }
 
     var body: some View {
@@ -1423,8 +1424,7 @@ private struct PoolComparisonNotes: View {
             } else {
                 Text(Loc("收益/PH·天 = 该池实际挖到的块 × 单块奖励 ÷ 算力 ×（1 − 手续费），即到手 PRL；绿色 = 最高。"))
             }
-            Text(Loc("真实费用 =（1 − 实际结算收益 ÷ 同期理论收益）× 100%；负值表示收益高于理论。"))
-            Text(Loc("PPS、PPS+ 与 FPPS 使用有统计区间的结算样本。PPLNS、PROP 根据统计期内的矿池产出和公示池费估算；PearlHash 未公布方案，但链上核实其按出块分配收益，同样估算。估算包含出块运气的影响。数据不足或其他方案显示「—」。不含矿工软件抽水及转账费。PF 分别展示 PPS 与 PPLNS。PPLNS、PROP 与 PearlHash 需要最近 7 天内至少 5 天的数据，且这段时间按矿池算力应出至少 100 个块；否则显示「—」。"))
+            Text(Loc("真实费用 =（1 − 扣池费后收益 ÷ 理论收益）× 100%；负值表示收益高于理论。PPS、PPS+ 与 FPPS 使用有统计区间的结算样本。PPLNS、PROP 根据统计期内的矿池出块和公示池费估算，并扣除出块运气：矿池自己公布的每块工作量（effort）说明这些块用了多少算力，剩下的就是池费和矿池损耗的算力。不公布每块工作量的矿池（如 PearlHash）显示「—」，数据不足或其他方案同样显示「—」。不含矿工软件抽水及转账费。PF 分别展示 PPS 与 PPLNS。PPLNS 与 PROP 需要最近 7 天内至少 5 天的数据、矿池自己公布的这段时间每个块的工作量（effort），且这段时间按矿池算力应出至少 100 个块；否则显示「—」。"))
             if source == .lordOfPearls {
                 Text(Loc("出块为最近 24 小时链上实测（按 coinbase 归属统计），算力取自各矿池自身 API。"))
             }

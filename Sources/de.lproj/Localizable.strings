@@ -1098,8 +1098,7 @@
 
 // Pool income comparison
 "真实费用" = "Reale Kosten";
-"真实费用 =（1 − 实际结算收益 ÷ 同期理论收益）× 100%；负值表示收益高于理论。" = "Reale Kosten = (1 − tatsächlich gutgeschriebener Ertrag ÷ theoretischer Ertrag im selben Zeitraum) × 100%; negativ bedeutet Ertrag über der Theorie.";
-"PPS、PPS+ 与 FPPS 使用有统计区间的结算样本。PPLNS、PROP 根据统计期内的矿池产出和公示池费估算；PearlHash 未公布方案，但链上核实其按出块分配收益，同样估算。估算包含出块运气的影响。数据不足或其他方案显示「—」。不含矿工软件抽水及转账费。PF 分别展示 PPS 与 PPLNS。PPLNS、PROP 与 PearlHash 需要最近 7 天内至少 5 天的数据，且这段时间按矿池算力应出至少 100 个块；否则显示「—」。" = "PPS, PPS+ und FPPS verwenden Messungen abgerechneter Erträge mit festem Zeitraum. PPLNS und PROP werden aus der Poolproduktion und der veröffentlichten Poolgebühr im Beobachtungszeitraum geschätzt, ebenso PearlHash, das kein Verfahren nennt, aber laut Blockchain die gefundenen Blöcke ausschüttet; die Schätzung enthält das Glück beim Finden von Blöcken. Fehlende Daten und andere Verfahren zeigen „—“. Software- und Transfergebühren sind ausgeschlossen. PF zeigt PPS und PPLNS getrennt. PPLNS, PROP und PearlHash benötigen Daten aus mindestens 5 der letzten 7 Tage und genug Pool-Hashrate, um in dieser Zeit mindestens 100 Blöcke zu erwarten; andernfalls wird „—“ angezeigt.";
+"真实费用 =（1 − 扣池费后收益 ÷ 理论收益）× 100%；负值表示收益高于理论。PPS、PPS+ 与 FPPS 使用有统计区间的结算样本。PPLNS、PROP 根据统计期内的矿池出块和公示池费估算，并扣除出块运气：矿池自己公布的每块工作量（effort）说明这些块用了多少算力，剩下的就是池费和矿池损耗的算力。不公布每块工作量的矿池（如 PearlHash）显示「—」，数据不足或其他方案同样显示「—」。不含矿工软件抽水及转账费。PF 分别展示 PPS 与 PPLNS。PPLNS 与 PROP 需要最近 7 天内至少 5 天的数据、矿池自己公布的这段时间每个块的工作量（effort），且这段时间按矿池算力应出至少 100 个块；否则显示「—」。" = "Reale Kosten = (1 − Ertrag nach Poolgebühr ÷ theoretischer Ertrag) × 100%; negative Werte bedeuten mehr Ertrag als theoretisch erwartet. PPS, PPS+ und FPPS verwenden Messungen abgerechneter Erträge mit festem Zeitraum. PPLNS und PROP werden aus den gefundenen Blöcken des Pools und der veröffentlichten Poolgebühr im Beobachtungszeitraum geschätzt, ohne das Glück beim Finden von Blöcken: Der vom Pool veröffentlichte Effort jedes Blocks zeigt, wie viel Arbeit seine Blöcke gekostet haben, sodass nur die Gebühr und die Arbeit bleiben, die der Pool verliert. Pools, die keinen Effort pro Block veröffentlichen (etwa PearlHash), fehlende Daten und andere Verfahren zeigen „—“. Software- und Transfergebühren sind ausgeschlossen. PF zeigt PPS und PPLNS getrennt. PPLNS und PROP benötigen Daten aus mindestens 5 der letzten 7 Tage, den vom Pool selbst veröffentlichten Effort jedes Blocks in dieser Zeit und genug Pool-Hashrate, um mindestens 100 Blöcke zu erwarten; andernfalls wird „—“ angezeigt.";
 "真实费用取自有日期的结算样本；「≈」表示网络历史插值估算，含统计误差，不等同于矿池额外抽水。" = "Reale Kosten stammen aus datierten Abrechnungsstichproben. „≈“ bedeutet interpolierte Netzwerkhistorie; das Ergebnis enthält Messfehler und belegt keine zusätzliche Poolprovision.";
 
 "数据说明" = "Datenhinweise";
@@ -1134,7 +1133,7 @@
 // Short real-cost explanation
 "这是按各矿池标注的样本时间段，计算的实际结算收益相对理论收益的折损率。" = "Dies ist der prozentuale Minderertrag der abgerechneten gegenüber den theoretischen Einnahmen im angegebenen Stichprobenzeitraum des Pools.";
 "这是 %@ 期间，实际结算收益相对理论收益的折损率。" = "Dies ist der prozentuale Minderertrag der abgerechneten gegenüber den theoretischen Einnahmen im Zeitraum %@.";
-"这是 %@ 期间按矿池产出和公示池费估算的折损率，包含出块运气的影响。" = "Dies ist der prozentuale Minderertrag, geschätzt aus der Poolproduktion und der veröffentlichten Poolgebühr im Zeitraum %@; er enthält das Glück beim Finden von Blöcken.";
+"这是 %@ 期间按矿池出块和公示池费估算的折损率，已扣除出块运气，剩下的是池费和矿池损耗的算力。" = "Dies ist der prozentuale Minderertrag, geschätzt aus den gefundenen Blöcken des Pools und der veröffentlichten Poolgebühr im Zeitraum %@, ohne das Glück beim Finden von Blöcken: Es bleiben nur die Gebühr und die Arbeit, die der Pool verliert.";
 
 "左右滑动查看完整对比" = "Seitlich wischen, um alle Spalten zu vergleichen";
 "提醒频率" = "Alarmhäufigkeit";

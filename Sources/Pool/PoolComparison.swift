@@ -25,7 +25,7 @@ struct SharedOverview: Decodable, Sendable {
             let fee, grossPerPH: Double?
             let estimated, solo: Bool
             /// The service's Real Cost for this payout: a PPS settlement measurement, or the
-            /// shared-reward estimate from pool output (PPLNS, PROP, PearlHash). Lossy: a field
+            /// shared-reward estimate from pool output (PPLNS, PROP). Lossy: a field
             /// the app can't read leaves the payout without one, never drops the snapshot.
             var realFeePercent: Double? = nil
             var realFeeEstimated: Bool? = nil
