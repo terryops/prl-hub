@@ -29,8 +29,7 @@ struct PriceAlertPromoCard: View {
                         Text(Loc("价格提醒")).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
                         if !pro.isPro { PearlBadge(text: Loc("高级版"), systemImage: "sparkles") }
                     }
-                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(subtitle).pearlExplanation()
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")

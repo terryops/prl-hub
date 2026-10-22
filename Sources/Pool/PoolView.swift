@@ -9,12 +9,8 @@ struct PoolView: View {
     @EnvironmentObject private var wallet: WalletStore
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var adding = false
-    /// nil = the sheet is adding a new watch; non-nil = editing this watch in place.
-    @State private var editingID: UUID?
-    @State private var newPool: PoolKind = .alphaPool
-    @State private var newAddr = ""
-    @State private var newAlias = ""
+    /// The add / edit sheet, and what it opens with; nil = closed.
+    @State private var draft: WatchDraft?
     @State private var draggingWatch: PoolWatch?
     @ObservedObject private var offlineAlerts = OfflineAlertStore.shared
     /// The 掉线提醒 pointer above the cards was opened or closed: it never comes back.
@@ -37,7 +33,7 @@ struct PoolView: View {
                 VStack(alignment: .leading, spacing: Pearl.Space.lg) {
                     HStack(spacing: Pearl.Space.sm) {
                         PearlSectionHeader(Loc("我的监控"), systemImage: "square.stack.3d.up.fill")
-                        Button { editingID = nil; newAddr = ""; newAlias = ""; newPool = .alphaPool; adding = true } label: {
+                        Button { draft = WatchDraft() } label: {
                             Label(Loc("添加"), systemImage: "plus")
                         }.font(.callout)
                     }
@@ -46,11 +42,12 @@ struct PoolView: View {
                         VStack(spacing: Pearl.Space.sm) {
                             PearlEmptyState(systemImage: "square.stack.3d.up",
                                             title: Loc("添加挖矿监控"),
-                                            message: Loc("点「添加」，选择矿池并填入你的 Pearl 收款地址。可添加多个地址 / 多个矿池。"))
+                                            message: Loc("点「添加」，选择矿池并填入你的 Pearl 收款地址。可添加多个地址 / 多个矿池。"),
+                                            showsMascot: true)
                             // Says plainly what this screen is: a reader of pool APIs. The
                             // device does no mining of any kind (App Store 3.1.5(ii)).
                             Text(Loc("Pearl Hub 本身不挖矿，仅读取矿池公开数据。"))
-                                .font(.caption).foregroundStyle(.secondary)
+                                .pearlExplanation()
                                 .multilineTextAlignment(.center)
                                 .frame(maxWidth: .infinity)
                         }
@@ -90,6 +87,7 @@ struct PoolView: View {
                 if reordered { store.commitWatchOrder() }
                 return reordered
             }
+            .pearlScreenBackground()
             .navigationTitle(Loc("我的监控"))
             .toolbar {
                 Button { Task { await store.refresh(force: true) } } label: {
@@ -125,7 +123,7 @@ struct PoolView: View {
             .onReceive(NotificationCenter.default.publisher(for: .cloudSyncDidUpdate)) { _ in
                 store.reloadWatches()   // a watch was added/removed on another device
             }
-            .sheet(isPresented: $adding) { watchSheet }
+            .sheet(item: $draft) { WatchSheet(store: store, draft: $0, walletAddress: wallet.address) }
             .navigationDestination(isPresented: $showingOfflineAlerts) { OfflineAlertsView() }
         }
     }
@@ -146,14 +144,42 @@ struct PoolView: View {
 
     /// Open the sheet in edit mode, pre-filled with this watch's pool/address/alias.
     private func beginEdit(_ w: PoolWatch) {
-        editingID = w.id
-        newPool = w.pool
-        newAddr = w.address
-        newAlias = w.alias ?? ""
-        adding = true
+        draft = WatchDraft(editingID: w.id, pool: w.pool, address: w.address, alias: w.alias ?? "")
     }
+}
 
-    // MARK: add / edit sheet
+// MARK: add / edit sheet
+
+/// What the add / edit sheet opens with — a new one per presentation.
+private struct WatchDraft: Identifiable {
+    let id = UUID()
+    /// nil = the sheet is adding a new watch; non-nil = editing this watch in place.
+    var editingID: UUID?
+    var pool: PoolKind = .alphaPool
+    var address = ""
+    var alias = ""
+}
+
+/// Add a watch, or edit one in place. The fields are this view's OWN state. As PoolView's
+/// state, read only inside its `.sheet` content, a change to them re-rendered nothing: 编辑监控
+/// opened as 添加监控 with 添加 greyed out, and stayed that way while only the alias was edited.
+private struct WatchSheet: View {
+    let store: PoolStore
+    let walletAddress: String?
+    private let editingID: UUID?
+    @State private var newPool: PoolKind
+    @State private var newAddr: String
+    @State private var newAlias: String
+    @Environment(\.dismiss) private var dismiss
+
+    init(store: PoolStore, draft: WatchDraft, walletAddress: String?) {
+        self.store = store
+        self.walletAddress = walletAddress
+        editingID = draft.editingID
+        _newPool = State(initialValue: draft.pool)
+        _newAddr = State(initialValue: draft.address)
+        _newAlias = State(initialValue: draft.alias)
+    }
 
     /// F2Pool is the one pool a user can't just paste an address into — the link has to be
     /// generated, and generated with the right coin + permissions, so the sheet walks them
@@ -170,9 +196,9 @@ struct PoolView: View {
             }
             .padding(.vertical, 2)
             Text(Loc("权限若只给「不含付款信息」，其余都能看，但「累计已付」会显示 0。"))
-                .font(.caption).foregroundStyle(.secondary)
+                .pearlExplanation()
             Text(Loc("链接是只读的，不能动用资金，且可随时在 F2Pool 撤销。"))
-                .font(.caption).foregroundStyle(.secondary)
+                .pearlExplanation()
             if let u = URL(string: "https://f2pool.zendesk.com/hc/en-us/articles/360058722231") {
                 Link(Loc("查看 F2Pool 官方图文教程"), destination: u).font(.caption)
             }
@@ -183,15 +209,14 @@ struct PoolView: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("\(n)")
                 .font(.caption2.monospacedDigit().bold())
-                .foregroundStyle(.white)
+                .foregroundStyle(Pearl.onAccent)
                 .frame(width: 16, height: 16)
-                .background(Circle().fill(.tint))
-            Text(text).font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .background(Circle().fill(Pearl.plate))
+            Text(text).pearlExplanation()
         }
     }
 
-    private var watchSheet: some View {
+    var body: some View {
         NavigationStack {
             Form {
                 Section(Loc("矿池")) {
@@ -206,7 +231,7 @@ struct PoolView: View {
                             ? Loc("选择矿池后，填入你的 Pearl 收款地址即可查询。")
                             : Loc("更换矿池后将按新矿池重新查询该地址的挖矿数据。"))
                          : Loc("F2Pool 不支持按地址查询，请粘贴账户的只读页链接。"))
-                        .font(.caption).foregroundStyle(.secondary)
+                        .pearlExplanation()
                 }
                 Section(newPool.isAddressBased ? Loc("挖矿地址") : Loc("只读页链接")) {
                     // Explicit row label + prompt: in a macOS grouped Form the
@@ -233,7 +258,7 @@ struct PoolView: View {
                               systemImage: "exclamationmark.triangle.fill")
                             .font(.caption).foregroundStyle(.red)
                     }
-                    if newPool.isAddressBased, let w = wallet.address {
+                    if newPool.isAddressBased, let w = walletAddress {
                         Button(Loc("用我的钱包地址")) { newAddr = w }.font(.caption)
                     }
                     Button(Loc("粘贴")) {
@@ -263,7 +288,7 @@ struct PoolView: View {
             .formStyle(.grouped)
             .navigationTitle(editingID == nil ? Loc("添加监控") : Loc("编辑监控"))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(Loc("取消")) { adding = false } }
+                ToolbarItem(placement: .cancellationAction) { Button(Loc("取消")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(editingID == nil ? Loc("添加") : Loc("保存")) {
                         if let id = editingID {
@@ -271,7 +296,7 @@ struct PoolView: View {
                         } else {
                             store.addWatch(pool: newPool, address: newAddr, alias: newAlias)
                         }
-                        adding = false
+                        dismiss()
                     }
                     .disabled(normalizeWatchAddress(newPool, newAddr) == nil)
                 }
@@ -279,7 +304,6 @@ struct PoolView: View {
             .frame(minWidth: 360, minHeight: 280)
         }
     }
-
 }
 
 /// Tallest monitor-card body in a row, so the others can match it (equal-height

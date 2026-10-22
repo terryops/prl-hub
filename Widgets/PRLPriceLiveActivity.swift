@@ -28,17 +28,20 @@ struct PriceLiveActivity: Widget {
 
 @MainActor
 private func priceActivityConfiguration(watchAware: Bool) -> some WidgetConfiguration {
-    ActivityConfiguration(for: PriceActivityAttributes.self) { context in
-        Group {
-            if watchAware, #available(iOS 18.0, *) {
-                FamilyAwarePriceView(attributes: context.attributes, state: context.state, stale: context.isStale)
-            } else {
+    return ActivityConfiguration(for: PriceActivityAttributes.self) { context in
+        let appearance = WidgetAppearance.load()
+        if watchAware, #available(iOS 18.0, *) {
+            FamilyAwarePriceView(appearance: appearance, attributes: context.attributes, state: context.state, stale: context.isStale)
+        } else {
+            WidgetPresentation(appearance: appearance) {
                 PhoneLockScreenView(attributes: context.attributes, state: context.state, stale: context.isStale)
             }
+            .activityBackgroundTint(appearance.activityBackground)
+            .activitySystemActionForegroundColor(appearance.isModern ? .primary : .white)
         }
-        .activityBackgroundTint(Color.black.opacity(0.55))
-        .activitySystemActionForegroundColor(.white)
     } dynamicIsland: { context in
+        let appearance = WidgetAppearance.load()
+        let islandColors = WidgetColors(appearance, scheme: .dark)
         let s = context.state
         let pearlOnly = context.attributes.resolvedStyle == .lock
         return DynamicIsland {
@@ -52,13 +55,13 @@ private func priceActivityConfiguration(watchAware: Bool) -> some WidgetConfigur
             DynamicIslandExpandedRegion(.trailing) {
                 Text(verbatim: usdString(s.usd))
                     .font(.title2.weight(.bold)).monospacedDigit()
-                    .foregroundStyle(Color.pearlGold)
+                    .foregroundStyle(islandColors.price)
                     .padding(.trailing, 4)
             }
             DynamicIslandExpandedRegion(.bottom) {
                 HStack {
-                    ChangePill(label: context.attributes.label1h, pct: s.change1h)
-                    ChangePill(label: context.attributes.label24h, pct: s.change24h)
+                    ChangePill(label: context.attributes.label1h, pct: s.change1h).environment(\.widgetColors, islandColors)
+                    ChangePill(label: context.attributes.label24h, pct: s.change24h).environment(\.widgetColors, islandColors)
                     Spacer()
                     Text(Date(timeIntervalSince1970: s.at), style: .time)
                         .font(.caption2).foregroundStyle(.secondary)
@@ -76,7 +79,7 @@ private func priceActivityConfiguration(watchAware: Bool) -> some WidgetConfigur
         } minimal: {
             PearlGlyph(size: 16)
         }
-        .keylineTint(Color.pearlIndigo)
+        .keylineTint(islandColors.accent)
     }
 }
 
@@ -99,42 +102,92 @@ private struct PhoneLockScreenView: View {
 @available(iOS 18.0, *)
 private struct FamilyAwarePriceView: View {
     @Environment(\.activityFamily) private var family
+    let appearance: WidgetAppearance
     let attributes: PriceActivityAttributes
     let state: PriceActivityAttributes.ContentState
     let stale: Bool
     var body: some View {
         if family == .small {
-            WatchPriceView(attributes: attributes, state: state)
+            WatchPriceView(appearance: appearance, attributes: attributes, state: state, stale: stale)
         } else {
-            PhoneLockScreenView(attributes: attributes, state: state, stale: stale)
+            WidgetPresentation(appearance: appearance) {
+                PhoneLockScreenView(attributes: attributes, state: state, stale: stale)
+            }
+            .activityBackgroundTint(appearance.activityBackground)
+            .activitySystemActionForegroundColor(appearance.isModern ? .primary : .white)
         }
     }
 }
 
-/// Apple Watch Smart Stack: pearl + PRL, the price big, 24h change and the time.
+/// The Smart Stack uses its own dark surface, even when the phone is in light mode.
+/// Keep the price prominent in an 80-point card and dim decorative colour for Always On.
 private struct WatchPriceView: View {
+    @Environment(\.isLuminanceReduced) private var reducedLuminance
+    let appearance: WidgetAppearance
     let attributes: PriceActivityAttributes
     let state: PriceActivityAttributes.ContentState
+    let stale: Bool
+
+    private var colors: WidgetColors { WidgetColors(appearance, scheme: .dark) }
+    private var background: Color {
+        if reducedLuminance { return .black }
+        return appearance.isModern
+            ? Color(red: 27 / 255, green: 29 / 255, blue: 33 / 255)
+            : Color(red: 23 / 255, green: 38 / 255, blue: 61 / 255)
+    }
+    private var changeColor: Color {
+        guard let pct = state.change24h, pct != 0 else { return colors.secondary }
+        return pct > 0 ? colors.positive : colors.negative
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 4) {
-                PearlGlyph(size: 14)
-                Text(verbatim: "PRL").font(.caption2.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
-                Spacer(minLength: 2)
+            HStack(spacing: 5) {
+                PearlGlyph(size: 18)
+                    .opacity(reducedLuminance ? 0.6 : 1)
+                    .accessibilityHidden(true)
+                Text(verbatim: "PRL")
+                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(colors.secondary)
+                Spacer(minLength: 4)
+                if stale {
+                    Image(systemName: "clock.badge.exclamationmark")
+                        .font(.system(size: 10)).foregroundStyle(colors.muted)
+                }
                 Text(Date(timeIntervalSince1970: state.at), style: .time)
-                    .font(.caption2).foregroundStyle(.white.opacity(0.55))
+                    .font(.system(size: 10, weight: .medium)).monospacedDigit()
+                    .foregroundStyle(colors.muted)
             }
+            .lineLimit(1).minimumScaleFactor(0.75)
             Text(verbatim: usdString(state.usd))
-                .font(.system(.title2, design: .rounded).weight(.bold)).monospacedDigit()
-                .foregroundStyle(.white)
-                .minimumScaleFactor(0.7).lineLimit(1)
-            ChangePill(label: attributes.label24h, pct: state.change24h)
+                .font(.system(size: 26, weight: .bold, design: .rounded)).monospacedDigit()
+                .foregroundStyle(colors.primary.opacity(stale ? 0.65 : 1))
+                .minimumScaleFactor(0.6).lineLimit(1)
+            HStack(spacing: 4) {
+                Text(attributes.label24h)
+                    .font(.system(size: 11, weight: .medium)).foregroundStyle(colors.secondary)
+                Spacer(minLength: 4)
+                if let pct = state.change24h {
+                    Image(systemName: pct > 0 ? "arrow.up.right" : pct < 0 ? "arrow.down.right" : "minus")
+                        .font(.system(size: 10, weight: .semibold))
+                        .accessibilityHidden(true)
+                }
+                Text(verbatim: state.change24h.map { String(format: "%+.2f%%", $0) } ?? "—")
+                    .font(.system(size: 12, weight: .semibold)).monospacedDigit()
+            }
+            .foregroundStyle(changeColor.opacity(reducedLuminance ? 0.8 : 1))
+            .lineLimit(1).minimumScaleFactor(0.75)
+            .accessibilityElement(children: .combine)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(.horizontal, 10).padding(.vertical, 6)
+        .environment(\.colorScheme, .dark)
+        .activityBackgroundTint(background)
+        .activitySystemActionForegroundColor(.white)
     }
 }
 
 private struct LockScreenPriceView: View {
+    @Environment(\.widgetColors) private var colors
     let attributes: PriceActivityAttributes
     let state: PriceActivityAttributes.ContentState
     let stale: Bool
@@ -143,10 +196,10 @@ private struct LockScreenPriceView: View {
         HStack(alignment: .center, spacing: 12) {
             PearlGlyph(size: 30)
             VStack(alignment: .leading, spacing: 2) {
-                Text(attributes.title).font(.caption).foregroundStyle(.white.opacity(0.7))
+                Text(attributes.title).font(.caption).foregroundStyle(colors.secondary)
                 Text(verbatim: usdString(state.usd))
                     .font(.system(size: 30, weight: .bold, design: .rounded)).monospacedDigit()
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primary)
                     .contentTransition(.numericText())
             }
             Spacer(minLength: 8)
@@ -154,7 +207,7 @@ private struct LockScreenPriceView: View {
                 ChangePill(label: attributes.label1h, pct: state.change1h)
                 ChangePill(label: attributes.label24h, pct: state.change24h)
                 Text(Date(timeIntervalSince1970: state.at), style: .time)
-                    .font(.caption2).foregroundStyle(.white.opacity(0.55))
+                    .font(.caption2).foregroundStyle(colors.muted)
             }
         }
         .padding(16)
@@ -164,14 +217,15 @@ private struct LockScreenPriceView: View {
 
 /// 灵动岛为主: the Lock Screen part shrinks to one quiet line.
 private struct LockScreenStrip: View {
+    @Environment(\.widgetColors) private var colors
     let state: PriceActivityAttributes.ContentState
     let label24h: String
     var body: some View {
         HStack(spacing: 8) {
             PearlGlyph(size: 18)
-            Text(verbatim: "PRL").font(.subheadline.weight(.semibold)).foregroundStyle(.white.opacity(0.8))
+            Text(verbatim: "PRL").font(.subheadline.weight(.semibold)).foregroundStyle(colors.secondary)
             Text(verbatim: usdString(state.usd))
-                .font(.subheadline.weight(.bold)).monospacedDigit().foregroundStyle(.white)
+                .font(.subheadline.weight(.bold)).monospacedDigit().foregroundStyle(colors.primary)
             Spacer(minLength: 4)
             ChangePill(label: label24h, pct: state.change24h)
         }
@@ -181,19 +235,20 @@ private struct LockScreenStrip: View {
 
 /// "1h +2.35%" — label dimmed, figure in green/red.
 private struct ChangePill: View {
+    @Environment(\.widgetColors) private var colors
     let label: String
     let pct: Double?
     var body: some View {
         HStack(spacing: 4) {
-            Text(label).foregroundStyle(.white.opacity(0.6))
+            Text(label).foregroundStyle(colors.secondary)
             Text(verbatim: pct.map { String(format: "%+.2f%%", $0) } ?? "—")
-                .foregroundStyle(changeColor(pct)).monospacedDigit()
+                .foregroundStyle(pct.map { $0 == 0 ? colors.primary : $0 > 0 ? colors.positive : colors.negative } ?? colors.primary).monospacedDigit()
         }
         .font(.caption.weight(.semibold))
     }
 }
 
-/// The app's pearl symbol in the brand gradient.
+/// Live Activities keep the original pearl symbol regardless of the app-icon choice.
 private struct PearlGlyph: View {
     let size: CGFloat
     var body: some View {

@@ -34,6 +34,8 @@ struct CloudAlertRule: Codable, Equatable {
     var fired: TimeInterval
     /// Worker time the user had seen when they last switched it on; 0 = none.
     var ack: TimeInterval
+    /// Optional for alerts saved before continuous reminders were available.
+    var repeats: Bool?
 }
 
 /// The `alerts.sync` blob CloudSync mirrors to iCloud.
@@ -64,12 +66,12 @@ private func nonZero(_ t: TimeInterval) -> TimeInterval? { t > 0 ? t : nil }
 extension PriceAlertRule {
     var cloud: CloudAlertRule {
         CloudAlertRule(id: id, kind: kind, value: value, window: window, enabled: enabled,
-                       changedAt: changedAt ?? 0, fired: fired ?? 0, ack: ack ?? 0)
+                       changedAt: changedAt ?? 0, fired: fired ?? 0, ack: ack ?? 0, repeats: repeats)
     }
 
     init(cloud c: CloudAlertRule) {
         self.init(id: c.id, kind: c.kind, value: c.value, window: c.window, enabled: c.enabled,
-                  changedAt: c.changedAt, fired: nonZero(c.fired), ack: nonZero(c.ack))
+                  repeats: c.repeats, changedAt: c.changedAt, fired: nonZero(c.fired), ack: nonZero(c.ack))
     }
 
     /// This device's rule taken over by a newer copy from another device. A changed
@@ -79,6 +81,7 @@ extension PriceAlertRule {
         if !hasSameCondition(kind: c.kind, value: c.value, window: c.window) { r.lastFired = nil; r.deferred = nil }
         r.kind = c.kind; r.value = c.value; r.window = c.window
         r.enabled = c.enabled
+        r.repeats = c.repeats
         r.changedAt = c.changedAt
         r.fired = nonZero(c.fired)
         r.ack = nonZero(c.ack)
@@ -140,7 +143,7 @@ enum PriceAlertSync {
         if incoming {
             let shared = rules.filter { theirs[$0.id] != nil }
             rules.removeAll { r in
-                theirs[r.id] == nil && (r.changedAt ?? 0) <= 0 && shared.contains { $0.hasSameCondition(as: r) }
+                theirs[r.id] == nil && (r.changedAt ?? 0) <= 0 && shared.contains { $0.hasSameCondition(as: r) && $0.isRepeating == r.isRepeating }
             }
         }
         if gone.count > maxTombstones {

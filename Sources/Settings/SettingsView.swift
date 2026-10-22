@@ -1,17 +1,11 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @AppStorage("ui.appearance") private var appearance = "system"   // system | light | dark
-    @AppStorage("ui.lockPortrait") private var lockPortrait = true   // iPhone 锁定竖屏 — same key as OrientationLock.key
-
-    // Scroll-driven header morph. An @Observable held in @State: only the two views that
-    // read `progress` (the logo row and the nav title) re-render per scroll frame, not
-    // this whole Form.
+    // Only the brand header and navigation title observe the scroll progress.
     @State private var header = SettingsHeaderScroll()
     @State private var shotOfflineAlerts = SettingsView.shotOfflineAlerts
+    @State private var shotWebLink = SettingsView.shotWebLink
 
-    /// DEBUG-only: SHOT_OFFLINE_ALERTS=1 opens 掉线提醒 on launch (with SHOT_TAB=4), so a
-    /// verification run can reach it without driving the list.
     private static var shotOfflineAlerts: Bool {
         #if DEBUG
         return ProcessInfo.processInfo.environment["SHOT_OFFLINE_ALERTS"] == "1"
@@ -20,17 +14,22 @@ struct SettingsView: View {
         #endif
     }
 
-    @EnvironmentObject private var loc: LocalizationManager
-    @EnvironmentObject private var currency: CurrencyManager
-    @ObservedObject private var alerts = PriceAlertStore.shared
-    @ObservedObject private var offline = OfflineAlertStore.shared
-    @ObservedObject private var pro = ProStore.shared
-    @ObservedObject private var live = PriceLiveActivity.shared
+    @State private var shotSecurity = SettingsView.shotSecurity
 
-    private var appVersion: String {
-        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
-        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
-        return "\(v) (\(b))"
+    private static var shotSecurity: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["SHOT_SECURITY"] == "1"
+        #else
+        return false
+        #endif
+    }
+
+    private static var shotWebLink: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["SHOT_WEB_LINK"] == "1"
+        #else
+        return false
+        #endif
     }
 
     var body: some View {
@@ -40,7 +39,6 @@ struct SettingsView: View {
                     CollapsingLogoRow(header: header)
                         .listRowBackground(Color.clear)
                         #if os(iOS)
-                        // KVO the enclosing scroll view → continuous collapse progress.
                         .background(ScrollOffsetReader { [header] y in
                             let p = min(max(y / 110, 0), 1)
                             if abs(p - header.progress) > 0.0005 { header.progress = p }
@@ -49,147 +47,36 @@ struct SettingsView: View {
                 }
                 .listRowInsets(EdgeInsets())
 
-                // Wallet-dependent rows live in their own views, so a WalletStore publish
-                // (every chain poll) re-renders them rather than the whole Form.
-                WalletSettingsSection()
+                AccountSettingsSection()
+                ProSettingsSection()
+                NotificationSettingsSection()
+                AppearanceSettingsSection()
+                RegionalSettingsSection()
+                GatewaySettingsSection()
 
-                Section(Loc("通知")) {
+                Section(Loc("安全与隐私")) {
                     NavigationLink {
-                        PriceAlertsView()
+                        SecurityInfoView()
+                    } label: {
+                        SettingsMenuLabel(Loc("安全性说明"), systemImage: "checkmark.shield")
+                    }
+                    .accessibilityIdentifier("settings-security")
+                }
+                .pearlListRowSurface()
+
+                Section(Loc("帮助与关于")) {
+                    NavigationLink {
+                        AboutSettingsView()
                     } label: {
                         LabeledContent {
-                            let on = alerts.rules.filter(\.isOn).count
-                            if !pro.isPro {
-                                PearlBadge(text: Loc("高级版"), tint: Pearl.accent)
-                            } else if on > 0 {
-                                Text("\(on)")
-                            }
+                            Text(appVersion)
                         } label: {
-                            Label(Loc("价格提醒"), systemImage: "bell.badge")
+                            SettingsMenuLabel(Loc("关于"), systemImage: "info.circle")
                         }
                     }
-                    NavigationLink {
-                        OfflineAlertsView()
-                    } label: {
-                        LabeledContent {
-                            let on = offline.activeCount
-                            if !pro.isPro {
-                                PearlBadge(text: Loc("高级版"), tint: Pearl.accent)
-                            } else if on > 0 {
-                                Text("\(on)")
-                            }
-                        } label: {
-                            Label(Loc("掉线提醒"), systemImage: "wifi.exclamationmark")
-                        }
-                    }
-                    if PriceLiveActivity.supported {
-                        NavigationLink {
-                            LiveActivitySettingsView()
-                        } label: {
-                            LabeledContent {
-                                if !pro.isPro {
-                                    PearlBadge(text: Loc("高级版"), tint: Pearl.accent)
-                                } else if live.running {
-                                    Text(Loc("盯盘中")).foregroundStyle(.green)
-                                }
-                            } label: {
-                                Label(Loc("锁屏盯盘"), systemImage: "lock.iphone")
-                            }
-                        }
-                    }
+                    .accessibilityIdentifier("settings-about")
                 }
-
-                NetworkSettingsSection()
-
-                Section(Loc("外观")) {
-                    Picker(Loc("主题"), selection: $appearance) {
-                        Text(Loc("跟随系统")).tag("system")
-                        Text(Loc("浅色")).tag("light")
-                        Text(Loc("深色")).tag("dark")
-                    }
-                    #if os(iOS)
-                    if UIDevice.current.userInterfaceIdiom == .phone {
-                        Toggle(Loc("锁定竖屏"), isOn: $lockPortrait)
-                    }
-                    #endif
-                }
-
-                Section(Loc("语言")) {
-                    Picker(Loc("界面语言"), selection: Binding(
-                        get: { loc.language },
-                        set: { loc.setLanguage($0) })) {
-                        ForEach(AppLanguage.allCases) { lang in
-                            Text(lang.displayName).tag(lang)
-                        }
-                    }
-                }
-
-                Section(Loc("货币")) {
-                    LabeledContent(Loc("主货币"), value: "USD · " + Loc("美元"))
-                    Picker(Loc("副货币"), selection: Binding(
-                        get: { currency.secondaryPref },
-                        set: { currency.setSecondaryPref($0) })) {
-                        Text(Loc("跟随语言")).tag(Fiat.auto)
-                        Text(Loc("不显示")).tag(Fiat.none)
-                        ForEach(Fiat.secondaries) { c in
-                            Text("\(c.localizedName) · \(c.code)").tag(c.code)
-                        }
-                    }
-                    if currency.secondaryPref == Fiat.auto, let s = currency.secondary {
-                        LabeledContent(Loc("当前副货币"), value: "\(s.localizedName) · \(s.code)")
-                    }
-                    if let line = currency.rateLine() {
-                        LabeledContent(Loc("当前汇率"), value: line)
-                    }
-                    if let at = currency.lastUpdated {
-                        LabeledContent(Loc("汇率更新于"),
-                                       value: at.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened)
-                                                            .locale(LocBundleHolder.shared.locale)))
-                    }
-                    Button(Loc("立即刷新汇率")) { Task { await currency.refresh() } }
-                    Label(Loc("汇率以美元为基准，每天自动更新一次；离线时使用最近一次缓存。"),
-                          systemImage: "clock.arrow.circlepath")
-                        .font(.footnote).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                if AppFeatures.tradeEnabled {   // gated off for App Store: no in-app trading
-                    SafeTradeSettingsSection()
-                }
-
-                Section(Loc("安全")) {
-                    Label(Loc("助记词加密存于钥匙串；查看助记词与转账需 Face ID / Touch ID 验证。"), systemImage: "key.fill")
-                        .font(.callout).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Section(Loc("关于")) {
-                    LabeledContent(Loc("应用"), value: Loc("$Pearl Hub"))
-                    LabeledContent(Loc("版本"), value: appVersion)
-                    // Opens the App Store review sheet directly. The in-app prompt (see
-                    // ReviewPrompt) is rate-limited by the system and may show nothing at
-                    // all, so an explicit "I want to rate this" needs a path that always works.
-                    if let url = ReviewPrompt.writeReviewURL {
-                        Link(destination: url) {
-                            Label(Loc("为 Pearl Hub 评分"), systemImage: "star.fill")
-                        }
-                    }
-                    LabeledContent(Loc("开发者"), value: "Cyber Corner")
-                    Link(destination: AppLinks.telegram) {
-                        Label(Loc("加入 Telegram 频道 @prl_hub，获取更新公告与帮助"), systemImage: "paperplane.fill")
-                    }
-                    Link(destination: AppLinks.github) {
-                        Label(Loc("GitHub 开源代码"), systemImage: "chevron.left.forwardslash.chevron.right")
-                    }
-                    NavigationLink {
-                        LicensesView()
-                    } label: { Label(Loc("开源许可"), systemImage: "doc.text") }
-                    Label(Loc("自托管 · 私钥与签名留在本机（钥匙串 / 安全隔区）"), systemImage: "shield.lefthalf.filled")
-                        .font(.footnote).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Label(Loc("内置 PRL 挖矿监控"), systemImage: "chart.line.uptrend.xyaxis")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
+                .pearlListRowSurface()
             }
             .formStyle(.grouped)
             .pearlListBackground()
@@ -197,20 +84,276 @@ struct SettingsView: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                // "设置" ↔ inline logo. The inline logo matches the content header's
-                // fully-collapsed size, so the two icons stay horizontally aligned, and
-                // it only fades in once the big header has scrolled away.
                 ToolbarItem(placement: .principal) {
                     SettingsNavTitle(header: header)
                 }
             }
             #endif
-            .onChange(of: appearance) { _, _ in CloudSync.push("ui.appearance") }
-            #if os(iOS)
-            .onChange(of: lockPortrait) { _, _ in OrientationLock.apply() }
-            #endif
             .navigationDestination(isPresented: $shotOfflineAlerts) { OfflineAlertsView() }
+            .navigationDestination(isPresented: $shotWebLink) { WebLinkView() }
+            .navigationDestination(isPresented: $shotSecurity) { SecurityInfoView() }
         }
+    }
+}
+
+private var appVersion: String {
+    let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+    let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+    return "\(v) (\(b))"
+}
+
+/// A settings row's leading icon. Bare glyph, no badge: in a 30pt badge the glyph is
+/// 14pt and the rows all read as the same tile. The frame keeps titles on one column.
+struct SettingsGlyph: View {
+    let systemImage: String
+    var tint: Color = Pearl.accent
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 20, weight: .medium))
+            .foregroundStyle(tint)
+            .frame(width: 30, height: 30)
+            .accessibilityHidden(true)
+    }
+}
+
+/// Shared menu treatment; controls and long explanations live on the destination pages.
+private struct SettingsMenuLabel: View {
+    let title: String
+    let systemImage: String
+    var detail: String? = nil
+
+    init(_ title: String, systemImage: String, detail: String? = nil) {
+        self.title = title
+        self.systemImage = systemImage
+        self.detail = detail
+    }
+
+    var body: some View {
+        HStack(spacing: Pearl.Space.sm) {
+            SettingsGlyph(systemImage: systemImage)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                if let detail {
+                    Text(detail).font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+private struct AccountSettingsSection: View {
+    @ObservedObject private var web = WebLinkStore.shared
+
+    var body: some View {
+        Section(Loc("账号与钱包")) {
+            NavigationLink {
+                WebLinkView()
+            } label: {
+                LabeledContent {
+                    if web.isLinked { Text(Loc("已连接")) }
+                } label: {
+                    SettingsMenuLabel(Loc("邮箱账号"), systemImage: "person.crop.circle")
+                }
+            }
+            .accessibilityIdentifier("settings-account")
+            WalletSettingsEntry()
+        }
+        .pearlListRowSurface()
+    }
+}
+
+/// Wallet polling only refreshes its own entry, rather than the settings directory.
+private struct WalletSettingsEntry: View {
+    @EnvironmentObject private var wallet: WalletStore
+
+    var body: some View {
+        NavigationLink {
+            WalletSecuritySettingsView()
+        } label: {
+            LabeledContent {
+                if wallet.phase == .unlocked { Text("\(wallet.wallets.count)") }
+            } label: {
+                SettingsMenuLabel(Loc("钱包与安全"), systemImage: "lock.shield")
+            }
+        }
+        .accessibilityIdentifier("settings-wallet")
+    }
+}
+
+private struct ProSettingsSection: View {
+    @ObservedObject private var pro = ProStore.shared
+
+    var body: some View {
+        Section(Loc("Pro 会员")) {
+            NavigationLink {
+                ProSettingsView()
+            } label: {
+                LabeledContent {
+                    Text(pro.isPro ? Loc("已开通") : Loc("未开通"))
+                } label: {
+                    SettingsMenuLabel(Loc("会员权益"), systemImage: "sparkles",
+                                      detail: Loc("跨设备数据同步"))
+                }
+            }
+            .accessibilityIdentifier("settings-pro")
+        }
+        .pearlListRowSurface()
+    }
+}
+
+private struct AppearanceSettingsSection: View {
+    @AppStorage("ui.appearance") private var appearance = "system"
+    @AppStorage(AppIconChoice.key) private var iconStored: String?
+
+    private var theme: String {
+        appearance == "light" ? Loc("浅色") : appearance == "dark" ? Loc("深色") : Loc("跟随系统")
+    }
+
+    var body: some View {
+        Section(Loc("外观设置")) {
+            NavigationLink {
+                AppearanceSettingsView()
+            } label: {
+                LabeledContent {
+                    Text(theme)
+                } label: {
+                    SettingsMenuLabel(Loc("主题与配色"), systemImage: "paintpalette")
+                }
+            }
+            .accessibilityIdentifier("settings-appearance")
+            NavigationLink {
+                AppIconSettingsView()
+            } label: {
+                LabeledContent {
+                    Text(AppIconChoice(stored: iconStored).title)
+                } label: {
+                    SettingsMenuLabel(Loc("应用图标"), systemImage: "app.badge")
+                }
+            }
+            .accessibilityIdentifier("settings-app-icon")
+        }
+        .pearlListRowSurface()
+    }
+}
+
+private struct RegionalSettingsSection: View {
+    @EnvironmentObject private var loc: LocalizationManager
+    @EnvironmentObject private var currency: CurrencyManager
+
+    var body: some View {
+        Section(Loc("语言与货币")) {
+            NavigationLink {
+                LanguageSettingsView()
+            } label: {
+                LabeledContent {
+                    Text(loc.language.displayName)
+                } label: {
+                    SettingsMenuLabel(Loc("界面语言"), systemImage: "globe")
+                }
+            }
+            .accessibilityIdentifier("settings-language")
+            NavigationLink {
+                CurrencySettingsView()
+            } label: {
+                LabeledContent {
+                    Text(currency.secondary.map { "USD · " + $0.code } ?? "USD")
+                } label: {
+                    SettingsMenuLabel(Loc("货币"), systemImage: "dollarsign.circle")
+                }
+            }
+            .accessibilityIdentifier("settings-currency")
+        }
+        .pearlListRowSurface()
+    }
+}
+
+private struct GatewaySettingsSection: View {
+    @EnvironmentObject private var wallet: WalletStore
+
+    var body: some View {
+        Section(Loc("网关设置")) {
+            NavigationLink {
+                NetworkSettingsView()
+            } label: {
+                LabeledContent {
+                    Text(wallet.network.label)
+                } label: {
+                    SettingsMenuLabel(Loc("Pearl 网络"), systemImage: "network")
+                }
+            }
+            .accessibilityIdentifier("settings-network")
+            if AppFeatures.tradeEnabled {
+                NavigationLink {
+                    TradeSettingsView()
+                } label: {
+                    SettingsMenuLabel(Loc("交易（SafeTrade）"), systemImage: "arrow.left.arrow.right")
+                }
+                .accessibilityIdentifier("settings-trade")
+            }
+        }
+        .pearlListRowSurface()
+    }
+}
+
+private struct NotificationSettingsSection: View {
+    @ObservedObject private var alerts = PriceAlertStore.shared
+    @ObservedObject private var offline = OfflineAlertStore.shared
+    @ObservedObject private var pro = ProStore.shared
+    @ObservedObject private var live = PriceLiveActivity.shared
+
+    var body: some View {
+        Section(Loc("通知设置")) {
+            NavigationLink {
+                PriceAlertsView()
+            } label: {
+                LabeledContent {
+                    let on = alerts.rules.filter(\.isOn).count
+                    if !pro.isPro {
+                        PearlBadge(text: Loc("高级版"), tint: Pearl.accent)
+                    } else if on > 0 {
+                        Text("\(on)")
+                    }
+                } label: {
+                    SettingsMenuLabel(Loc("价格提醒"), systemImage: "bell.badge")
+                }
+            }
+            .accessibilityIdentifier("settings-price-alerts")
+            NavigationLink {
+                OfflineAlertsView()
+            } label: {
+                LabeledContent {
+                    let on = offline.activeCount
+                    if !pro.isPro {
+                        PearlBadge(text: Loc("高级版"), tint: Pearl.accent)
+                    } else if on > 0 {
+                        Text("\(on)")
+                    }
+                } label: {
+                    SettingsMenuLabel(Loc("掉线提醒"), systemImage: "wifi.exclamationmark")
+                }
+            }
+            .accessibilityIdentifier("settings-offline-alerts")
+            if PriceLiveActivity.supported {
+                NavigationLink {
+                    LiveActivitySettingsView()
+                } label: {
+                    LabeledContent {
+                        if !pro.isPro {
+                            PearlBadge(text: Loc("高级版"), tint: Pearl.accent)
+                        } else if live.running {
+                            Text(Loc("盯盘中")).foregroundStyle(.green)
+                        }
+                    } label: {
+                        SettingsMenuLabel(Loc("锁屏盯盘"), systemImage: "lock.iphone")
+                    }
+                }
+                .accessibilityIdentifier("settings-live-activity")
+            }
+        }
+        .pearlListRowSurface()
     }
 }
 
@@ -230,10 +373,8 @@ private struct CollapsingLogoRow: View {
         let sp = min(1, p / 0.5)            // size finishes collapsing by progress 0.5
         let mark = lerp(96, 26, sp)
         MorphStack(progress: p, spacing: lerp(8, 7, sp)) {
-            Image("AppLogoMark")
-                .resizable().interpolation(.high).scaledToFit()
+            PearlLogo(size: mark * 0.82, showsWordmark: false)
                 .frame(width: mark, height: mark)
-                .shadow(color: Pearl.indigo.opacity(0.30), radius: mark * 0.12, y: mark * 0.05)
             PearlLogo.wordmark
                 .font(.system(size: lerp(30, 17, sp), weight: .bold, design: .rounded))
                 .lineLimit(1)
@@ -255,84 +396,12 @@ private struct SettingsNavTitle: View {
             Text(Loc("设置")).font(.headline)
                 .opacity(1 - fade(header.progress, 0.85, 0.95))
             HStack(spacing: 7) {
-                Image("AppLogoMark").resizable().interpolation(.high).scaledToFit()
+                PearlLogo(size: 26 * 0.82, showsWordmark: false)
                     .frame(width: 26, height: 26)
-                    .shadow(color: Pearl.indigo.opacity(0.30), radius: 26 * 0.12, y: 26 * 0.05)
                 PearlLogo.wordmark
                     .font(.system(size: 17, weight: .bold, design: .rounded)).lineLimit(1)
             }
             .opacity(fade(header.progress, 0.90, 1.0))
-        }
-    }
-}
-
-/// 设置 → 钱包 (only while unlocked) plus the remove-wallet confirmation.
-private struct WalletSettingsSection: View {
-    @EnvironmentObject private var wallet: WalletStore
-    @State private var confirmingReset = false
-    @State private var resetError: String?
-
-    var body: some View {
-        if wallet.phase == .unlocked {
-            Section(Loc("钱包")) {
-                NavigationLink {
-                    ManageWalletsView(store: wallet)
-                } label: {
-                    LabeledContent {
-                        Text("\(wallet.wallets.count)")
-                    } label: {
-                        Label(Loc("管理钱包"), systemImage: "wallet.pass")
-                    }
-                }
-                NavigationLink {
-                    ContactsView()
-                } label: { Label(Loc("地址簿"), systemImage: "person.crop.circle") }
-                NavigationLink {
-                    RevealSeedView(store: wallet)
-                } label: { Label(Loc("查看助记词"), systemImage: "key.horizontal") }
-                NavigationLink {
-                    RecoverChangeView(store: wallet)
-                } label: { Label(Loc("找回搁浅的找零"), systemImage: "arrow.uturn.down.circle") }
-                Button { wallet.lock() } label: {
-                    Label(Loc("锁定钱包"), systemImage: "lock").foregroundStyle(.primary)
-                }
-                Button(role: .destructive) { confirmingReset = true } label: {
-                    Label(Loc("移除钱包（需助记词恢复）"), systemImage: "trash")
-                }
-            }
-            // .alert (not .confirmationDialog) — centered on every platform; a
-            // confirmationDialog mis-anchors as a popover over the nav bar on iPad/Mac.
-            .alert(Loc("确定要移除钱包「%@」吗？", wallet.walletName), isPresented: $confirmingReset) {
-                Button(Loc("移除钱包"), role: .destructive) {
-                    let ok = withAnimation { wallet.reset() }
-                    if !ok { resetError = wallet.lastError ?? Loc("移除失败"); wallet.lastError = nil }
-                }
-                Button(Loc("取消"), role: .cancel) {}
-            } message: {
-                Text(Loc("助记词将从本机删除且无法恢复。请确认你已安全备份助记词，否则资产将永久丢失。"))
-            }
-            .alert(Loc("移除失败"), isPresented: Binding(
-                get: { resetError != nil }, set: { if !$0 { resetError = nil } })) {
-                Button(Loc("知道了"), role: .cancel) { resetError = nil }
-            } message: {
-                Text(resetError ?? "")
-            }
-        }
-    }
-}
-
-/// 设置 → 网络.
-private struct NetworkSettingsSection: View {
-    @EnvironmentObject private var wallet: WalletStore
-
-    var body: some View {
-        Section(Loc("网络")) {
-            Picker(Loc("Pearl 网络"), selection: Binding(
-                get: { wallet.network },
-                set: { wallet.changeNetwork($0) })) {
-                ForEach(WalletNetwork.allCases) { Text($0.label).tag($0) }
-            }
-            LabeledContent(Loc("索引服务"), value: "blockbook.pearlresearch.ai")
         }
     }
 }

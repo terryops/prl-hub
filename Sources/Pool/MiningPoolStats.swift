@@ -52,12 +52,78 @@ struct MPSPool: Decodable {
     let fee: FlexDouble?
     let feetype: String?          // "PPLNS" · "PPS%3" · "PPS+%2|SOLO%1"
     let blocks_1000: FlexDouble?
+    let lastblocktime: FlexDouble?
+    let hashrate_average_7d: FlexDouble?
+    let history_start: FlexDouble?
+    let history_interval: FlexDouble?
+    let history: [HistoryValue]?
+
+    /// History is delta-encoded. An "x" is a missing sample, not zero hashrate.
+    struct HistoryValue: Decodable {
+        let value: Double?
+        init(from decoder: Decoder) throws {
+            let c = try decoder.singleValueContainer()
+            if let number = try? c.decode(Double.self) { value = number }
+            else if let string = try? c.decode(String.self) { value = Double(string) }
+            else { value = nil }
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case url, pool_id, hashrate, miners, workers, fee, feetype, blocks_1000
+        case lastblocktime, hashrate_average_7d, history_start, history_interval, history
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        url = try c.decodeIfPresent(String.self, forKey: .url)
+        pool_id = try c.decodeIfPresent(String.self, forKey: .pool_id)
+        hashrate = try c.decodeIfPresent(FlexDouble.self, forKey: .hashrate)
+        miners = try c.decodeIfPresent(FlexDouble.self, forKey: .miners)
+        workers = try c.decodeIfPresent(FlexDouble.self, forKey: .workers)
+        fee = try c.decodeIfPresent(FlexDouble.self, forKey: .fee)
+        feetype = try c.decodeIfPresent(String.self, forKey: .feetype)
+        blocks_1000 = try c.decodeIfPresent(FlexDouble.self, forKey: .blocks_1000)
+        // Optional display data must never make a usable pool row disappear.
+        lastblocktime = try? c.decode(FlexDouble.self, forKey: .lastblocktime)
+        hashrate_average_7d = try? c.decode(FlexDouble.self, forKey: .hashrate_average_7d)
+        history_start = try? c.decode(FlexDouble.self, forKey: .history_start)
+        history_interval = try? c.decode(FlexDouble.self, forKey: .history_interval)
+        history = try? c.decode([HistoryValue].self, forKey: .history)
+    }
+
+    var hashrateHistory: [PoolHashratePoint] {
+        guard let start = history_start?.value, start.isFinite, start > 0,
+              let interval = history_interval?.value, interval.isFinite, interval > 0,
+              let history else { return [] }
+        var accumulated = 0.0
+        return history.enumerated().map { index, sample in
+            var rate: Double?
+            if let delta = sample.value, delta.isFinite {
+                accumulated += delta
+                rate = accumulated.isFinite && accumulated >= 0 ? accumulated : nil
+            }
+            // Missing entries do not reset the running sum; the next numeric entry is
+            // still a delta from the last known value (the source's own decoder does this).
+            return PoolHashratePoint(time: start + Double(index) * interval, hashrate: rate)
+        }
+    }
+
+    var lastBlockDate: Date? {
+        (lastblocktime?.value).flatMap { $0.isFinite && $0 > 0 ? Date(timeIntervalSince1970: $0) : nil }
+    }
 
     var hps: Double { hashrate?.value ?? 0 }
     /// -1 is the feed's "not published" sentinel — surface it as nil, not as a miner count.
     var minerCount: Int? { (miners?.value).flatMap { $0 >= 0 ? Int($0) : nil } }
     var workerCount: Int? { (workers?.value).flatMap { $0 >= 0 ? Int($0) : nil } }
     var blocksIn1000: Int { Int(blocks_1000?.value ?? 0) }
+}
+
+struct PoolHashratePoint: Identifiable, Sendable {
+    let time: Double
+    let hashrate: Double?
+    var id: Double { time }
 }
 
 struct MPSSupply: Decodable { let emission24: FlexDouble? }

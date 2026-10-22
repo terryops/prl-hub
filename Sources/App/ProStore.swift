@@ -3,19 +3,32 @@ import Combine
 import StoreKit
 
 // ============================================================
-// Pearl Hub Pro — one-time in-app purchase (StoreKit 2)
+// Pearl Hub Pro — verified App Store or account purchase
 // ------------------------------------------------------------
 // A single non-consumable (`com.prl.wizard.pro`, US$4.99) unlocks
 // the premium features: server-monitored price alerts, 锁屏盯盘, the
 // order-book depth chart and the home-screen / desktop widget.
-// App Store rules (3.1.1) require IAP for unlocking functionality;
-// crypto donations can't gate anything.
-//
-// The bundle id is Universal Purchase, so one purchase covers
-// iPhone, iPad and Mac. Entitlement = Transaction.currentEntitlements
-// (verified by StoreKit), cached in UserDefaults only so the UI
-// doesn't flash a paywall on launch before StoreKit answers.
+// StoreKit verifies local Apple purchases. The account service verifies linked
+// Apple purchases and confirmed PRL payments. Either source unlocks Pro; removing
+// one source never removes another. The local Apple cache stays separate from
+// the account verdict, which is stored with its session in the Keychain.
 // ============================================================
+
+struct ProEntitlements: Equatable {
+    var apple = false
+    private(set) var accountID: String?
+    private(set) var account = false
+    var unlocked: Bool { apple || account }
+
+    mutating func useAccount(_ id: String?, verifiedPro: Bool = false) {
+        accountID = id
+        account = id != nil && verifiedPro
+    }
+    mutating func updateAccount(_ id: String, verifiedPro: Bool) {
+        guard id == accountID else { return }
+        account = verifiedPro
+    }
+}
 
 @MainActor
 final class ProStore: ObservableObject {
@@ -26,7 +39,7 @@ final class ProStore: ObservableObject {
     /// The Pro transaction's signed JWS (StoreKit's `jwsRepresentation`), sent with
     /// the price-alert and 锁屏盯盘 registrations so the worker can verify the purchase
     /// itself. Cached like `isPro`, so a launch-time registration has it before
-    /// StoreKit answers; nil when not Pro.
+    /// StoreKit answers; nil when there is no local Apple purchase.
     @Published private(set) var jws: String?
     @Published private(set) var product: Product?
     @Published private(set) var busy = false
@@ -35,10 +48,14 @@ final class ProStore: ObservableObject {
     private static let cacheKey = "pro.unlocked"
     private static let jwsKey = "pro.jws"
     private var updates: Task<Void, Never>?
+    private var entitlements: ProEntitlements
+    @Published private(set) var hasAccountPro = false
 
     init() {
-        isPro = UserDefaults.standard.bool(forKey: Self.cacheKey)
-        jws = isPro ? UserDefaults.standard.string(forKey: Self.jwsKey) : nil
+        let cachedApple = UserDefaults.standard.bool(forKey: Self.cacheKey)
+        isPro = cachedApple
+        entitlements = ProEntitlements(apple: cachedApple)
+        jws = cachedApple ? UserDefaults.standard.string(forKey: Self.jwsKey) : nil
         #if DEBUG
         // Screenshot / UI-test seam, compiled out of release.
         if ProcessInfo.processInfo.environment["SHOT_PRO"] == "1" { isPro = true; WidgetBridge.updatePro(true); return }
@@ -58,7 +75,7 @@ final class ProStore: ObservableObject {
         product = try? await Product.products(for: [Self.productID]).first
     }
 
-    /// Re-derive `isPro` from StoreKit's verified entitlements.
+    /// Refresh only the Apple source, preserving a verified account purchase.
     func refresh() async {
         var owned = false
         var signed: String?
@@ -106,17 +123,37 @@ final class ProStore: ObservableObject {
     }
 
     private func set(_ owned: Bool, jws signed: String?) {
-        // Every verdict goes to the widget (a no-op when unchanged), including the first
-        // one after an update, before which its snapshot has no Pro status at all.
-        WidgetBridge.updatePro(owned)
+        let hadSync = CloudSync.canSync()
+        entitlements.apple = owned
+        UserDefaults.standard.set(owned, forKey: Self.cacheKey)
         let newJWS = owned ? signed ?? jws : nil
         if newJWS != jws {
             jws = newJWS
             UserDefaults.standard.set(newJWS, forKey: Self.jwsKey)
         }
-        guard owned != isPro || UserDefaults.standard.object(forKey: Self.cacheKey) == nil else { return }
-        isPro = owned
-        UserDefaults.standard.set(owned, forKey: Self.cacheKey)
+        publish()
+        if !hadSync && CloudSync.canSync() { CloudSync.refresh() }
+    }
+
+    func useAccount(_ id: String?, verifiedPro: Bool = false) {
+        entitlements.useAccount(id, verifiedPro: verifiedPro)
+        publish()
+    }
+
+    func updateAccount(_ id: String, verifiedPro: Bool) {
+        entitlements.updateAccount(id, verifiedPro: verifiedPro)
+        publish()
+    }
+
+    private func publish() {
+        // Publish source changes even when another source keeps Pro enabled: alerts
+        // must switch between account authorization and a local Apple receipt.
+        isPro = entitlements.unlocked
+        let hadSync = CloudSync.canSync()
+        UserDefaults.standard.set(entitlements.account, forKey: "pro.accountSync")
+        if !hadSync && CloudSync.canSync() { CloudSync.refresh() }
+        if hasAccountPro != entitlements.account { hasAccountPro = entitlements.account }
+        WidgetBridge.updatePro(isPro)
     }
 }
 

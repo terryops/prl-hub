@@ -3,11 +3,13 @@ import SwiftUI
 
 // MARK: - Pearl Hub widget bundle (iOS)
 //
-// Two widgets the user adds separately:
+// Widgets the user adds separately:
 //   • Pearl Hub  — home screen / desktop: balance + fiat, recent transfers, pool hashrate.
 //   • PRL 币价   — iOS Lock Screen: today's date, weekday and the live PRL price.
+//   • PRL 报价 / 1h / 24h — iOS Lock Screen: quote and rolling price changes.
+//   • 报价与矿池监控 — iOS Lock Screen: price, total hashrate and online workers.
 // Plus the 锁屏盯盘 Live Activity (iOS, Pro), which the app starts on demand.
-// Both read the app's App Group snapshot for inputs and self-refresh on the system
+// All read the app's App Group snapshot for inputs and self-refresh on the system
 // timeline so they stay current while the app is closed.
 
 @main
@@ -16,6 +18,10 @@ struct PearlWidgetBundle: WidgetBundle {
         PearlWidget()
         #if os(iOS)
         PearlLockWidget()
+        PearlQuoteWidget()
+        PearlChange1hWidget()
+        PearlChange24hWidget()
+        PearlQuoteMiningWidget()
         PriceLiveActivity()
         #endif
     }
@@ -135,11 +141,11 @@ func balanceParts(_ v: Double) -> (head: String, tail: String) {
 
 /// The balance as a Text: big `head` (integer + 2 dp) followed by the remaining
 /// fraction digits in the smaller, dimmer `tail` font. "——" when no wallet yet.
-func balanceText(_ snap: WidgetSnapshot, head: Font, tail: Font) -> Text {
+func balanceText(_ snap: WidgetSnapshot, head: Font, tail: Font, tailColor: Color = .white.opacity(0.6)) -> Text {
     guard snap.hasWallet else { return Text(verbatim: "——").font(head) }
     let p = balanceParts(snap.balancePRL)
     return Text(p.head).font(head)
-        + Text(p.tail).font(tail).foregroundStyle(.white.opacity(0.6))
+        + Text(p.tail).font(tail).foregroundStyle(tailColor)
 }
 
 func moneyString(_ symbol: String, _ v: Double, decimals: Int = 2) -> String {
@@ -175,6 +181,8 @@ extension WidgetSnapshot {
         s.walletName = "Bikgo Pearl"
         s.balancePRL = 63.61479714
         s.prlUsd = 0.52
+        s.prlUsdAt = Date()
+        s.marketQuote = WidgetMarketQuote(usd: 0.52, change1h: -0.84, change24h: 5.26, at: Date())
         s.fiat = WidgetFiat(code: "CNY", symbol: "¥", decimals: 2, rate: 7.10)
         s.hasWallet = true
         s.recentTx = [
@@ -188,6 +196,7 @@ extension WidgetSnapshot {
             WidgetPool(label: "Rig B · HeroMiners", kind: "HeroMiners", address: "prl1demo2",
                        hashrate: "642 MH/s", hashrateRaw: 6.42e8, online: 2, total: 2),
         ]
+        s.poolsAt = Date()
         s.updatedAt = Date()
         return s
     }

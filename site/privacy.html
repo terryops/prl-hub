@@ -6,7 +6,7 @@
 <title>Privacy Policy — Pearl Hub</title>
 <meta name="description" content="Pearl Hub privacy policy. A self-custody wallet that keeps your data on your device.">
 <style>
-  :root { --indigo:#1B2A6B; --blue:#527AF2; }
+  :root { --indigo:#1B2A6B; --blue:#527AF2; --link:#355FEA; }
   body { margin:0; font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
          color:#1b2444; background:#f4f7ff; -webkit-font-smoothing:antialiased; }
   header { background:linear-gradient(135deg,var(--indigo),var(--blue)); color:#fff; padding:40px 24px; }
@@ -17,9 +17,9 @@
   main { max-width:760px; margin:0 auto; padding:36px 24px 80px; }
   h2 { font-size:19px; margin:30px 0 8px; color:#142a6b; }
   p, li { color:#27345c; }
-  a { color:var(--blue); }
-  .muted { color:#67739a; font-size:14px; }
-  code { background:#e7edff; padding:1px 6px; border-radius:6px; font-size:14px; }
+  a { color:var(--link); }
+  .muted { color:#5f6b92; font-size:14px; }
+  code { background:#e7edff; padding:1px 6px; border-radius:6px; font-size:14px; overflow-wrap:anywhere; }
   .box { background:#fff; border:1px solid #e2e9ff; border-radius:14px; padding:4px 22px 18px; margin-top:18px; }
 </style>
 </head>
@@ -28,19 +28,19 @@
 <main>
   <p class="muted">Last updated: October 10, 2026</p>
 
-  <p><strong>Pearl Hub</strong> ("the app") is a self-custody cryptocurrency wallet and mining
-  monitor for the Pearl ($PRL) network. We designed it to keep your data on your device.
-  <strong>We do not sell or share any data, and we collect none unless you turn on Price
-  Alerts, Offline Alerts or the Lock Screen live price</strong> (see below).</p>
+  <p><strong>Pearl Hub</strong> provides a native self-custody cryptocurrency wallet and mining
+  monitor for the Pearl ($PRL) network, a Chrome wallet extension, and a web mining companion. We do not sell your
+  data or use advertising trackers. The native app's optional alerts and the web companion's
+  server requests and encrypted sync are described below.</p>
 
   <div class="box">
-  <h2>No accounts, no tracking</h2>
-  <p>The app has no user accounts, no analytics, no advertising, and no third-party tracking
-  SDKs, and we have no way to identify you. The only server we — the developer — operate is
-  the optional alert service described below.</p>
+  <h2>Optional email accounts, no tracking</h2>
+  <p>Local features work without an account. Email sign-in is optional and enables configuration sync,
+  device management and purchase linking. We do not use advertising or analytics SDKs. Cloudflare Turnstile
+  verifies email requests to prevent abuse; Cloudflare Email Service sends one-time verification codes.</p>
 
   <h2>Your keys stay on your device</h2>
-  <p>Your wallet recovery phrase and private keys are generated on your device and stored,
+  <p>In the native app, your wallet recovery phrase and private keys are generated on your device and stored,
   encrypted, in the device Keychain / Secure Enclave. They never leave your device and are
   never transmitted to us. Viewing your recovery phrase or sending funds is protected by
   Face ID / Touch ID.</p>
@@ -51,9 +51,8 @@
   Apple push notification token, the alert conditions you set (for example "PRL rises to
   $1.20"), the app's display language and, if you limit notifications to certain hours, those
   hours and your time zone. The server uses them only to check the $PRL price every minute
-  and notify you through Apple's push service when a condition is met. For price alerts it never
-  receives your wallet addresses, balances, recovery phrase or any account information, and the
-  push token cannot be used to identify you. Removing all your alerts deletes this data from the server;
+  and notify you through Apple's push service when a condition is met. For price alerts it does not
+  receive wallet recovery phrases or private keys. If you sign in, your notification token is associated with your account device. Removing all your alerts deletes this data from the server;
   tokens that Apple reports as no longer valid are deleted automatically. The Lock Screen
   live price works the same way: while it is running the server holds the push token Apple
   issues for it, and forgets it when it ends.</p>
@@ -78,8 +77,75 @@
   storefront country Apple reports, to confirm that alerts belong to a Pro purchase and to
   stop them if it is refunded.</p>
 
+  <h2>Web version</h2>
+  <p>The web version sends pool identifiers you add (including an F2Pool read-only link key)
+  to our service to query the relevant pool. Results are cached briefly and are not associated with an identity. Your lists
+  and preferences are stored in your browser. We never request recovery phrases or private keys.</p>
+  <p>The read-only wallet page sends watch addresses to our service, which queries
+  Blockbook for balances and paginated transaction history, including fees and counterparties. Mining income queries also send your
+  monitored payout addresses to exclude transfers between them. These results are briefly
+  cached using hashed address keys. The web page cannot sign or send transactions.
+  Watch addresses remain in local settings and optional encrypted sync. A collapsed card
+  on the same page contains the Chrome extension download and installation guide.</p>
+  <p>USD exchange rates come from ExchangeRate-API's public USD feed; extended price
+  history comes from BigONE's public PRL/USDT daily candles. These requests contain
+  no wallet address or identity. Network charts use public Blockbook samples retained
+  by our service. Device lists, rental costs and calculator preferences remain in your
+  browser and, if enabled, your encrypted settings sync. Synchronizing pool workers
+  into your device list queries only the monitors you have enabled.</p>
+  <h2>Email accounts and configuration sync</h2>
+  <p>Signing in stores your email, random account and installation identifiers, device names, platform,
+  login times and recent activity on Cloudflare D1. Six-digit codes expire in five minutes and are stored as
+  keyed hashes. Request limits use keyed hashes of IP addresses and emails. Web sessions use Secure,
+  HttpOnly cookies. Native apps keep access and refresh credentials in the device-only Keychain;
+  the extension keeps them in local storage restricted to trusted extension contexts.</p>
+  <p>Sync includes public watch addresses (from the native app, each wallet's first receive address and its
+  name, shown read-only on the Web), contacts (names, addresses and notes), monitors, alerts, devices,
+  calculator inputs, language and display preferences. It excludes recovery phrases, private keys,
+  wallet passwords, API secrets and signed transactions. Transport uses HTTPS. Cloud configuration is
+  encrypted at rest with a key stored in Cloudflare Worker secrets. <strong>This is not end-to-end encryption:
+  the server can read the configuration to validate it and process notifications.</strong></p>
+  <p>Browser notification subscriptions belong to a local purchase credential or an account device.
+  Signing out or removing a device revokes its sessions and stops its account notifications; a valid
+  purchase saved in this browser can continue with local settings. Local caches are separated by account;
+  sign-out restores guest settings. An account-managed setting is not also mirrored through iCloud.
+  Wallet storage and local wallet unlock are independent of the account.</p>
+  <p>PRL checkout works without an email account. The browser automatically saves a random purchase
+  credential in local storage before checkout. The server stores its hash, an installation identifier,
+  order amounts and payment transaction identifiers. This credential can access only its purchases and
+  browser notifications; it is excluded from exported and synced settings. A confirmed payment enables
+  Pro in that browser. Optionally linking a verified email lets you restore purchases and use them on
+  other devices. Clearing site data removes the local credential, so email linking is recommended for recovery.
+  Linking an App Store purchase verifies Apple's signed transaction and associates its original
+  transaction identifier with one account. Refunds revoke that purchase's entitlement while retaining
+  independent valid purchases. Linked PRL and App Store purchases grant the same account Pro features
+  in supported app versions. Local App Store purchases also work without an email account.</p>
+  <p>The account page provides configuration export, device removal, verified email changes and account
+  deletion. Deletion removes your email and cloud configuration and revokes sessions and notifications.
+  De-identified payment, purchase/refund and notification-claim records remain to prevent receipt replay
+  and prevent revoked devices from reconnecting through older interfaces. Local wallets are not deleted.
+  Expired codes and request budgets are cleaned up automatically; sessions expire after 30 days of
+  inactivity or 90 days from sign-in.</p>
+
+  <h2>Chrome wallet extension</h2>
+  <p>The extension encrypts recovery phrases and pending transaction records in local
+  extension storage using your password. It does not sync private keys through a Chrome
+  account or our web service. Blockchain queries send account extended public keys,
+  addresses and transaction identifiers to the selected network's Blockbook service;
+  transfers send signed transactions. Recovery phrases and private keys are not sent.
+  Uninstalling the extension removes its local wallet records.</p>
+  <p>On mainnet the extension requests the public PRL price and exchange rates from our
+  service to show an estimate of your balance; these requests carry no wallet address or
+  identity. Contacts you save (name, address and note) are stored unencrypted in local extension
+  storage. Optional email account sync shares these contacts with Web and native apps, over HTTPS.
+  Cloud configuration is encrypted at rest and readable by the server. Account credentials remain
+  in trusted local storage. Signing out stops sync and restores guest contacts. Local account caches
+  are separated by user, and no data is synced through your Chrome or Microsoft account.</p>
+  <p>Opening a public wallet address in the Web companion places the selected address in the
+  URL fragment. The browser reads it after the page loads; it is not sent in the initial page request.</p>
+
   <h2>Third-party services the app contacts</h2>
-  <p>To provide its features, the app makes direct requests from your device to public
+  <p>To provide its features, the native app makes direct requests from your device to public
   services. These requests carry only what is needed to fulfill them (for example a wallet
   or mining address you enter), and each service has its own privacy policy:</p>
   <ul>
@@ -88,17 +154,17 @@
     <li><strong>SafeTrade trading API</strong> (<code>safetrade.com</code>) — only if you add your own SafeTrade API key, to show your exchange balances and place or cancel your orders.</li>
     <li><strong>Mining pool public APIs</strong> (AlphaPool, Lucky Pool, HeroMiners, Pearl Fortune, PearlHash, Kryptex, F2Pool) — to show stats for a mining address you choose to monitor.</li>
   </ul>
-  <p>We do not control these services and receive no data from them.</p>
+  <p>We do not control these services. Native app queries go directly to them; web queries
+  pass through our service as described in the Web version section.</p>
 
   <h2>iCloud sync (optional, Apple-encrypted)</h2>
-  <p>If you use iCloud, your preferences (language, currency, pool setup) sync across your own
+  <p>While signed out of the email account, iCloud can sync your preferences (language, currency, pool setup) across your own
   devices through Apple iCloud, and a SafeTrade API key you add is kept in your iCloud
   Keychain. This data is handled by Apple under Apple's privacy policy; we have no access to
   it.</p>
 
   <h2>Children</h2>
-  <p>The app is not directed to children and does not knowingly collect any information from
-  anyone, including children.</p>
+  <p>The app is not directed to children.</p>
 
   <h2>Changes</h2>
   <p>We may update this policy from time to time. Material changes will be reflected on this

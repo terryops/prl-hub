@@ -35,8 +35,9 @@ enum PriceAlertFormat {
             default:   what = Loc("24 小时内")
             }
         }
-        guard let t = r.lastPushed else { return what }
-        return what + " · " + Loc("上次提醒：%@", RelTime(t))
+        let detail = what + " · " + (r.isRepeating ? Loc("持续提醒") : Loc("仅提醒一次"))
+        guard let t = r.lastPushed else { return detail }
+        return detail + " · " + Loc("上次提醒：%@", RelTime(t))
     }
 
     static func icon(_ r: PriceAlertRule) -> String {
@@ -47,11 +48,12 @@ enum PriceAlertFormat {
         }
     }
 
-    static func gradient(_ r: PriceAlertRule) -> LinearGradient {
+    /// nil is the brand fill (see PearlIconBadge).
+    static func gradient(_ r: PriceAlertRule) -> LinearGradient? {
         switch r.kind {
         case .above: return Pearl.positive
         case .below: return Pearl.negative
-        case .move:  return Pearl.brand
+        case .move:  return nil
         }
     }
 }

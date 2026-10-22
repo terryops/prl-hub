@@ -1,5 +1,101 @@
 import Foundation
 
+/// The public snapshot used by both Web and the app. Upstream parsing, measurement
+/// windows and yield calculations belong to the service; personal miner data does not.
+struct SharedOverview: Decodable, Sendable {
+    struct Network: Decodable, Sendable {
+        let ts: Double?
+        let difficulty, hashrate, blockTime, reward, prlPerTHDay: Double?
+        let difficulty24h, difficulty3d, difficulty7d: Double?
+
+        func isUsable(at date: Date) -> Bool {
+            guard let ts, ts > 0, date.timeIntervalSince1970 - ts <= 900,
+                  ts <= date.timeIntervalSince1970 + 60,
+                  let difficulty, difficulty > 0,
+                  let hashrate, hashrate > 1e12, hashrate < 1e24 else { return false }
+            return true
+        }
+    }
+    struct Row: Decodable, Sendable {
+        struct Point: Decodable, Sendable { let ts: Double; let hashrate: Double? }
+        struct Payout: Decodable, Sendable {
+            let scheme: String?
+            let fee, grossPerPH: Double?
+            let estimated, solo: Bool
+        }
+        let id, name, url: String
+        let hashrate, share, fee: Double?
+        let scheme: String?
+        let solo: Bool
+        let miners, blocksSample: Int?
+        let blocksPerDay, sampleDays, earningsPerPH, theoreticalEarningsPerPH: Double?
+        let trustworthy: Bool
+        let source: String
+        let hashFromPoolAPI, feeFromPoolAPI: Bool?
+        let history: [Point]?
+        let averageHashrate7d, lastBlockTime: Double?
+        let lifetimeBlocks: Int?
+        let payouts: [Payout]?
+        var realFeeMeasurement: PPSFeeMeasurement? = nil
+    }
+    let ok: Bool
+    let ts: Double
+    let source: String
+    let network: Network?
+    let rows: [Row]
+    let partial, stale: Bool
+
+    func isUsable(at date: Date) -> Bool {
+        ok && !stale && ts > 0 && ts <= date.timeIntervalSince1970 + 60 &&
+            date.timeIntervalSince1970 - ts <= 900 &&
+            (!rows.isEmpty || network?.isUsable(at: date) == true)
+    }
+}
+
+/// Pool overview and the calculator share one request and a five-minute cache.
+/// An explicit refresh bypasses the local TTL, while the service controls upstream polling.
+actor SharedPublicData {
+    static let shared = SharedPublicData()
+    private let load: @Sendable () async throws -> SharedOverview
+    private var cached: SharedOverview?
+    private var fetchedAt: Date?
+    private var inFlight: Task<SharedOverview, Error>?
+
+    init(load: @escaping @Sendable () async throws -> SharedOverview = { try await SharedPublicData.fetch() }) {
+        self.load = load
+    }
+
+    func overview(force: Bool = false, at date: Date = Date()) async throws -> SharedOverview {
+        if !force, let cached, let fetchedAt, date.timeIntervalSince(fetchedAt) < 300,
+           cached.isUsable(at: date) { return cached }
+        if let inFlight { return try await inFlight.value }
+        let task = Task {
+            let value = try await load()
+            guard value.isUsable(at: date) else { throw URLError(.badServerResponse) }
+            return value
+        }
+        inFlight = task
+        defer { inFlight = nil }
+        let value = try await task.value
+        guard value.isUsable(at: date) else { throw URLError(.badServerResponse) }
+        cached = value
+        fetchedAt = date
+        return value
+    }
+
+    private static func fetch() async throws -> SharedOverview {
+        var request = URLRequest(url: URL(string: "https://pearlhub.net/v1/pools")!)
+        request.timeoutInterval = 12
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 2_000_000 else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(SharedOverview.self, from: data)
+    }
+}
+
 // Pool-LEVEL clients for the 矿池总览 (address-free) — Lucky Pool, HeroMiners, Pearl Fortune.
 // Their per-MINER halves (what a 我的监控 card reads) live in Sources/WidgetShared/Pools/,
 // shared with the widget extension; hashrate formatting/parsing and FlexDouble live there too.
@@ -33,8 +129,8 @@ struct LuckyPoolClient {
 }
 
 // MARK: - HeroMiners (英雄池) — pearl.herominers.com (cryptonote-nodejs-pool fork)
-// Pool抽水 0%（促销至 2026-08-01，config.fee == 0），但 PRL 仅 SRBMiner 可挖，
-// 矿工端 SRBMiner 抽水约 3% —— 这才是矿工的实际成本，故总览按 3% 展示。
+// Pool fee comes from config.fee. Miner software fees depend on the chosen software
+// and are not part of the address-free pool's yield comparison.
 // Pool-level:  GET /api/stats  →  { config, pool, network } for the 矿池总览 card.
 
 /// Pool-level stats for the 矿池总览 card (GET /api/stats). hashrate is H/s;
@@ -71,9 +167,6 @@ struct HeroPoolStats: Decodable {
 
 struct HeroMinersClient {
     static let coinUnits = HeroMinersSource.coinUnits
-    /// Effective miner cost: pool is 0%, but PRL needs SRBMiner whose dev抽水 ≈ 3%.
-    static let fee = 3.0
-
     /// Pool-wide stats (hashrate / miners / workers / fee) for the address-free
     /// 矿池总览. Throws on a network/HTTP failure so the card shows its inline error.
     func stats(live: Bool = true) async throws -> HeroPoolStats {
@@ -93,6 +186,7 @@ struct PFSummary: Decodable {
         let hours: Int?
         let hashrate: Double?      // pool average over the window, H/s
         let total_coins: Double?   // PRL the pool mined within the window
+        let expected_coins: Double? // theoretical PRL for the same window and credited work
         let block_count: Int?      // pool blocks found within the window
     }
     struct PoolStats: Decodable {

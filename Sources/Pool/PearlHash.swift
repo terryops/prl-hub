@@ -52,9 +52,9 @@ struct PearlHashWalletTx: Decodable {
 private struct PearlHashWalletResp: Decodable { let transactions: [PearlHashWalletTx]? }
 
 struct PearlHashClient {
-    /// Pool fee as the site states it (its API publishes no fee field). Used only by the
-    /// last-resort overview path — the aggregators carry the fee on the primary paths.
-    static let fee = 3.0
+    /// Pool fee as the site states it (its API publishes no fee field). Corrects stale
+    /// aggregator fees as well as the last-resort overview path.
+    static let fee = 1.0  // https://pearlhash.xyz — 1% pool fee (verified 2026-10-12)
 
     private func get<T: Decodable>(_ path: String, as: T.Type, live: Bool) async throws -> T {
         try PoolHTTP.decode(T.self, from: try await PoolHTTP.get(PearlHashSource.base + path, timeout: 25, live: live))

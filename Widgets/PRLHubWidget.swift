@@ -16,14 +16,14 @@ struct PearlWidget: Widget {
     let kind = "PRLHubWidget"
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: PearlProvider()) { entry in
-            Group {
+            WidgetPresentation(appearance: entry.appearance) {
                 if entry.locked {
                     PearlWidgetLocked(languageCode: entry.snap.languageCode)
                 } else {
                     PearlWidgetView(snap: entry.snap, age: entry.age, fresh: entry.fresh)
                 }
             }
-            .containerBackground(pearlGradient, for: .widget)
+            .containerBackground(for: .widget) { WidgetBackground(appearance: entry.appearance) }
             .environment(\.locale, widgetLocale(entry.snap.languageCode))
         }
         .configurationDisplayName("Pearl Hub")
@@ -39,6 +39,7 @@ struct PearlEntry: TimelineEntry {
     var age: String = ""        // precomputed minute-granularity freshness, e.g. "5 分钟前"
     var fresh: Bool = false     // refreshed within the last 5 minutes → stamp shows the fresh badge
     var locked: Bool = false    // medium / large without Pro — the locked card instead of the figures
+    var appearance: WidgetAppearance = .load()
 }
 
 /// Medium and large need Pro; the small size is free.
@@ -231,6 +232,7 @@ struct PearlProvider: TimelineProvider {
 // MARK: - Views
 
 struct PearlWidgetView: View {
+    @Environment(\.widgetColors) private var colors
     @Environment(\.widgetFamily) private var family
     let snap: WidgetSnapshot
     let age: String
@@ -252,6 +254,7 @@ struct PearlWidgetView: View {
 /// its balance / price / pool regions carry their own links, which would still take
 /// the tap.) The small size never gets here — it's free.
 struct PearlWidgetLocked: View {
+    @Environment(\.widgetColors) private var colors
     @Environment(\.widgetFamily) private var family
     let languageCode: String?
 
@@ -265,15 +268,15 @@ struct PearlWidgetLocked: View {
                     .font(.headline.weight(.bold))
                 Text(WLoc("在桌面随时查看余额、币价和矿池算力", languageCode))
                     .font(.caption).multilineTextAlignment(.center)
-                    .foregroundStyle(.white.opacity(0.8))
+                    .foregroundStyle(colors.secondary)
                 Text(WLoc("点按解锁", languageCode))
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(.white.opacity(0.18), in: Capsule())
+                    .background(colors.panel, in: Capsule())
                 Text(WLoc("小尺寸可免费使用", languageCode))
-                    .font(.caption2).foregroundStyle(.white.opacity(0.6))
+                    .font(.caption2).foregroundStyle(colors.secondary)
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(colors.primary)
             .padding(.horizontal, 8)
         }
         .widgetURL(WidgetDeepLink.pro.url)
@@ -295,7 +298,7 @@ struct PearlWidgetLocked: View {
 
     private func bar(width: CGFloat, height: CGFloat) -> some View {
         GeometryReader { g in
-            Capsule().fill(.white.opacity(0.14)).frame(width: g.size.width * width)
+            Capsule().fill(colors.divider.opacity(0.5)).frame(width: g.size.width * width)
         }
         .frame(height: height)
     }
@@ -308,6 +311,7 @@ struct PearlWidgetLocked: View {
 /// dims the text. The icon is the main tell — it survives the macOS desktop's vibrant
 /// (desaturated) rendering, where colour and opacity differences flatten out.
 private struct FreshnessStamp: View {
+    @Environment(\.widgetColors) private var colors
     let age: String
     let fresh: Bool
     let font: Font
@@ -322,12 +326,12 @@ private struct FreshnessStamp: View {
                 }
                 Text(age)
                     .fontWeight(fresh ? .semibold : .regular)
-                    .foregroundStyle(.white.opacity(fresh ? 1 : 0.45))
+                    .foregroundStyle(fresh ? colors.primary : colors.muted)
             }
             .font(font)
             // Same padding in both states so the text doesn't shift when the badge flips.
             .padding(.horizontal, 5).padding(.vertical, 1.5)
-            .background(Capsule().fill(.white.opacity(fresh ? 0.2 : 0)))
+            .background(Capsule().fill(colors.panel.opacity(fresh ? 1 : 0)))
         }
     }
 }
@@ -335,35 +339,38 @@ private struct FreshnessStamp: View {
 // MARK: small — price hero on top, balance under, one-line mining summary
 
 private struct SmallCombined: View {
+    @Environment(\.widgetColors) private var colors
     let snap: WidgetSnapshot
     private var online: Int { snap.pools.reduce(0) { $0 + $1.online } }
     private var total: Int { snap.pools.reduce(0) { $0 + $1.total } }
     private var raw: Double { snap.pools.reduce(0) { $0 + $1.hashrateRaw } }
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("PRL/USD").font(.caption2.weight(.medium)).foregroundStyle(.white.opacity(0.6))
+            Text("PRL/USD").font(.caption2.weight(.medium)).foregroundStyle(colors.secondary)
             PriceBig(snap: snap, size: 18)
+            WidgetDivider().padding(.vertical, 5)
             Spacer(minLength: 2)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 balanceText(snap, head: .system(.callout, design: .rounded).weight(.bold),
-                            tail: .system(.caption2, design: .rounded).weight(.bold))
+                            tail: .system(.caption2, design: .rounded).weight(.bold), tailColor: colors.secondary)
                     .monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
-                Text("PRL").font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(0.7))
+                Text("PRL").font(.system(size: 9, weight: .semibold)).foregroundStyle(colors.secondary)
             }
             if let fiat = fiatLine(snap) {
-                Text(fiat).font(.system(size: 9)).foregroundStyle(.white.opacity(0.75))
+                Text(fiat).font(.system(size: 9)).foregroundStyle(colors.secondary)
                     .lineLimit(1).minimumScaleFactor(0.6)
             }
             Spacer(minLength: 2)
             if !snap.pools.isEmpty {
+                WidgetDivider().padding(.vertical, 5)
                 HStack(spacing: 5) {
-                    Image(systemName: "bolt.fill").foregroundStyle(Color.pearlGold)
+                    Image(systemName: "bolt.fill").foregroundStyle(colors.gold)
                     Text(raw > 0 ? formatHashrate(raw) : "—").lineLimit(1).minimumScaleFactor(0.6)
                     Spacer(minLength: 2)
                     Image(systemName: "desktopcomputer")
                     Text("\(online)/\(total)").monospacedDigit()
                 }
-                .font(.caption2).foregroundStyle(.white.opacity(0.9))
+                .font(.caption2).foregroundStyle(colors.primary)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -376,6 +383,7 @@ private struct SmallCombined: View {
 // MARK: medium — price | balance two-column header, then a split mining panel
 
 private struct MediumCombined: View {
+    @Environment(\.widgetColors) private var colors
     let snap: WidgetSnapshot
     let age: String
     var fresh: Bool = false
@@ -385,32 +393,32 @@ private struct MediumCombined: View {
             if !age.isEmpty { FreshnessStamp(age: age, fresh: fresh, font: .system(size: 9)) }
             Spacer(minLength: 0)
 
-            // Header: PRL price is the gold hero on the left; balance + fiat on the
+            // Header: PRL price leads on the left; balance + fiat on the
             // right, split by a hairline. No wallet name — the price leads. Each half
             // taps to its own page: 价格 → 交易, 余额 → 钱包.
             HStack(spacing: 0) {
                 Link(destination: WidgetDeepLink.trade.url) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("PRL/USD").font(.caption2.weight(.medium)).foregroundStyle(.white.opacity(0.6))
+                    Text("PRL/USD").font(.caption2.weight(.medium)).foregroundStyle(colors.secondary)
                     PriceBig(snap: snap, size: 22)
-                    Text("USD").font(.system(size: 10)).foregroundStyle(.white.opacity(0.5))
+                    Text("USD").font(.system(size: 10)).foregroundStyle(colors.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                Rectangle().fill(.white.opacity(0.15)).frame(width: 1, height: 52)
+                WidgetDivider(vertical: true).frame(height: 52)
 
                 Link(destination: WidgetDeepLink.wallet.url) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(WLoc("余额", snap.languageCode)).font(.caption2.weight(.medium)).foregroundStyle(.white.opacity(0.6))
+                    Text(WLoc("余额", snap.languageCode)).font(.caption2.weight(.medium)).foregroundStyle(colors.secondary)
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         balanceText(snap, head: .system(.title3, design: .rounded).weight(.bold),
-                                    tail: .system(.caption2, design: .rounded).weight(.bold))
+                                    tail: .system(.caption2, design: .rounded).weight(.bold), tailColor: colors.secondary)
                             .monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
-                        Text("PRL").font(.caption2.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
+                        Text("PRL").font(.caption2.weight(.semibold)).foregroundStyle(colors.secondary)
                     }
                     if let fiat = fiatLine(snap) {
-                        Text(fiat).font(.system(size: 10)).foregroundStyle(.white.opacity(0.8))
+                        Text(fiat).font(.system(size: 10)).foregroundStyle(colors.secondary)
                             .lineLimit(1).minimumScaleFactor(0.6)
                     } else {
                         Text(" ").font(.system(size: 10))
@@ -419,9 +427,9 @@ private struct MediumCombined: View {
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 14)
                 }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(colors.primary)
 
-            Rectangle().fill(.white.opacity(0.10)).frame(height: 1).padding(.vertical, 11)
+            WidgetDivider().padding(.vertical, 11)
 
             // Lower panel taps to its own page: pool watches → 我的监控, transfers → 钱包.
             if snap.pools.isEmpty {
@@ -441,6 +449,7 @@ private struct MediumCombined: View {
 // MARK: large — price headline + balance, recent transfers, then up to 4 pool rows
 
 private struct LargeCombined: View {
+    @Environment(\.widgetColors) private var colors
     let snap: WidgetSnapshot
     let age: String
     var fresh: Bool = false
@@ -448,55 +457,59 @@ private struct LargeCombined: View {
         VStack(alignment: .leading, spacing: 11) {
             // Freshness stamp — top-right corner (minute-granularity "N 分钟前").
             if !age.isEmpty { FreshnessStamp(age: age, fresh: fresh, font: .caption2) }
-            // Price is the headline (left, gold); balance + fiat sit to the right.
+            // Price is the headline (left); balance + fiat sit to the right.
             // No wallet name. Each side taps to its own page: 价格 → 交易, 余额 → 钱包.
-            HStack(alignment: .top) {
+            HStack(alignment: .top, spacing: 14) {
                 Link(destination: WidgetDeepLink.trade.url) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("PRL/USD").font(.caption.weight(.medium)).foregroundStyle(.white.opacity(0.6))
+                    Text("PRL/USD").font(.caption.weight(.medium)).foregroundStyle(colors.secondary)
                     PriceBig(snap: snap, size: 24)
                 }
                 }
-                Spacer(minLength: 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                WidgetDivider(vertical: true).frame(height: 57)
                 Link(destination: WidgetDeepLink.wallet.url) {
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(WLoc("余额", snap.languageCode)).font(.caption.weight(.medium)).foregroundStyle(.white.opacity(0.6))
+                    Text(WLoc("余额", snap.languageCode)).font(.caption.weight(.medium)).foregroundStyle(colors.secondary)
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         balanceText(snap, head: .system(.title2, design: .rounded).weight(.bold),
-                                    tail: .system(.caption, design: .rounded).weight(.bold))
+                                    tail: .system(.caption, design: .rounded).weight(.bold), tailColor: colors.secondary)
                             .monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
-                        Text("PRL").font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
+                        Text("PRL").font(.caption.weight(.semibold)).foregroundStyle(colors.secondary)
                     }
                     if let fiat = fiatLine(snap) {
-                        Text(fiat).font(.caption2).foregroundStyle(.white.opacity(0.8))
+                        Text(fiat).font(.caption2).foregroundStyle(colors.secondary)
                     }
                 }
                 }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(colors.primary)
             // Recent transfers — tap to 钱包.
             if !snap.recentTx.isEmpty {
+                WidgetDivider()
                 Link(destination: WidgetDeepLink.wallet.url) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(WLoc("最近交易", snap.languageCode)).font(.caption2.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
+                    Text(WLoc("最近交易", snap.languageCode)).font(.caption2.weight(.semibold)).foregroundStyle(colors.secondary)
                     ForEach(Array(snap.recentTx.prefix(2).enumerated()), id: \.offset) { _, tx in
                         TxRow(tx: tx).font(.caption)
                     }
                 }
                 }
             }
-            Rectangle().fill(.white.opacity(0.16)).frame(height: 1)
             // Mining — the pool rows tap to 我的监控.
             if snap.pools.isEmpty {
                 Text(" ").font(.caption)
             } else {
+                WidgetDivider()
                 Link(destination: WidgetDeepLink.pools.url) {
                 VStack(alignment: .leading, spacing: 11) {
-                    ForEach(Array(snap.pools.prefix(4).enumerated()), id: \.offset) { _, p in
+                    ForEach(Array(snap.pools.prefix(4).enumerated()), id: \.offset) { index, p in
+                        if index > 0 { WidgetDivider().opacity(0.65) }
                         PoolRow(pool: p, compact: false)
                     }
                     if snap.pools.count > 4 {
-                        Text("+\(snap.pools.count - 4)").font(.caption2).foregroundStyle(.white.opacity(0.6))
+                        Text("+\(snap.pools.count - 4)").font(.caption2).foregroundStyle(colors.secondary)
                     }
                 }
                 }
@@ -511,17 +524,18 @@ private struct LargeCombined: View {
 
 // MARK: - Shared pieces
 
-/// 币价 — the live PRL unit price as the widget's GOLD hero figure (the star of
+/// 币价 — the live PRL unit price as the widget's headline figure (the star of
 /// this design). Adaptive precision (priceLine) so a sub-dollar coin never collapses
 /// to "$0.00"; shows "—" until a price is known.
 private struct PriceBig: View {
+    @Environment(\.widgetColors) private var colors
     let snap: WidgetSnapshot
     var size: CGFloat
     var body: some View {
         let line = priceLine(snap)
         Text(line ?? "—")
             .font(.system(size: size, weight: .heavy, design: .rounded))
-            .foregroundStyle(line == nil ? Color.pearlGold.opacity(0.5) : Color.pearlGold)
+            .foregroundStyle(line == nil ? colors.price.opacity(0.5) : colors.price)
             .monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
     }
 }
@@ -529,45 +543,47 @@ private struct PriceBig: View {
 /// Mining (medium) — one rounded panel with each pool as an equal column split by a
 /// hairline: bigger and tidier than loose rows. Shows up to 2 pools.
 private struct MiningPanel: View {
+    @Environment(\.widgetColors) private var colors
     let pools: [WidgetPool]
     private var shown: [WidgetPool] { Array(pools.prefix(2)) }
     var body: some View {
         HStack(spacing: 0) {
             ForEach(Array(shown.enumerated()), id: \.offset) { idx, p in
                 HStack(spacing: 6) {
-                    Circle().fill(p.online > 0 ? Color.green : Color.white.opacity(0.4)).frame(width: 7, height: 7)
-                    Image(systemName: "bolt.fill").font(.system(size: 11)).foregroundStyle(Color.pearlGold)
+                    Circle().fill(p.online > 0 ? colors.positive : colors.muted).frame(width: 7, height: 7)
+                    Image(systemName: "bolt.fill").font(.system(size: 11)).foregroundStyle(colors.gold)
                     Text(p.hashrate).font(.system(size: 13, weight: .bold)).monospacedDigit()
                         .lineLimit(1).minimumScaleFactor(0.55)
                     Spacer(minLength: 3)
                     Text("\(p.online)/\(p.total)").font(.system(size: 11, weight: .medium)).monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.8))
+                        .foregroundStyle(colors.secondary)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 10)
                 .frame(maxWidth: .infinity)
                 if idx == 0 && shown.count > 1 {
-                    Rectangle().fill(.white.opacity(0.14)).frame(width: 1, height: 22)
+                    WidgetDivider(vertical: true).frame(height: 22)
                 }
             }
         }
-        .foregroundStyle(.white)
-        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .foregroundStyle(colors.primary)
+        .background(colors.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
 /// One pool row: status dot · label · hashrate · online/total — matches the design.
 private struct PoolRow: View {
+    @Environment(\.widgetColors) private var colors
     let pool: WidgetPool
     let compact: Bool
     var body: some View {
         HStack(spacing: 7) {
-            Circle().fill(pool.online > 0 ? Color.green : Color.white.opacity(0.4)).frame(width: 7, height: 7)
+            Circle().fill(pool.online > 0 ? colors.positive : colors.muted).frame(width: 7, height: 7)
             Text(pool.label)
                 .font(compact ? .caption.weight(.medium) : .subheadline.weight(.medium))
                 .lineLimit(1).minimumScaleFactor(0.7)
             Spacer(minLength: 6)
             HStack(spacing: 4) {
-                Image(systemName: "bolt.fill").foregroundStyle(Color.pearlGold).font(.caption2)
+                Image(systemName: "bolt.fill").foregroundStyle(colors.gold).font(.caption2)
                 Text(pool.hashrate)
                     .font(compact ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
                     .monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
@@ -577,21 +593,22 @@ private struct PoolRow: View {
                 Text("\(pool.online)/\(pool.total)")
                     .font(compact ? .caption : .subheadline).monospacedDigit()
             }
-            .foregroundStyle(.white.opacity(0.85))
+            .foregroundStyle(colors.secondary)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(colors.primary)
     }
 }
 
 /// When there are no pools, the medium widget fills the lower area with the most
 /// recent transfers instead.
 private struct TxStrip: View {
+    @Environment(\.widgetColors) private var colors
     let snap: WidgetSnapshot
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(WLoc("最近交易", snap.languageCode)).font(.caption2.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
+            Text(WLoc("最近交易", snap.languageCode)).font(.caption2.weight(.semibold)).foregroundStyle(colors.secondary)
             if snap.recentTx.isEmpty {
-                Text(WLoc("暂无交易记录", snap.languageCode)).font(.caption2).foregroundStyle(.white.opacity(0.6))
+                Text(WLoc("暂无交易记录", snap.languageCode)).font(.caption2).foregroundStyle(colors.secondary)
             } else {
                 ForEach(Array(snap.recentTx.prefix(2).enumerated()), id: \.offset) { _, tx in
                     TxRow(tx: tx).font(.caption2)
@@ -603,16 +620,17 @@ private struct TxStrip: View {
 }
 
 private struct TxRow: View {
+    @Environment(\.widgetColors) private var colors
     let tx: WidgetTx
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: tx.received ? "arrow.down" : "arrow.up")
                 .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(tx.received ? .green : .orange)
+                .foregroundStyle(tx.received ? colors.positive : colors.negative)
             Text((tx.received ? "+" : "-") + prlAmountString(tx.amount, maxFrac: 4))
-                .foregroundStyle(.white).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+                .foregroundStyle(colors.primary).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
             Spacer(minLength: 2)
-            Text(tx.time, style: .relative).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
+            Text(tx.time, style: .relative).foregroundStyle(colors.muted).lineLimit(1)
         }
     }
 }

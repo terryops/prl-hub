@@ -21,10 +21,9 @@ import AppKit
 // every change re-sends the whole set with PUT, which the worker
 // diffs so unchanged rules keep their fired/armed state. The
 // token can rotate, so each launch re-registers and re-syncs.
-// One exception: an alert that was pushed switches itself off on
-// the server (one-shot, opted into with `oneshot`); the app adopts
-// that from every reply and only re-enables it when the user
-// switches it back on.
+// By default a pushed alert switches itself off on the server;
+// the app adopts that from every reply. Users can opt each rule
+// into repeating notifications after its condition resets.
 //
 // 推送时段 (1.16): pushes can be limited to a daily window of local
 // time (default: all day). An alert that fires outside it is queued
@@ -69,6 +68,8 @@ struct PriceAlertRule: Codable, Identifiable, Equatable {
     var window: Int = 0
     /// Switched on by the user (synced). Whether it is live right now: `isOn`.
     var enabled = true
+    /// nil in older saved rules: reminders default to one-shot.
+    var repeats: Bool?
     /// Last time the server pushed this rule to THIS device (from the worker's reply).
     var lastFired: Date?
     /// Fired during quiet hours; the push waits for the next window start
@@ -85,9 +86,10 @@ struct PriceAlertRule: Codable, Identifiable, Equatable {
     /// rule on. Synced.
     var ack: TimeInterval?
 
-    /// One-shot: an alert that fired after it was last switched on is off until the
-    /// user switches it back on. Only worker timestamps are compared.
-    var isOn: Bool { enabled && (fired ?? 0) <= (ack ?? 0) }
+    /// Repeating alerts remain on after firing; one-shot alerts stay off until
+    /// switched back on. Only worker timestamps are compared.
+    var isRepeating: Bool { repeats == true }
+    var isOn: Bool { enabled && (isRepeating || (fired ?? 0) <= (ack ?? 0)) }
 
     /// When the alert last went out, on any device.
     var lastPushed: Date? { fired.map { Date(timeIntervalSince1970: $0) } ?? lastFired }
@@ -112,7 +114,17 @@ struct PriceAlertRule: Codable, Identifiable, Equatable {
     /// it too) — an edited one-shot alert that had fired used to stay off. An
     /// unchanged condition keeps its on/off and fired state.
     func applyingEdit(_ edited: PriceAlertRule) -> PriceAlertRule {
-        if hasSameCondition(as: edited) { return self }
+        if hasSameCondition(as: edited) {
+            guard isRepeating != edited.isRepeating else { return self }
+            var r = self
+            r.repeats = edited.isRepeating
+            // Keep the threshold's disarmed/cooldown state on the worker. Changing
+            // the frequency enables future crossings without sending a duplicate.
+            r.enabled = true
+            r.ack = max(ack ?? 0, fired ?? 0)
+            r.changedAt = Self.stamp(after: changedAt)
+            return r
+        }
         var r = edited
         r.id = id
         r.enabled = true
@@ -139,7 +151,7 @@ struct PriceAlertRule: Codable, Identifiable, Equatable {
     /// — here or on another device, where the user switched it back on.
     var wire: Wire {
         Wire(id: id, kind: kind, value: value, window: window, on: isOn,
-             seen: Int(max(ack ?? 0, lastFired?.timeIntervalSince1970 ?? 0)))
+             seen: Int(max(ack ?? 0, lastFired?.timeIntervalSince1970 ?? 0)), repeats: isRepeating)
     }
 
     struct Wire: Equatable {
@@ -149,9 +161,10 @@ struct PriceAlertRule: Codable, Identifiable, Equatable {
         var window: Int
         var on: Bool
         var seen: Int
+        var repeats = false
 
         fileprivate var payload: [String: Any] {
-            ["id": id, "kind": kind.rawValue, "value": value, "window": window, "enabled": on, "seen_fired": seen]
+            ["id": id, "kind": kind.rawValue, "value": value, "window": window, "enabled": on, "seen_fired": seen, "repeat": repeats]
         }
     }
 }
@@ -189,6 +202,7 @@ struct AlertQuote: Equatable {
 @MainActor
 final class PriceAlertStore: ObservableObject {
     static let shared = PriceAlertStore()
+    private let defaults: UserDefaults
 
     nonisolated static let endpoint = URL(string: "https://pearlhub.net/v1")!
     /// The worker's cap on rules per device.
@@ -209,10 +223,10 @@ final class PriceAlertStore: ObservableObject {
 
     private static let rulesKey = "alerts.rules"
     /// iCloud copy of the rules (CloudSync mirrors it); merged into `rules`, never read directly.
-    static let syncKey = "alerts.sync"
+    nonisolated static let syncKey = "alerts.sync"
     /// Deleted rule ids → when, so a deletion also reaches the other devices.
     private static let removedKey = "alerts.removed"
-    static let windowKey = "alerts.window"
+    nonisolated static let windowKey = "alerts.window"
     private static let pushHereKey = "alerts.pushHere"
     private var removed: [String: TimeInterval] = [:]
     /// Time zone the worker last got with the window — re-sent after travel.
@@ -223,7 +237,7 @@ final class PriceAlertStore: ObservableObject {
     /// offline — above all removing the last alert, after which nothing here would
     /// otherwise look worth sending — still reaches the worker later.
     private var unsynced: Bool {
-        didSet { if unsynced != oldValue { UserDefaults.standard.set(unsynced, forKey: Self.unsyncedKey) } }
+        didSet { if unsynced != oldValue { defaults.set(unsynced, forKey: Self.unsyncedKey) } }
     }
     private var syncTask: Task<Void, Never>?
     private var windowPushTask: Task<Void, Never>?
@@ -234,16 +248,20 @@ final class PriceAlertStore: ObservableObject {
     private var languageSub: AnyCancellable?
     private var proSub: AnyCancellable?
     private var jwsSub: AnyCancellable?
+    private var accountProSub: AnyCancellable?
     private var cloudSub: AnyCancellable?
+    private var configurationOwner: String?
 
-    init() {
-        let d = UserDefaults.standard
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        let d = defaults
+        configurationOwner = d.string(forKey: "account.current")
         if let data = d.data(forKey: Self.rulesKey),
            let r = try? JSONDecoder().decode([PriceAlertRule].self, from: data) { rules = r.map { $0.migratedFromLegacy() } }
         if let data = d.data(forKey: Self.removedKey),
            let r = try? JSONDecoder().decode([String: TimeInterval].self, from: data) { removed = r }
         token = d.string(forKey: Self.tokenKey)
-        window = Self.savedWindow()
+        window = Self.savedWindow(defaults)
         pushHere = d.object(forKey: Self.pushHereKey) as? Bool ?? true
         unsynced = d.bool(forKey: Self.unsyncedKey)
         if d.data(forKey: Self.syncKey) == nil {
@@ -259,7 +277,6 @@ final class PriceAlertStore: ObservableObject {
             reconcile(incoming: true)
         }
         cloudSub = NotificationCenter.default.publisher(for: .cloudSyncDidUpdate)
-            .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.cloudDidUpdate() }
         // The push copy is localized server-side, so a language switch (here or
         // synced from another device) must re-send the rules with the new code.
@@ -268,11 +285,16 @@ final class PriceAlertStore: ObservableObject {
         // Alerts are a Pro feature: losing Pro (refund) empties the server copy,
         // (re)gaining it re-registers — local rules are kept either way.
         proSub = ProStore.shared.$isPro.dropFirst().removeDuplicates()
+            .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.proChanged() }
         // The signed purchase arrived after registering (StoreKit answered late, or a
         // purchase on another device): hand it to the worker.
         jwsSub = ProStore.shared.$jws.dropFirst().removeDuplicates()
-            .sink { [weak self] jws in if jws != nil { self?.jwsChanged() } }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.jwsChanged() }
+        accountProSub = ProStore.shared.$hasAccountPro.dropFirst().removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.jwsChanged() }
     }
 
     // MARK: rules
@@ -284,12 +306,11 @@ final class PriceAlertStore: ObservableObject {
         rulesChanged()
     }
 
-    /// Save an edit made to `original`. Only the condition can be edited, so an
-    /// unchanged one saves nothing — the stored copy may have moved on since the
-    /// editor opened (fired, or edited on another device) and must not be put back.
+    /// Save a condition or frequency edit. An unchanged edit saves nothing: the
+    /// stored copy may have fired or changed on another device since the editor opened.
     /// A changed condition is a new alert: its fired/armed state resets, server-side too.
     func update(_ edited: PriceAlertRule, from original: PriceAlertRule) {
-        guard !edited.hasSameCondition(as: original),
+        guard !edited.hasSameCondition(as: original) || edited.isRepeating != original.isRepeating,
               let i = rules.firstIndex(where: { $0.id == original.id }) else { return }
         let r = rules[i].applyingEdit(edited)
         guard r != rules[i] else { return }
@@ -322,8 +343,8 @@ final class PriceAlertStore: ObservableObject {
     func setWindow(_ w: PushWindow?) {
         guard w != window else { return }
         window = w
-        if let w, let d = try? JSONEncoder().encode(w) { UserDefaults.standard.set(d, forKey: Self.windowKey) }
-        else { UserDefaults.standard.removeObject(forKey: Self.windowKey) }
+        if let w, let d = try? JSONEncoder().encode(w) { defaults.set(d, forKey: Self.windowKey) }
+        else { defaults.removeObject(forKey: Self.windowKey) }
         // Upload once the time picker settles, not on every step of it.
         windowPushTask?.cancel()
         windowPushTask = Task {
@@ -340,7 +361,7 @@ final class PriceAlertStore: ObservableObject {
     func setPushHere(_ on: Bool) {
         guard on != pushHere else { return }
         pushHere = on
-        UserDefaults.standard.set(on, forKey: Self.pushHereKey)
+        defaults.set(on, forKey: Self.pushHereKey)
         localVersion += 1
         if on { followOnServer(prompt: true) } else { scheduleSync() }
     }
@@ -360,8 +381,8 @@ final class PriceAlertStore: ObservableObject {
         followOnServer(prompt: prompt)
     }
 
-    private static func savedWindow() -> PushWindow? {
-        UserDefaults.standard.data(forKey: windowKey).flatMap { try? JSONDecoder().decode(PushWindow.self, from: $0) }
+    private static func savedWindow(_ defaults: UserDefaults) -> PushWindow? {
+        defaults.data(forKey: windowKey).flatMap { try? JSONDecoder().decode(PushWindow.self, from: $0) }
     }
 
     private func rulesChanged() {
@@ -381,11 +402,22 @@ final class PriceAlertStore: ObservableObject {
     // MARK: iCloud
 
     /// Rules or the window changed on another device.
-    private func cloudDidUpdate() {
+    func cloudDidUpdate() {
+        let d = defaults, owner = defaults.string(forKey: "account.current")
+        let switched = owner != configurationOwner
+        if switched {
+            configurationOwner = owner
+            syncTask?.cancel(); windowPushTask?.cancel()
+            localVersion += 1
+            rules = d.data(forKey: Self.rulesKey).flatMap { try? JSONDecoder().decode([PriceAlertRule].self, from: $0) } ?? []
+            removed = d.data(forKey: Self.removedKey).flatMap { try? JSONDecoder().decode([String: TimeInterval].self, from: $0) } ?? [:]
+            unsynced = d.bool(forKey: Self.unsyncedKey)
+            syncState = .idle; sentTimeZone = nil
+        }
         var changed = reconcile(incoming: true)
-        let w = Self.savedWindow()
+        let w = Self.savedWindow(defaults)
         if w != window { window = w; if hasContent { changed = true } }
-        guard changed else { return }
+        guard changed || switched else { return }
         localVersion += 1   // a server reply already in flight predates this
         followOnServer(prompt: false)
     }
@@ -394,7 +426,7 @@ final class PriceAlertStore: ObservableObject {
     /// is behind. Returns whether anything the worker sees changed.
     @discardableResult
     private func reconcile(incoming: Bool) -> Bool {
-        let d = UserDefaults.standard
+        let d = defaults
         let raw = d.data(forKey: Self.syncKey)
         let cloud = CloudAlerts.decode(raw)
         // Written by a newer version this one can't read: leave it alone rather than
@@ -428,7 +460,7 @@ final class PriceAlertStore: ObservableObject {
     }
 
     private func persist() {
-        let d = UserDefaults.standard
+        let d = defaults
         if let data = try? JSONEncoder().encode(rules) { d.set(data, forKey: Self.rulesKey) }
         if let data = try? JSONEncoder().encode(removed) { d.set(data, forKey: Self.removedKey) }
     }
@@ -478,7 +510,7 @@ final class PriceAlertStore: ObservableObject {
         let changed = token != hex
         if let old = token, changed { forget(token: old) }
         token = hex
-        UserDefaults.standard.set(hex, forKey: Self.tokenKey)
+        defaults.set(hex, forKey: Self.tokenKey)
         // Only a new token needs sending: with the old one still valid, ensureRegistered has
         // already scheduled the sync it wanted. Syncing here as well sent every change twice
         // whenever the system answered late — and switching a dozen 掉线提醒 monitors in a
@@ -533,12 +565,12 @@ final class PriceAlertStore: ObservableObject {
     }
 
     /// The 掉线提醒 monitors for the worker. nil = say nothing about them (the worker
-    /// keeps what it has): it takes monitors only with the signed purchase, and that
-    /// can arrive a moment after Pro itself is known (`jwsChanged` then re-sends).
+    /// keeps what it has): authorization requires a signed Apple purchase or a
+    /// verified account purchase. Either can arrive after initial registration.
     private var wireWatches: [OfflineAlertWire]? {
         guard ProStore.shared.isPro, pushHere else { return [] }
         let list = offline.wire
-        return list.isEmpty || ProStore.shared.jws != nil ? list : nil
+        return list.isEmpty || ProStore.shared.jws != nil || ProStore.shared.hasAccountPro ? list : nil
     }
 
     /// The device record as the worker's PUT /v1/devices/:token takes it (alerts/src/index.js
@@ -576,7 +608,7 @@ final class PriceAlertStore: ObservableObject {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
         do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
+            let (data, resp) = try await WebLinkStore.shared.data(for: req)
             guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
                 syncState = .failed(Loc("服务器暂时不可用，稍后自动重试"))
                 return
@@ -600,7 +632,7 @@ final class PriceAlertStore: ObservableObject {
         let asked = localVersion
         var req = URLRequest(url: Self.endpoint.appendingPathComponent("devices/\(token)"))
         req.timeoutInterval = 10
-        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+        guard let (data, resp) = try? await WebLinkStore.shared.data(for: req),
               (resp as? HTTPURLResponse)?.statusCode == 200,
               asked == localVersion, syncState != .syncing else { return }
         adoptServerState(data, fromPut: false)
@@ -641,7 +673,7 @@ final class PriceAlertStore: ObservableObject {
     private func forget(token old: String) {
         var req = URLRequest(url: Self.endpoint.appendingPathComponent("devices/\(old)"))
         req.httpMethod = "DELETE"
-        URLSession.shared.dataTask(with: req).resume()
+        Task { _ = try? await WebLinkStore.shared.data(for: req) }
     }
 
     enum TestResult { case sent, failed(String) }
@@ -652,7 +684,7 @@ final class PriceAlertStore: ObservableObject {
         var req = URLRequest(url: Self.endpoint.appendingPathComponent("devices/\(token)/test"))
         req.httpMethod = "POST"
         req.timeoutInterval = 15
-        guard let (_, resp) = try? await URLSession.shared.data(for: req),
+        guard let (_, resp) = try? await WebLinkStore.shared.data(for: req),
               let code = (resp as? HTTPURLResponse)?.statusCode else {
             return .failed(Loc("无法连接提醒服务器，请检查网络"))
         }
@@ -688,13 +720,16 @@ final class PriceAlertStore: ObservableObject {
         #endif
     }
 
-    /// The app's resolved UI language, one of the worker's six.
+    /// The app's resolved UI language, one of the worker's (alerts/src/i18n.js `LANGS`,
+    /// which mirrors `AppLanguage`).
     static var pushLanguage: String {
-        let supported = ["en", "ru", "zh-Hans", "zh-Hant", "vi", "id"]
+        let supported = AppLanguage.allCases.compactMap(\.lprojCode)
         if let code = LocBundleHolder.shared.languageCode, supported.contains(code) { return code }
         let pref = Bundle.main.preferredLocalizations.first ?? "en"
         if supported.contains(pref) { return pref }
         if pref.hasPrefix("zh") { return pref.contains("Hant") || pref.contains("TW") || pref.contains("HK") ? "zh-Hant" : "zh-Hans" }
-        return supported.first { pref.hasPrefix($0) } ?? "en"
+        // "pt-PT" → "pt-BR", "es-419" → "es": the same language under another region.
+        let base = pref.split(separator: "-").first.map(String.init) ?? pref
+        return supported.first { $0 == base || $0.hasPrefix(base + "-") } ?? "en"
     }
 }

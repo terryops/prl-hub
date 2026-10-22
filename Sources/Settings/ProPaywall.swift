@@ -6,9 +6,10 @@ import UIKit
 // MARK: - Paywall
 
 /// Pearl Hub Pro — a one-time US$4.99 in-app purchase: price alerts, 掉线提醒, 锁屏盯盘,
-/// the depth chart and the home-screen / desktop widget.
+/// the depth chart, the home-screen / desktop widget and cross-device data sync.
 struct ProPaywallCard: View {
     @ObservedObject var pro: ProStore
+    @State private var showingAccount = false
 
     var body: some View {
         VStack(spacing: Pearl.Space.lg) {
@@ -19,28 +20,14 @@ struct ProPaywallCard: View {
                     .font(.subheadline).foregroundStyle(.secondary)
             }
 
-            VStack(alignment: .leading, spacing: Pearl.Space.sm) {
-                feature("scope", Loc("到价提醒：涨破或跌破你设定的价格"))
-                feature("waveform.path.ecg", Loc("涨跌幅提醒：5 分钟、1 小时或 24 小时"))
-                feature("bell.badge", Loc("没打开 App 也能收到通知"))
-                feature("wifi.exclamationmark", Loc("掉线提醒：矿机离线 10 分钟以上就通知你"))
-                if PriceLiveActivity.supported {
-                    feature("lock.iphone", Loc("锁屏盯盘：锁屏和灵动岛实时显示价格"))
-                }
-                if AppFeatures.tradeEnabled {
-                    feature("chart.bar.xaxis", Loc("买卖深度图：看清各价位的挂单和买卖力量"))
-                }
-                feature("square.grid.2x2", Loc("中、大尺寸桌面小组件：矿池算力和最近交易一目了然"))
-                feature("laptopcomputer.and.iphone", Loc("一次购买，iPhone、iPad 和 Mac 通用"))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            ProFeatureList()
 
             VStack(spacing: Pearl.Space.sm) {
                 Button {
                     Task { await pro.purchase() }
                 } label: {
                     HStack(spacing: Pearl.Space.xs) {
-                        if pro.busy { ProgressView().controlSize(.small).tint(.white) }
+                        if pro.busy { ProgressView().controlSize(.small).tint(Pearl.onAccent) }
                         Text(pro.product.map { Loc("以 %@ 解锁", $0.displayPrice) } ?? Loc("解锁高级版"))
                     }
                 }
@@ -55,6 +42,9 @@ struct ProPaywallCard: View {
                 }
                 .font(.footnote)
 
+                Button(Loc("已有高级版？登录账号")) { showingAccount = true }
+                    .font(.footnote)
+
                 if let msg = pro.message {
                     Text(msg).font(.caption).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -62,6 +52,47 @@ struct ProPaywallCard: View {
             }
         }
         .pearlAccentCard()
+        .sheet(isPresented: $showingAccount) {
+            // A sheet needs its own way out: a Mac's can't be swiped away.
+            NavigationStack {
+                WebLinkView()
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button(Loc("关闭")) { showingAccount = false }
+                        }
+                        .noGlassBackground()
+                    }
+            }
+            #if os(macOS)
+            .frame(minWidth: 480, minHeight: 460)
+            #endif
+        }
+        // Signing in to an account that has Pro is what the sheet was opened for.
+        .onChange(of: pro.isPro) { _, unlocked in
+            if unlocked { showingAccount = false }
+        }
+    }
+}
+
+/// Shared by the purchase offer and the active member's settings page.
+struct ProFeatureList: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: Pearl.Space.sm) {
+            feature("arrow.triangle.2.circlepath", Loc("数据同步：登录同一邮箱，在网页、iPhone、iPad 和 Mac 间同步配置"))
+            feature("scope", Loc("到价提醒：涨破或跌破你设定的价格"))
+            feature("waveform.path.ecg", Loc("涨跌幅提醒：5 分钟、1 小时或 24 小时"))
+            feature("bell.badge", Loc("没打开 App 也能收到通知"))
+            feature("wifi.exclamationmark", Loc("掉线提醒：矿机离线 10 分钟以上就通知你"))
+            if PriceLiveActivity.supported {
+                feature("lock.iphone", Loc("锁屏盯盘：锁屏和灵动岛实时显示价格"))
+            }
+            if AppFeatures.tradeEnabled {
+                feature("chart.bar.xaxis", Loc("买卖深度图：看清各价位的挂单和买卖力量"))
+            }
+            feature("square.grid.2x2", Loc("中、大尺寸桌面小组件：矿池算力和最近交易一目了然"))
+            feature("laptopcomputer.and.iphone", Loc("一次购买，iPhone、iPad 和 Mac 通用"))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func feature(_ icon: String, _ text: String) -> some View {

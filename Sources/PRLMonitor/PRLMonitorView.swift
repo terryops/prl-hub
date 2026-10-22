@@ -52,6 +52,7 @@ struct PRLMonitorView: View {
                 case .catalog:   CatalogSection(store: store)
                 }
             }
+            .pearlScreenBackground()
             .navigationTitle(Loc("PRL 挖矿监控"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -97,11 +98,6 @@ struct PRLMonitorView: View {
         // and the daily rate refresh (no-op while the user pinned a manual rate).
         .onChange(of: currency.secondaryPref) { _, _ in store.syncFx() }
         .onChange(of: currency.lastUpdated) { _, _ in store.syncFx() }
-        .onReceive(NotificationCenter.default.publisher(for: .cloudSyncDidUpdate)) { _ in
-            store.reloadDevices()   // adopt 设备资料 synced from another device
-            store.reloadPrefs()     // adopt synced config (电费 / 费率 / 模式 / 排序…)
-            store.syncFx()
-        }
     }
 
     /// Dismissible first-run tip: you add pools/addresses in 我的监控, then one-tap
@@ -112,11 +108,9 @@ struct PRLMonitorView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(Loc("新手提示")).font(.callout.weight(.semibold))
                 Text(Loc("先到「我的监控」添加你的矿池和挖矿地址；再回到「我的设备」点『从矿池同步』，即可一键把矿机同步成设备。"))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .pearlExplanation()
                 Text(Loc("Pearl Hub 本身不挖矿，仅读取矿池公开数据。"))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .pearlExplanation()
             }
             Spacer(minLength: 0)
             Button { withAnimation(.snappy) { introSeen = true } } label: {
@@ -153,12 +147,12 @@ private struct SectionTabBar: View {
                         } label: {
                             Text(Loc(s.rawValue))
                                 .font(.subheadline.weight(on ? .semibold : .regular))
-                                .foregroundStyle(on ? Color.white : Color.primary)
+                                .foregroundStyle(on ? Pearl.onAccent : Color.primary)
                                 .lineLimit(1)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 7)
                                 .background(
-                                    Capsule().fill(on ? AnyShapeStyle(Pearl.accent)
+                                    Capsule().fill(on ? AnyShapeStyle(Pearl.plate)
                                                       : AnyShapeStyle(Color.primary.opacity(0.06)))
                                 )
                         }
@@ -196,7 +190,7 @@ struct StatCard: View {
         .background(Pearl.surface, in: RoundedRectangle(cornerRadius: Pearl.Radius.sm, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: Pearl.Radius.sm, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+                .strokeBorder(Pearl.surfaceEdge, lineWidth: 1)
         )
     }
 }

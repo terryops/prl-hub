@@ -56,9 +56,9 @@ struct DevicesSection: View {
                 .onPreferenceChange(DeviceCardHeightKey.self) { cardHeight = $0 }
 
                 HStack(alignment: .top, spacing: Pearl.Space.sm) {
-                    PearlIconBadge(systemImage: "info.circle", gradient: Pearl.brand, size: 30)
+                    PearlIconBadge(systemImage: "info.circle", size: 30)
                     Text(store.sym(Loc("提示：自动保存。每台可选『自有』(付电费+计硬件成本) 或『租用』(按 ¥/小时 付租，全包价不另计电费/功率)。『可用h』= 每天实际挖矿小时，按比例缩放出币/电费/租金。租金单价可在此逐台调，默认值在【显卡对比】选中卡后设。")))
-                        .font(.callout).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                        .font(.subheadline).fixedSize(horizontal: false, vertical: true)
                 }
                 .pearlCard(padding: Pearl.Space.lg, radius: Pearl.Radius.md)
 
@@ -213,8 +213,8 @@ struct DeviceRow: View {
                     Spacer(minLength: Pearl.Space.xs)
                     // 手动录入按小时租金（可直接键入数字，或用步进器微调）；内部仍存日租
                     // （=时×24），收益按「可用h」缩放。橙色 = 已手动覆盖默认值。
-                    let hourlyBinding = Binding(get: { (dev.rentDaily ?? store.devRent(dev)) / 24 },
-                                                set: { dev.rentDaily = max(0, $0) * 24 })
+                    let hourlyBinding = Binding(get: { store.devRent(dev) / 24 },
+                                                set: { dev.rentDaily = max(0, $0) * 24; dev.rentCurrency = nil; dev.rentFX = nil })
                     Text(store.localSymbol).font(.body.monospacedDigit()).foregroundColor(.secondary)
                     TextField("0", value: hourlyBinding,
                               format: .number.precision(.fractionLength(0...2)))

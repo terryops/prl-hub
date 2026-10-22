@@ -1,12 +1,14 @@
 import SwiftUI
 
 // The pools' own logos (each pool's site icon), bundled in Assets.xcassets as
-// pool-*.imageset — square, opaque tiles, so nothing is fetched to draw a row and a
-// dark mark still reads in dark mode.
+// pool-*.imageset — square, opaque tiles, so nothing is fetched to draw a row.
 //
-// Each is one 180 px PNG: the site's largest icon, trimmed and centred at about 80 % on
+// Each is a 180 px PNG: the site's largest icon, trimmed and centred at about 80 % on
 // a white plate (Lucky Pool's and Pearl Fortune's are tiles already and fill it).
 // PearlHash publishes only a 48 px favicon; its glyph was enlarged and re-cut.
+// Dark mode gets a <name>-dark.png beside it (tools/make-pool-icons-dark.py): the same
+// logo on a dark plate, black glyphs (PearlHash, Pearl Fortune) turned light. Lucky
+// Pool's full-colour tile serves both.
 
 extension PoolKind {
     /// This pool's logo in the asset catalog.

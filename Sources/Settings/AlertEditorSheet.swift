@@ -13,6 +13,7 @@ struct AlertEditorSheet: View {
     @State private var priceText: String
     @State private var pctText: String
     @State private var window: Int
+    @State private var repeats: Bool
     @Environment(\.dismiss) private var dismiss
 
     init(existing: PriceAlertRule?, current: Double?,
@@ -23,6 +24,7 @@ struct AlertEditorSheet: View {
         _priceText = State(initialValue: existing.flatMap { $0.kind == .move ? nil : String(format: "%.2f", $0.value) } ?? "")
         _pctText = State(initialValue: existing.flatMap { $0.kind == .move ? String(format: "%g", $0.value) : nil } ?? "10")
         _window = State(initialValue: isMove ? (existing?.window ?? 86400) : 86400)
+        _repeats = State(initialValue: existing?.isRepeating ?? false)
     }
 
     private static func number(_ s: String) -> Double? {
@@ -44,12 +46,21 @@ struct AlertEditorSheet: View {
         return out
     }
 
-    /// The price rule to save, or nil while the input is invalid. The direction
-    /// follows the current price: a target above it alerts on the way up.
+    /// The price rule to save, or nil while the input is invalid.
     private var priceRule: PriceAlertRule? {
         guard let raw = Self.number(priceText) else { return nil }
-        let t = PriceAlertFormat.cents(raw)
+        return Self.priceRule(for: raw, current: current, existing: existing)
+    }
+
+    /// Keep an existing threshold's direction when its target is unchanged,
+    /// even if the market crossed it (or the quote is unavailable). Only new or
+    /// changed targets infer their direction from the current price.
+    static func priceRule(for target: Double, current: Double?, existing: PriceAlertRule?) -> PriceAlertRule? {
+        let t = PriceAlertFormat.cents(target)
         guard t >= 0.01, t < 1_000_000 else { return nil }
+        if let existing, existing.kind != .move, t == existing.value {
+            return PriceAlertRule(kind: existing.kind, value: t)
+        }
         if let current, t == PriceAlertFormat.cents(current) { return nil }   // already there
         let up = current.map { t > $0 } ?? true
         return PriceAlertRule(kind: up ? .above : .below, value: t)
@@ -64,7 +75,8 @@ struct AlertEditorSheet: View {
 
     /// The rule to save — an edit keeps the original id (see applyingEdit).
     private var rule: PriceAlertRule? {
-        guard let r = mode == .price ? priceRule : moveRule else { return nil }
+        guard var r = mode == .price ? priceRule : moveRule else { return nil }
+        r.repeats = repeats
         return existing.map { $0.applyingEdit(r) } ?? r
     }
 
@@ -87,7 +99,10 @@ struct AlertEditorSheet: View {
                                 Spacer(minLength: 0)
                                 // "$" hugs the number: the field sizes to its text.
                                 Text("$").foregroundStyle(.secondary)
-                                TextField("0.00", text: $priceText)
+                                // A prompt, not a title: a Mac form draws a field's title
+                                // beside it as a label, so "0.00" stayed next to the number.
+                                TextField("", text: $priceText, prompt: Text(verbatim: "0.00"))
+                                    .labelsHidden()
                                     .fixedSize()
                                     .accessibilityLabel(Loc("目标价格（USD）"))
                                     #if os(iOS)
@@ -116,8 +131,10 @@ struct AlertEditorSheet: View {
                         }
                         LabeledContent(Loc("涨跌幅")) {
                             HStack(spacing: 4) {
-                                TextField(Loc("涨跌幅（%）"), text: $pctText)
+                                TextField("", text: $pctText, prompt: Text(Loc("涨跌幅（%）")))
+                                    .labelsHidden()
                                     .multilineTextAlignment(.trailing)
+                                    .accessibilityLabel(Loc("涨跌幅（%）"))
                                     #if os(iOS)
                                     .keyboardType(.decimalPad)
                                     #endif
@@ -129,6 +146,18 @@ struct AlertEditorSheet: View {
                              ? Loc("请输入 0.5 到 1000 之间的百分比。")
                              : Loc("涨或跌超过这个幅度都会通知你。"))
                     }
+                }
+
+                Section {
+                    Picker(Loc("提醒频率"), selection: $repeats) {
+                        Text(Loc("仅提醒一次")).tag(false)
+                        Text(Loc("持续提醒")).tag(true)
+                    }
+                    .accessibilityIdentifier("price-alert-frequency")
+                } footer: {
+                    Text(repeats
+                         ? Loc("触发后保持开启。条件重置后，再次满足时继续提醒，并设有冷却间隔。")
+                         : Loc("触发后自动关闭，可手动重新开启。"))
                 }
 
                 if let existing {

@@ -87,9 +87,7 @@ struct DepositView: View {
                 }
             }
             if let note = store.network?.maintenanceMessage {
-                Label(Loc("SafeTrade 提示：%@", note), systemImage: "info.circle")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                PearlInfoRow(Loc("SafeTrade 提示：%@", note))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -231,10 +229,10 @@ struct DepositView: View {
                 Label(Loc("从钱包转入"), systemImage: "arrow.down.to.line")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.pearl(Pearl.brand))
+            .buttonStyle(.pearl)
         } else if isPRL, wallet.phase == .locked {
             Text(Loc("解锁钱包后，可以从钱包直接转入。"))
-                .font(.caption).foregroundStyle(.secondary)
+                .pearlExplanation()
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }

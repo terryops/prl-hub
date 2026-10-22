@@ -105,6 +105,7 @@ struct DeviceRegistrationBodyTests {
         var move = PriceAlertRule(kind: .move, value: 5, window: 3600)
         move.id = "A1B2C3D4-0000-4000-8000-000000000002"
         move.enabled = false
+        move.repeats = true
         move.ack = 1_790_000_000
         var garage = PoolWatch(id: UUID(uuidString: "6F1B7C2A-1111-4C1C-9C43-000000000001")!, pool: .kryptex, address: addr)
         garage.alias = "Garage"

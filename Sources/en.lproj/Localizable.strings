@@ -354,7 +354,7 @@
 "给「%@」起个好记的别名；留空恢复默认。" = "Give \"%@\" a memorable alias; leave blank to restore default.";
 "编辑联系人" = "Edit Contact";
 "网络" = "Network";
-"美元" = "USD";
+"美元" = "US Dollar";
 "联系人：%@" = "Contact: %@";
 "联网中…" = "Connecting…";
 "联网取价（关闭 = 手动覆盖币价/算力/难度）" = "Live pricing (off = manually override Price / Hashrate / Difficulty)";
@@ -449,6 +449,10 @@
 "新加坡元" = "Singapore Dollar";
 "澳元" = "Australian Dollar";
 "加元" = "Canadian Dollar";
+"巴西雷亚尔" = "Brazilian Real";
+"土耳其里拉" = "Turkish Lira";
+"印度卢比" = "Indian Rupee";
+"泰铢" = "Thai Baht";
 
 "当前汇率" = "Current Rate";
 
@@ -988,3 +992,192 @@
 "为监控开启掉线提醒后，服务器会保存它的矿池和收款地址（F2Pool 为只读页链接），只用来查询矿机状态；不涉及助记词、私钥或余额。" = "Turning on offline alerts for a monitor stores its pool and payout address on the server (for F2Pool, the read-only page link), used only to check worker status. Recovery phrases, private keys and balances are never involved.";
 "矿机离线 10 分钟以上就推送通知。点这里为你的监控开启。" = "Get a push when a worker is offline for 10+ min. Tap to set it up.";
 "矿池暂时查询不到，恢复后继续监控" = "Pool isn't answering — resumes when it does";
+"成交量" = "Volume";
+"应用图标" = "App Icon";
+"新图标" = "New";
+"珍珠图标" = "Pearl";
+"P 图标" = "P";
+"经典图标" = "Classic";
+"在 Mac 上只更换程序坞里运行中的图标，访达和启动台仍显示默认图标。" = "On Mac this only changes the Dock icon while the app is running; Finder and Launchpad keep the default icon.";
+
+"配色" = "Colors";
+"黑白" = "Black & White";
+"经典蓝" = "Classic Blue";
+
+/* 网页版 (WebLinkView / WebLink.swift) */
+"网页版" = "Web Version";
+"断开网页版？" = "Disconnect the web version?";
+"断开连接" = "Disconnect";
+"这台设备不再与网页版同步。两边现有的内容都不会被删除。" = "This device will stop syncing with the web version. Nothing is deleted on either side.";
+"用浏览器打开就是网页版。连接后，这里的监控、价格提醒、掉线提醒和推送时段会和网页版保持一致；在 App 里买的高级版，网页上也能用。" = "The web version opens in any browser. Once connected, your monitors, price alerts, offline alerts and push hours stay the same here and there, and Pro bought in the app also works on the web.";
+"已连接" = "Connected";
+"已开通" = "Active";
+"未开通" = "Not active";
+"查看" = "Show";
+"立即同步" = "Sync Now";
+"配置太大，无法同步到网页版" = "The configuration is too large to sync to the web version.";
+"无法连接网页版，请检查网络" = "Can't reach the web version. Check your network.";
+"网页版暂时无法同步，稍后会再试" = "Can't sync with the web version right now. It will try again later.";
+"现代银" = "Modern Silver";
+
+/* Lock Screen market widgets */
+"PRL 报价" = "PRL Quote";
+"报价与 1 小时、24 小时涨跌幅" = "Price and 1-hour / 24-hour changes";
+"PRL 1 小时涨跌幅" = "PRL 1-Hour Change";
+"PRL 24 小时涨跌幅" = "PRL 24-Hour Change";
+"过去 1 小时的 PRL 涨跌幅" = "PRL price change over the last hour";
+"过去 24 小时的 PRL 涨跌幅" = "PRL price change over the last 24 hours";
+"锁屏小组件" = "Lock Screen Widgets";
+"锁屏小组件免费使用，支持圆形、矩形和单行样式。" = "Lock Screen widgets are free, with circular, rectangular and inline layouts.";
+"长按锁屏，点「自定」，再选择「锁定屏幕」。" = "Touch and hold the Lock Screen, tap “Customize”, then select “Lock Screen”.";
+"点时间下方的小组件区域，搜索「Pearl Hub」，选择报价或涨跌幅。" = "Tap the widget area below the time, search for “Pearl Hub”, then choose a quote or price-change widget.";
+"时间上方的日期区域也能添加单行报价或涨跌幅。" = "The date area above the time also supports inline quote and price-change widgets.";
+"报价更新于 %@" = "Quote updated at %@";
+"邮箱账号" = "Email account";
+"用邮箱登录，同步矿机、挖矿配置、监控、公开地址、通讯录、提醒和偏好设置。助记词、私钥和钱包密码不会上传。" = "Sign in with email to sync workers, calculator settings, monitors, public addresses, contacts, alerts and preferences. Recovery phrases, private keys and wallet passwords are never uploaded.";
+"管理账号与设备" = "Manage account and devices";
+"重新验证并关联购买" = "Verify again and link purchase";
+"用邮箱登录" = "Sign in with email";
+"登录后只用账号里的配置" = "Sign in with account settings only";
+"退出登录" = "Sign out";
+"退出登录？" = "Sign out?";
+"停止此设备的账号同步和通知，恢复未登录时的本地配置。钱包和 App Store 购买会保留。" = "Stop account sync and notifications on this device and restore the previous local settings. Wallets and App Store purchases remain.";
+"登录中" = "Signing in";
+"无法安全保存登录信息" = "Could not securely save sign-in details.";
+"邮箱登录未完成，请重试" = "Email sign-in did not finish. Please try again.";
+"退出未完成，请检查网络后重试" = "Sign-out did not finish. Check your connection and try again.";
+"登录已过期，请重新登录" = "Your session has expired. Please sign in again.";
+
+/* Combined quote and mining Lock Screen widget */
+"报价与矿池监控" = "Quote & Pool Monitor";
+"PRL 报价、总算力和在线矿机数" = "PRL price, total hashrate and online workers";
+"添加矿池监控" = "Add a pool monitor";
+"汇总 %d 个监控" = "%d monitors combined";
+"%d/%d 个监控有数据" = "%d/%d monitors have data";
+"矿池更新于 %@" = "Pools updated at %@";
+"报价与矿池监控会汇总「我的监控」中所有已启用的监控。" = "Quote & Pool Monitor combines all enabled monitors in “Monitor”.";
+
+"删除账号" = "Delete account";
+
+"账号高级版" = "Account Pro";
+"在其他设备或网页版登录同一邮箱，App Store 购买的高级版也能使用。" = "Sign in with the same email on your other devices or the web version to use the Pro you bought on the App Store there too.";
+"已有高级版？登录账号" = "Already have Pro? Sign in";
+
+/* Grouped settings and Pro membership */
+"账号与钱包" = "Account & Wallet";
+"钱包与安全" = "Wallet & Security";
+"通知设置" = "Notification Settings";
+"外观设置" = "Appearance Settings";
+"网关设置" = "Gateway Settings";
+"语言与货币" = "Language & Currency";
+"帮助与关于" = "Help & About";
+"主题与配色" = "Theme & Colors";
+"Pro 会员" = "Pro Membership";
+"会员权益" = "Membership Benefits";
+"跨设备数据同步" = "Cross-device Data Sync";
+"数据同步：登录同一邮箱，在网页、iPhone、iPad 和 Mac 间同步配置" = "Data sync: sign in with the same email to sync settings across Web, iPhone, iPad and Mac";
+"数据同步是 Pro 专属权益。免费账号的数据仅保存在本机。" = "Data sync requires Pro. Free accounts keep data only on this device.";
+"同步矿机、挖矿配置、监控、公开地址、通讯录、提醒和偏好设置。" = "Syncs workers, calculator settings, monitors, public addresses, contacts, alerts and preferences.";
+"助记词、私钥和钱包密码不会上传。" = "Recovery phrases, private keys and wallet passwords are never uploaded.";
+"密钥留在本机" = "Keys stay on this device";
+"同步需要 Pro" = "Sync requires Pro";
+"同一邮箱共享购买" = "One email shares your purchase";
+"免费账号的数据仅保存在本机。" = "Free accounts keep data only on this device.";
+"这台设备上现有的配置会保留，并加入你的账号。" = "The settings on this device are kept and added to your account.";
+"这台设备现有的配置会先收起来，退出登录后恢复。" = "This device's current settings are set aside and come back when you sign out.";
+
+// Pool income comparison
+"真实费用" = "Real Cost";
+"真实费用 =（1 − 实际结算收益 ÷ 同期理论收益）× 100%；负值表示收益高于理论。" = "Real cost = (1 − actual credited earnings ÷ theoretical earnings for the same period) × 100%; negative means earnings above theory.";
+"真实费用仅计算 PPS、PPS+ 与 FPPS；其他方案或数据不足显示「—」。不含矿工软件抽水及转账费。" = "Real cost is calculated only for PPS, PPS+ and FPPS; other schemes or missing data show “—”. Miner software and transfer fees are excluded.";
+"PF 保留两种方案的公示费率，仅计算 PPS 的真实费用。" = "PF keeps the advertised fees for both schemes; real cost is calculated only for PPS.";
+"真实费用取自有日期的结算样本；「≈」表示网络历史插值估算，含统计误差，不等同于矿池额外抽水。" = "Real cost uses dated settlement samples. “≈” means network history was interpolated; the result includes measurement error and does not establish extra pool commission.";
+
+"数据说明" = "Data notes";
+
+"7 天算力" = "7d hashrate";
+
+"预估收益" = "Est. yield";
+
+"最近出块" = "Last block";
+
+"更新于 %@" = "Updated %@";
+
+"7 天均值 %@" = "%@ 7d avg";
+
+"每 PH/天" = "per PH/day";
+
+"%@ 的理论值" = "%@ of expected";
+
+"全网占比 %@" = "%@ of network";
+
+"累计 %@ 块" = "%@ all-time";
+
+"走势展示近 7 天算力；数据缺失时显示「—」。" = "The chart shows hashrate over the last 7 days; unavailable data appears as “—”.";
+"样本 %@" = "Sample %@";
+
+// Real-cost explanation popover
+"真实费用说明" = "Real Cost Explained";
+"理论收益按样本期算力和独立链上的难度、区块奖励计算。样本日期见数值下方。" = "Theoretical earnings use the sample period’s hashrate and independently sourced on-chain difficulty and block rewards. Sample dates appear below the value.";
+"「≈」表示估算，可能包含算力统计、观测缺口补估和链上历史插值误差；结果反映样本期收益折损，不等同于矿池公示手续费或额外抽水。" = "“≈” marks an estimate that may include hashrate statistics, estimated observation gaps and interpolation errors in chain history. The result measures the sample period’s earnings shortfall; it is not equivalent to the pool’s advertised fee or an additional commission.";
+
+// Short real-cost explanation
+"这是按各矿池标注的样本时间段，计算的实际结算收益相对理论收益的折损率。" = "This is the shortfall of settled earnings versus theoretical earnings over each pool’s displayed sample period.";
+"这是 %@ 期间，实际结算收益相对理论收益的折损率。" = "This is the shortfall of settled earnings versus theoretical earnings during %@.";
+
+"左右滑动查看完整对比" = "Swipe sideways to compare all columns";
+"提醒频率" = "Alert frequency";
+"仅提醒一次" = "Notify once";
+"持续提醒" = "Keep notifying";
+"触发后自动关闭，可手动重新开启。" = "Turns off after triggering. You can turn it on again manually.";
+"触发后保持开启。条件重置后，再次满足时继续提醒，并设有冷却间隔。" = "Stays on after triggering. Notifies again when the condition resets and is met again, with a cooldown between alerts.";
+
+/* Candlestick chart density */
+"K 线" = "Candlesticks";
+"全屏" = "Full Screen";
+"缩小" = "Zoom out";
+"放大" = "Zoom in";
+
+/* 设置 → 安全性说明 */
+"安全与隐私" = "Security & Privacy";
+"安全性说明" = "Security Overview";
+"自托管钱包" = "Self-custody wallet";
+"助记词和私钥只在你的设备上生成和保存，交易也在本机签名。我们拿不到你的私钥，无法动用或冻结你的资产。" = "Your recovery phrase and private keys are created and kept only on your device, and transactions are signed there too. We never have your keys and cannot move or freeze your funds.";
+"我们拿不到的数据" = "What we never receive";
+"助记词与私钥" = "Recovery phrase and private keys";
+"加密存于本机钥匙串，只属于这台设备：不同步到 iCloud，也不进备份。查看助记词和转账都要 Face ID / Touch ID 验证。" = "Encrypted in this device's Keychain and tied to this device: never synced to iCloud or included in backups. Viewing the phrase and sending funds require Face ID / Touch ID.";
+"SafeTrade API 密钥" = "SafeTrade API key";
+"只存在你的钥匙串里（开着 iCloud 钥匙串时由 Apple 端到端加密同步）；交易请求由 App 签名后直接发往 safetrade.com。" = "Kept only in your Keychain (synced by Apple with end-to-end encryption when iCloud Keychain is on). The app signs trading requests with it and sends them straight to safetrade.com.";
+"余额与交易记录" = "Balances and transaction history";
+"App 直接向区块浏览器查询，不经过我们的服务器。" = "The app looks them up directly from the block explorer, not through our server.";
+"付款信息" = "Payment details";
+"内购全程由 Apple 处理，我们拿不到你的付款方式和 Apple 账号。" = "In-app purchases are handled entirely by Apple. We never see your payment method or Apple Account.";
+"统计与追踪" = "Analytics and tracking";
+"App 里没有广告、统计或崩溃收集 SDK，也不做跨应用追踪。" = "The app has no advertising, analytics or crash-reporting SDKs and does no cross-app tracking.";
+"发给我们服务器（pearlhub.net）的数据" = "Sent to our server (pearlhub.net)";
+"公开数据" = "Public data";
+"币价、矿池汇总和矿池费率。这些请求不带地址，也不带任何身份信息。" = "PRL price, pool overview and pool fees. These requests carry no address and no identity.";
+"开启后才发送：推送令牌、提醒条件、界面语言，以及推送时段和时区。删掉全部提醒、结束盯盘后，服务器上的这些数据随之删除。" = "Sent only once you turn them on: the push token, your alert conditions, the app language, and your notification hours with their time zone. Deleting all alerts or ending the live price removes them from the server.";
+"价格提醒与锁屏盯盘" = "Price alerts and Lock Screen live price";
+"开启后才发送：矿池、收益地址（F2Pool 为只读页链接和账户名）、监控名称和提醒延迟。服务器会保存矿池最近报告的矿机名和在线状态，用来判断掉线；关掉提醒或删除监控后即从服务器移除。" = "Sent only once you turn it on: the pool, the payout address (for F2Pool, the read-only page link and account name), the monitor's name and the delay. The server keeps the worker names and online status the pool last reported, to detect outages. Turning the alert off or deleting the monitor removes it from the server.";
+"购买后 Apple 会通知我们的服务器，服务器保存交易号、价格和国家或地区，用来处理退款。开启提醒或登录邮箱账号时，App 还会发送 Apple 签名的购买记录，用来确认高级版。" = "After a purchase, Apple notifies our server, which keeps the transaction ID, price and country or region to handle refunds. When you turn on alerts or sign in with email, the app also sends Apple's signed purchase record to confirm Pro.";
+"高级版购买记录" = "Pro purchase record";
+"登录后才有：服务器保存邮箱、设备名称和登录时间，并同步矿池监控、提醒、地址簿、每个钱包的名称和第一个收款地址、显卡与电费设置、语言和外观。同步数据加密存储，但不是端到端加密，服务器能读取。" = "Only if you sign in: the server keeps your email, device names and sign-in times, and syncs your pool monitors, alerts, address book, each wallet's name and first receive address, GPU and power settings, language and appearance. Synced data is encrypted at rest but not end-to-end, so the server can read it.";
+"App 直接连接的第三方服务" = "Services the app contacts directly";
+"blockbook.pearlresearch.ai。查余额和记录时发送钱包的扩展公钥（xpub，可据此推出这个钱包的全部地址）；转账时广播本机签好的交易。" = "blockbook.pearlresearch.ai. To show balances and history the app sends the wallet's extended public key (xpub, from which all of the wallet's addresses can be derived); to send, it broadcasts the transaction signed on this device.";
+"Pearl 区块浏览器" = "Pearl block explorer";
+"添加矿池监控后，App 把收益地址（F2Pool 为只读页链接）发给对应矿池。" = "For each pool monitor you add, the app sends its payout address (for F2Pool, the read-only page link) to that pool.";
+"矿池公开接口" = "Mining pool APIs";
+"SafeTrade、CoinGecko、WhatToMine、MiningPoolStats、open.er-api.com 等公开数据源，请求不带地址。" = "Public sources such as SafeTrade, CoinGecko, WhatToMine, MiningPoolStats and open.er-api.com. These requests carry no address.";
+"行情与汇率" = "Prices and exchange rates";
+"存在你设备上的数据" = "Stored on your devices";
+"钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。" = "The wallet database, address book, settings and caches stay on this device, and the wallet database is excluded from backups. Sign-in credentials are kept in this device's Keychain.";
+"本机" = "This device";
+"矿池监控、提醒、地址簿、钱包名称、显卡与电费、语言和外观等设置，通过你自己的 iCloud 在你的设备间同步，我们无法访问。助记词从不同步。" = "Settings such as pool monitors, alerts, address book, wallet names, GPUs and power costs, language and appearance sync between your devices through your own iCloud, which we cannot access. The recovery phrase is never synced.";
+"iCloud 同步（高级版）" = "iCloud sync (Pro)";
+"开源代码" = "Open source";
+"App 和网页版前端完全由下面的公开仓库编译发布，服务器后台的代码也已公开。任何人都可以审查代码、自己编译。" = "The app and the web frontend are built and released entirely from the public repositories below, and the server's code is public too. Anyone can review the code and build it themselves.";
+"代码全部公开" = "All code is public";
+"App（iPhone / iPad / Mac）" = "App (iPhone / iPad / Mac)";
+"网页版前端" = "Web frontend";
+"服务器后台" = "Server";

@@ -46,6 +46,10 @@ enum Fiat {
         FiatCurrency(code: "SGD", symbol: "S$",  nameKey: "新加坡元", decimals: 2),
         FiatCurrency(code: "AUD", symbol: "A$",  nameKey: "澳元",     decimals: 2),
         FiatCurrency(code: "CAD", symbol: "C$",  nameKey: "加元",     decimals: 2),
+        FiatCurrency(code: "BRL", symbol: "R$",  nameKey: "巴西雷亚尔", decimals: 2),
+        FiatCurrency(code: "TRY", symbol: "₺",   nameKey: "土耳其里拉", decimals: 2),
+        FiatCurrency(code: "INR", symbol: "₹",   nameKey: "印度卢比", decimals: 2),
+        FiatCurrency(code: "THB", symbol: "฿",   nameKey: "泰铢",     decimals: 2),
     ]
 
     static func find(_ code: String) -> FiatCurrency? {
@@ -64,8 +68,17 @@ enum Fiat {
         case .ru:     return "RUB"
         case .vi:     return "VND"
         case .id:     return "IDR"
+        case .ja:     return "JPY"
+        case .ko:     return "KRW"
+        case .fr, .de, .it: return "EUR"
+        case .ptBR:   return "BRL"
+        case .tr:     return "TRY"
+        case .hi:     return "INR"
+        case .th:     return "THB"
         case .en:     return none
-        case .system:
+        // Spanish is spoken under a dozen currencies: go by the device region, as for
+        // the system language.
+        case .es, .system:
             // Match the device region's currency if it's one we support, else none.
             let code = Locale.current.currency?.identifier ?? ""
             return secondaries.contains { $0.code == code } ? code : none

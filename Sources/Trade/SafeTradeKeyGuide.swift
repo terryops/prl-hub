@@ -21,8 +21,7 @@ struct SafeTradeKeyGuide: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Pearl.Space.lg) {
                     Text(Loc("在 SafeTrade 网站创建一把 API 密钥，填进 App 后就能在这里看余额、下单和提现。全程约 2 分钟。"))
-                        .font(.callout).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .pearlExplanation()
                     VStack(alignment: .leading, spacing: Pearl.Space.lg) {
                         step(1, Loc("开启谷歌验证"),
                              Loc("登录 safetrade.com。创建 API 密钥需要谷歌验证（2FA），还没开的话先在账户安全设置里开启。"))
@@ -40,8 +39,7 @@ struct SafeTradeKeyGuide: View {
                              Loc("SafeTrade 只接受这里列出的 IP。填入 SafeTrade 现在看到的你的 IP：")) {
                             ipRow
                             Text(Loc("多个 IP 用空格隔开，IPv4 和 IPv6 都可以，最多 20 个。手机可能时而用 IPv4、时而用 IPv6，换网络后 IP 也会变——以后交易页提示 IP 不在白名单时，把它显示的新 IP 补进来即可。"))
-                                .font(.caption).foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
+                                .pearlExplanation()
                         }
                         step(5, Loc("保存 API Key 和 Secret"),
                              Loc("输入谷歌验证码确认后，页面会显示 API Key 和 API Secret。Secret 只显示这一次，请立刻复制。"))
@@ -80,7 +78,7 @@ struct SafeTradeKeyGuide: View {
                                    @ViewBuilder extra: () -> Extra) -> some View {
         HStack(alignment: .top, spacing: Pearl.Space.sm) {
             Text(verbatim: "\(n)")
-                .font(.caption.weight(.bold)).foregroundStyle(.white)
+                .font(.caption.weight(.bold)).foregroundStyle(Pearl.onAccent)
                 .frame(width: 22, height: 22)
                 .background(Pearl.brand, in: Circle())
             VStack(alignment: .leading, spacing: Pearl.Space.xs) {
@@ -138,19 +136,17 @@ struct SafeTradeKeyGuide: View {
             .tint(Pearl.accent)
             .padding(.leading, 28)
             Text(Loc("建议只开需要的权限，并绑定 IP。不要把 API Key 或 Secret 告诉任何人，包括自称客服的人。"))
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .pearlExplanation()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
     }
 
     private func bullet(_ icon: String, _ text: String) -> some View {
-        HStack(alignment: .top, spacing: Pearl.Space.xs) {
-            Image(systemName: icon).font(.caption).foregroundStyle(.green)
+        HStack(alignment: .firstTextBaseline, spacing: Pearl.Space.xs) {
+            Image(systemName: icon).font(.subheadline).foregroundStyle(.green)
                 .frame(width: 20)
-            Text(text).font(.caption)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(text).pearlExplanation()
         }
     }
 

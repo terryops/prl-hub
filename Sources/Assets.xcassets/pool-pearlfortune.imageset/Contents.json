@@ -3,6 +3,16 @@
     {
       "filename" : "pearlfortune.png",
       "idiom" : "universal"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "pearlfortune-dark.png",
+      "idiom" : "universal"
     }
   ],
   "info" : {

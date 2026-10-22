@@ -21,8 +21,8 @@ settings:
     DEVELOPMENT_TEAM: ""   # your Apple team id
     CODE_SIGN_STYLE: Automatic
     GENERATE_INFOPLIST_FILE: YES
-    MARKETING_VERSION: "1.20"
-    CURRENT_PROJECT_VERSION: "150"
+    MARKETING_VERSION: "2.0"
+    CURRENT_PROJECT_VERSION: "177"
     # Full data-race checking (still the Swift 5 language mode): every concurrency
     # diagnostic surfaces as a warning now, so the move to Swift 6 is a flag flip.
     SWIFT_STRICT_CONCURRENCY: complete
@@ -73,7 +73,10 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.prl.wizard
+        INFOPLIST_FILE: AccountInfo.plist
         PRODUCT_NAME: Pearl
+        # Previous icons remain selectable; AppIconPearl preserves existing pearl selections.
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIconClassic AppIconModern AppIconPearl"
         TARGETED_DEVICE_FAMILY: "1,2"
         ENABLE_PREVIEWS: YES
         SWIFT_EMIT_LOC_STRINGS: YES
@@ -123,6 +126,7 @@ targets:
         # iPhone/iPad/Mac) AND a shared iCloud KVS container so 语言/货币/矿池配置
         # actually sync iPhone↔Mac (the Mac target previously had no entitlement).
         PRODUCT_BUNDLE_IDENTIFIER: com.prl.wizard
+        INFOPLIST_FILE: AccountInfo.plist
         PRODUCT_NAME: Pearl
         # macOS-specific: adds the App Sandbox (Mac App Store requirement) +
         # network.client, alongside the iCloud KVS entitlement. The iOS target

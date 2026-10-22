@@ -40,8 +40,8 @@ struct CreateWalletView: View {
                     HStack(spacing: Pearl.Space.md) {
                         PearlMark(size: 52)
                         VStack(alignment: .leading, spacing: Pearl.Space.xxs) {
-                            Text(Loc("创建钱包")).font(.title3.bold()).foregroundStyle(.white)
-                            Text(Loc("生成助记词并安全备份")).font(.subheadline).foregroundStyle(.white.opacity(0.85))
+                            Text(Loc("创建钱包")).font(.title3.bold()).foregroundStyle(Pearl.onHero)
+                            Text(Loc("生成助记词并安全备份")).font(.subheadline).foregroundStyle(Pearl.onHero.opacity(0.85))
                         }
                         Spacer(minLength: 0)
                     }
@@ -63,6 +63,7 @@ struct CreateWalletView: View {
             .padding(Pearl.Space.screen).frame(maxWidth: 520).frame(maxWidth: .infinity)
             .animation(.snappy, value: step)
         }
+        .pearlScreenBackground()
         .navigationTitle(Loc("创建钱包"))
     }
 
@@ -71,9 +72,8 @@ struct CreateWalletView: View {
             VStack(alignment: .leading, spacing: Pearl.Space.md) {
                 PearlSectionHeader(Loc("钱包名称"), systemImage: "wallet.pass")
                 TextField("Pearl Wallet", text: $name).textFieldStyle(.roundedBorder)
-                Label(Loc("下一步会生成 12 个助记词。请离线抄写，任何人拿到它都能转走你的资产。"),
-                      systemImage: "exclamationmark.shield")
-                    .font(.callout).foregroundStyle(.secondary)
+                PearlInfoRow(Loc("下一步会生成 12 个助记词。请离线抄写，任何人拿到它都能转走你的资产。"),
+                             systemImage: "exclamationmark.shield")
             }
             .pearlCard()
             Button {
@@ -244,12 +244,12 @@ struct ImportWalletView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Pearl.Space.lg) {
-                PearlHero(gradient: Pearl.mint, minHeight: 0) {
+                PearlHero(gradient: AppPalette.current == .modern ? Pearl.brandVivid : Pearl.mint, minHeight: 0) {
                     HStack(spacing: Pearl.Space.md) {
                         PearlIconBadge(systemImage: "arrow.down.doc", gradient: Pearl.mint, size: 46)
                         VStack(alignment: .leading, spacing: Pearl.Space.xxs) {
-                            Text(Loc("恢复钱包")).font(.title3.bold()).foregroundStyle(.white)
-                            Text(Loc("粘贴或输入你的助记词")).font(.subheadline).foregroundStyle(.white.opacity(0.85))
+                            Text(Loc("恢复钱包")).font(.title3.bold()).foregroundStyle(Pearl.onHero)
+                            Text(Loc("粘贴或输入你的助记词")).font(.subheadline).foregroundStyle(Pearl.onHero.opacity(0.85))
                         }
                         Spacer(minLength: 0)
                     }
@@ -328,7 +328,7 @@ struct ImportWalletView: View {
                     }
                 } label: {
                     HStack(spacing: Pearl.Space.xs) {
-                        if working { ProgressView().controlSize(.small).tint(.white) }
+                        if working { ProgressView().controlSize(.small).tint(Pearl.onAccent) }
                         Label(working ? Loc("恢复中…") : Loc("恢复钱包"), systemImage: "arrow.down.doc")
                     }
                 }
@@ -339,6 +339,7 @@ struct ImportWalletView: View {
             .animation(.snappy, value: working)
         }
         .coveredInAppSwitcher()
+        .pearlScreenBackground()
         .navigationTitle(Loc("恢复钱包"))
         #if os(iOS)
         // 助记词用 TextEditor，回车是换行而非收起键盘——给一个「完成」按钮 + 下拉收起。

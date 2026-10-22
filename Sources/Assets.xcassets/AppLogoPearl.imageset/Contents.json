@@ -1,0 +1,16 @@
+{
+  "images": [
+    {
+      "filename": "logo-pearl.png",
+      "idiom": "universal"
+    },
+    {
+      "filename": "logo-pearl-mac.png",
+      "idiom": "mac"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}

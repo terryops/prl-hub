@@ -23,7 +23,7 @@ struct RecoverChangeView: View {
         Form {
             Section {
                 Text(Loc("转账产生的“找零”会退回到钱包自动生成的找零地址。这些余额已计入你的总额、也能正常花费；如需把它们归集到一个地址，可在这里一键扫回。"))
-                    .font(.callout).foregroundStyle(.secondary)
+                    .pearlExplanation()
             }
 
             if done {
@@ -37,7 +37,7 @@ struct RecoverChangeView: View {
                         Label(Loc("找回成功 ✓"), systemImage: "checkmark.seal.fill").foregroundStyle(.green)
                     }
                     Text(Loc("交易已广播，待网络确认后即并入「钱包」余额与最近交易。"))
-                        .font(.caption).foregroundStyle(.secondary)
+                        .pearlExplanation()
                 }
             } else if store.recoveryScanning {
                 Section {
@@ -71,7 +71,9 @@ struct RecoverChangeView: View {
                             Text(short(a)).font(.caption.monospaced()).foregroundStyle(.secondary)
                         }
                     } else {
-                        TextField("\(store.network.addressPrefix)…", text: $customDestination)
+                        // A prompt, not a title: a Mac form draws a field's title beside it.
+                        TextField("", text: $customDestination, prompt: Text(verbatim: "\(store.network.addressPrefix)…"))
+                            .labelsHidden().accessibilityLabel(Loc("地址"))
                             .font(.body.monospaced())
                             #if os(iOS)
                             .textInputAutocapitalization(.never).autocorrectionDisabled()
@@ -94,13 +96,13 @@ struct RecoverChangeView: View {
                         }
                     } label: {
                         HStack(spacing: 8) {
-                            if working { ProgressView().controlSize(.small) }
+                            if working { ProgressView().controlSize(.small).tint(.white) }
                             Text(working ? Loc("签名并广播…") : Loc("找回 %@ PRL", amount(store.recoverableTotal)))
                                 .fontWeight(.semibold)
                         }
                         .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.borderedProminent).tint(Pearl.plate)
                     .controlSize(.large)
                     .disabled(working || done || !destValid)
                     .listRowBackground(Color.clear)

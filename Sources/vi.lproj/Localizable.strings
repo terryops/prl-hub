@@ -449,6 +449,10 @@
 "新加坡元" = "Đô la Singapore";
 "澳元" = "Đô la Úc";
 "加元" = "Đô la Canada";
+"巴西雷亚尔" = "Real Brazil";
+"土耳其里拉" = "Lira Thổ Nhĩ Kỳ";
+"印度卢比" = "Rupee Ấn Độ";
+"泰铢" = "Baht Thái Lan";
 
 "当前汇率" = "Tỷ giá hiện tại";
 
@@ -988,3 +992,192 @@
 "为监控开启掉线提醒后，服务器会保存它的矿池和收款地址（F2Pool 为只读页链接），只用来查询矿机状态；不涉及助记词、私钥或余额。" = "Khi bật cảnh báo ngoại tuyến cho một mục theo dõi, máy chủ lưu pool và địa chỉ nhận thưởng của mục đó (với F2Pool là liên kết trang chỉ đọc), chỉ để kiểm tra trạng thái worker. Không liên quan đến cụm từ khôi phục, khóa riêng hay số dư.";
 "矿机离线 10 分钟以上就推送通知。点这里为你的监控开启。" = "Thông báo khi worker ngoại tuyến từ 10 phút. Chạm để thiết lập.";
 "矿池暂时查询不到，恢复后继续监控" = "Pool chưa phản hồi — sẽ tiếp tục khi có lại";
+"成交量" = "Khối lượng";
+"应用图标" = "Biểu tượng ứng dụng";
+"新图标" = "Mới";
+"珍珠图标" = "Ngọc trai";
+"P 图标" = "P";
+"经典图标" = "Cổ điển";
+"在 Mac 上只更换程序坞里运行中的图标，访达和启动台仍显示默认图标。" = "Trên Mac, tùy chọn này chỉ đổi biểu tượng trên Dock khi ứng dụng đang chạy; Finder và Launchpad vẫn hiển thị biểu tượng mặc định.";
+
+"配色" = "Màu sắc";
+"黑白" = "Đen trắng";
+"经典蓝" = "Xanh cổ điển";
+
+/* 网页版 (WebLinkView / WebLink.swift) */
+"网页版" = "Phiên bản web";
+"断开网页版？" = "Ngắt kết nối phiên bản web?";
+"断开连接" = "Ngắt kết nối";
+"这台设备不再与网页版同步。两边现有的内容都不会被删除。" = "Thiết bị này sẽ ngừng đồng bộ với phiên bản web. Không có gì bị xóa ở cả hai phía.";
+"用浏览器打开就是网页版。连接后，这里的监控、价格提醒、掉线提醒和推送时段会和网页版保持一致；在 App 里买的高级版，网页上也能用。" = "Phiên bản web mở được trong mọi trình duyệt. Sau khi kết nối, các mục theo dõi, cảnh báo giá, cảnh báo ngoại tuyến và khung giờ thông báo sẽ giống nhau ở cả hai nơi, và Pro mua trong ứng dụng cũng dùng được trên web.";
+"已连接" = "Đã kết nối";
+"已开通" = "Đã kích hoạt";
+"未开通" = "Chưa kích hoạt";
+"查看" = "Hiện";
+"立即同步" = "Đồng bộ ngay";
+"配置太大，无法同步到网页版" = "Cấu hình quá lớn, không thể đồng bộ với phiên bản web.";
+"无法连接网页版，请检查网络" = "Không kết nối được với phiên bản web. Hãy kiểm tra mạng.";
+"网页版暂时无法同步，稍后会再试" = "Hiện chưa đồng bộ được với phiên bản web. Sẽ thử lại sau.";
+"现代银" = "Bạc hiện đại";
+
+/* Lock Screen market widgets */
+"PRL 报价" = "Báo giá PRL";
+"报价与 1 小时、24 小时涨跌幅" = "Giá và mức thay đổi trong 1 / 24 giờ";
+"PRL 1 小时涨跌幅" = "Thay đổi PRL trong 1 giờ";
+"PRL 24 小时涨跌幅" = "Thay đổi PRL trong 24 giờ";
+"过去 1 小时的 PRL 涨跌幅" = "Mức thay đổi giá PRL trong giờ qua";
+"过去 24 小时的 PRL 涨跌幅" = "Mức thay đổi giá PRL trong 24 giờ qua";
+"锁屏小组件" = "Tiện ích màn hình khóa";
+"锁屏小组件免费使用，支持圆形、矩形和单行样式。" = "Tiện ích màn hình khóa miễn phí, hỗ trợ dạng tròn, chữ nhật và một dòng.";
+"长按锁屏，点「自定」，再选择「锁定屏幕」。" = "Nhấn giữ màn hình khóa, chạm “Tùy chỉnh”, rồi chọn “Màn hình khóa”.";
+"点时间下方的小组件区域，搜索「Pearl Hub」，选择报价或涨跌幅。" = "Chạm vùng tiện ích dưới giờ, tìm “Pearl Hub”, rồi chọn báo giá hoặc mức thay đổi.";
+"时间上方的日期区域也能添加单行报价或涨跌幅。" = "Vùng ngày phía trên giờ cũng hỗ trợ tiện ích báo giá và mức thay đổi một dòng.";
+"报价更新于 %@" = "Báo giá cập nhật lúc %@";
+"邮箱账号" = "Tài khoản email";
+"用邮箱登录，同步矿机、挖矿配置、监控、公开地址、通讯录、提醒和偏好设置。助记词、私钥和钱包密码不会上传。" = "Đăng nhập bằng email để đồng bộ worker, thiết lập máy tính lợi nhuận, mục theo dõi, địa chỉ công khai, danh bạ, cảnh báo và tùy chọn. Cụm từ khôi phục, khóa riêng và mật khẩu ví không bao giờ được tải lên.";
+"管理账号与设备" = "Quản lý tài khoản và thiết bị";
+"重新验证并关联购买" = "Xác minh lại và liên kết giao dịch mua";
+"用邮箱登录" = "Đăng nhập bằng email";
+"登录后只用账号里的配置" = "Đăng nhập chỉ với cài đặt của tài khoản";
+"退出登录" = "Đăng xuất";
+"退出登录？" = "Đăng xuất?";
+"停止此设备的账号同步和通知，恢复未登录时的本地配置。钱包和 App Store 购买会保留。" = "Dừng đồng bộ tài khoản và thông báo trên thiết bị này, khôi phục cài đặt cục bộ trước đó. Ví và giao dịch mua trên App Store vẫn được giữ.";
+"登录中" = "Đang đăng nhập";
+"无法安全保存登录信息" = "Could not securely save sign-in details.";
+"邮箱登录未完成，请重试" = "Email sign-in did not finish. Please try again.";
+"退出未完成，请检查网络后重试" = "Sign-out did not finish. Check your connection and try again.";
+"登录已过期，请重新登录" = "Your session has expired. Please sign in again.";
+
+/* Combined quote and mining Lock Screen widget */
+"报价与矿池监控" = "Báo giá và theo dõi pool";
+"PRL 报价、总算力和在线矿机数" = "Giá PRL, tổng hashrate và máy đào trực tuyến";
+"添加矿池监控" = "Thêm theo dõi pool";
+"汇总 %d 个监控" = "Tổng hợp %d mục theo dõi";
+"%d/%d 个监控有数据" = "%d/%d mục theo dõi có dữ liệu";
+"矿池更新于 %@" = "Pool cập nhật lúc %@";
+"报价与矿池监控会汇总「我的监控」中所有已启用的监控。" = "Báo giá và theo dõi pool tổng hợp tất cả mục theo dõi đang bật trong “Theo dõi”.";
+
+"删除账号" = "Xóa tài khoản";
+
+"账号高级版" = "Pro của tài khoản";
+"在其他设备或网页版登录同一邮箱，App Store 购买的高级版也能使用。" = "Đăng nhập cùng email trên thiết bị khác hoặc phiên bản web để dùng cả ở đó gói Pro đã mua trên App Store.";
+"已有高级版？登录账号" = "Đã có Pro? Đăng nhập";
+
+/* Grouped settings and Pro membership */
+"账号与钱包" = "Tài khoản & Ví";
+"钱包与安全" = "Ví & Bảo mật";
+"通知设置" = "Cài đặt thông báo";
+"外观设置" = "Cài đặt giao diện";
+"网关设置" = "Cài đặt cổng kết nối";
+"语言与货币" = "Ngôn ngữ & Tiền tệ";
+"帮助与关于" = "Trợ giúp & Giới thiệu";
+"主题与配色" = "Chủ đề & Màu sắc";
+"Pro 会员" = "Thành viên Pro";
+"会员权益" = "Quyền lợi thành viên";
+"跨设备数据同步" = "Đồng bộ dữ liệu giữa thiết bị";
+"数据同步：登录同一邮箱，在网页、iPhone、iPad 和 Mac 间同步配置" = "Đồng bộ dữ liệu: đăng nhập bằng cùng email để đồng bộ cài đặt giữa web, iPhone, iPad và Mac";
+"数据同步是 Pro 专属权益。免费账号的数据仅保存在本机。" = "Đồng bộ dữ liệu cần Pro. Tài khoản miễn phí chỉ lưu dữ liệu trên thiết bị này.";
+"同步矿机、挖矿配置、监控、公开地址、通讯录、提醒和偏好设置。" = "Đồng bộ worker, thiết lập máy tính lợi nhuận, mục theo dõi, địa chỉ công khai, danh bạ, cảnh báo và tùy chọn.";
+"助记词、私钥和钱包密码不会上传。" = "Cụm từ khôi phục, khóa riêng và mật khẩu ví không bao giờ được tải lên.";
+"密钥留在本机" = "Khóa nằm trên thiết bị này";
+"同步需要 Pro" = "Đồng bộ cần Pro";
+"同一邮箱共享购买" = "Một email dùng chung giao dịch mua";
+"免费账号的数据仅保存在本机。" = "Tài khoản miễn phí chỉ lưu dữ liệu trên thiết bị này.";
+"这台设备上现有的配置会保留，并加入你的账号。" = "Cài đặt trên thiết bị này được giữ lại và thêm vào tài khoản của bạn.";
+"这台设备现有的配置会先收起来，退出登录后恢复。" = "Cài đặt hiện tại của thiết bị này được cất đi và trở lại khi bạn đăng xuất.";
+
+// Pool income comparison
+"真实费用" = "Chi phí thực";
+"真实费用 =（1 − 实际结算收益 ÷ 同期理论收益）× 100%；负值表示收益高于理论。" = "Chi phí thực = (1 − thu nhập đã được ghi có ÷ thu nhập lý thuyết cùng kỳ) × 100%; giá trị âm là thu nhập vượt lý thuyết.";
+"真实费用仅计算 PPS、PPS+ 与 FPPS；其他方案或数据不足显示「—」。不含矿工软件抽水及转账费。" = "Chi phí thực chỉ được tính cho PPS, PPS+ và FPPS; phương thức khác hoặc thiếu dữ liệu hiển thị “—”. Không gồm phí phần mềm đào và chuyển tiền.";
+"PF 保留两种方案的公示费率，仅计算 PPS 的真实费用。" = "PF giữ phí công bố của cả hai phương thức; chi phí thực chỉ được tính cho PPS.";
+"真实费用取自有日期的结算样本；「≈」表示网络历史插值估算，含统计误差，不等同于矿池额外抽水。" = "Chi phí thực dựa trên mẫu quyết toán có ngày. “≈” là nội suy lịch sử mạng, có sai số đo lường và không chứng minh pool thu thêm phí.";
+
+"数据说明" = "Thông tin dữ liệu";
+
+"7 天算力" = "Hashrate 7 ngày";
+
+"预估收益" = "Lợi nhuận ước tính";
+
+"最近出块" = "Khối gần nhất";
+
+"更新于 %@" = "Cập nhật %@";
+
+"7 天均值 %@" = "TB 7 ngày %@";
+
+"每 PH/天" = "mỗi PH/ngày";
+
+"%@ 的理论值" = "%@ mức kỳ vọng";
+
+"全网占比 %@" = "%@ toàn mạng";
+
+"累计 %@ 块" = "Tổng %@ khối";
+
+"走势展示近 7 天算力；数据缺失时显示「—」。" = "Biểu đồ hiển thị hashrate 7 ngày qua; dữ liệu thiếu được ghi «—».";
+"样本 %@" = "Mẫu %@";
+
+// Real-cost explanation popover
+"真实费用说明" = "Giải thích chi phí thực";
+"理论收益按样本期算力和独立链上的难度、区块奖励计算。样本日期见数值下方。" = "Thu nhập lý thuyết được tính từ hashrate trong kỳ mẫu và dữ liệu độc lập trên chuỗi về độ khó, phần thưởng khối. Ngày lấy mẫu nằm dưới giá trị.";
+"「≈」表示估算，可能包含算力统计、观测缺口补估和链上历史插值误差；结果反映样本期收益折损，不等同于矿池公示手续费或额外抽水。" = "“≈” là ước tính, có thể bao gồm sai số thống kê hashrate, bù khoảng trống quan sát và nội suy lịch sử chuỗi. Kết quả phản ánh phần thu nhập thiếu hụt trong kỳ mẫu, không tương đương phí công bố hoặc phí bổ sung của pool.";
+
+// Short real-cost explanation
+"这是按各矿池标注的样本时间段，计算的实际结算收益相对理论收益的折损率。" = "Đây là tỷ lệ thu nhập đã quyết toán thiếu hụt so với thu nhập lý thuyết trong kỳ mẫu được ghi cho mỗi pool.";
+"这是 %@ 期间，实际结算收益相对理论收益的折损率。" = "Đây là tỷ lệ thu nhập đã quyết toán thiếu hụt so với thu nhập lý thuyết trong %@.";
+
+"左右滑动查看完整对比" = "Vuốt ngang để so sánh tất cả các cột";
+"提醒频率" = "Tần suất cảnh báo";
+"仅提醒一次" = "Chỉ cảnh báo một lần";
+"持续提醒" = "Tiếp tục cảnh báo";
+"触发后自动关闭，可手动重新开启。" = "Tự tắt sau khi kích hoạt. Bạn có thể bật lại thủ công.";
+"触发后保持开启。条件重置后，再次满足时继续提醒，并设有冷却间隔。" = "Vẫn bật sau khi kích hoạt. Cảnh báo lại khi điều kiện được đặt lại rồi được đáp ứng, với khoảng nghỉ giữa các cảnh báo.";
+
+/* Candlestick chart density */
+"K 线" = "Nến";
+"全屏" = "Toàn màn hình";
+"缩小" = "Thu nhỏ";
+"放大" = "Phóng to";
+
+/* 设置 → 安全性说明 */
+"安全与隐私" = "Bảo mật & Quyền riêng tư";
+"安全性说明" = "Tổng quan bảo mật";
+"自托管钱包" = "Ví tự lưu ký";
+"助记词和私钥只在你的设备上生成和保存，交易也在本机签名。我们拿不到你的私钥，无法动用或冻结你的资产。" = "Cụm từ khôi phục và khóa riêng chỉ được tạo và lưu trên thiết bị của bạn, giao dịch cũng được ký ngay trên máy. Chúng tôi không có khóa của bạn và không thể chuyển hay đóng băng tài sản của bạn.";
+"我们拿不到的数据" = "Những gì chúng tôi không bao giờ nhận";
+"助记词与私钥" = "Cụm từ khôi phục và khóa riêng";
+"加密存于本机钥匙串，只属于这台设备：不同步到 iCloud，也不进备份。查看助记词和转账都要 Face ID / Touch ID 验证。" = "Được mã hóa trong Keychain của thiết bị này và chỉ thuộc về thiết bị này: không đồng bộ lên iCloud, không nằm trong bản sao lưu. Xem cụm từ và chuyển tiền đều cần Face ID / Touch ID.";
+"SafeTrade API 密钥" = "Khóa API SafeTrade";
+"只存在你的钥匙串里（开着 iCloud 钥匙串时由 Apple 端到端加密同步）；交易请求由 App 签名后直接发往 safetrade.com。" = "Chỉ lưu trong Keychain của bạn (khi bật Chuỗi khóa iCloud, Apple đồng bộ với mã hóa đầu cuối). Ứng dụng dùng khóa này ký các lệnh giao dịch và gửi thẳng đến safetrade.com.";
+"余额与交易记录" = "Số dư và lịch sử giao dịch";
+"App 直接向区块浏览器查询，不经过我们的服务器。" = "Ứng dụng truy vấn trực tiếp từ trình khám phá khối, không qua máy chủ của chúng tôi.";
+"付款信息" = "Thông tin thanh toán";
+"内购全程由 Apple 处理，我们拿不到你的付款方式和 Apple 账号。" = "Mua hàng trong ứng dụng do Apple xử lý hoàn toàn. Chúng tôi không thấy phương thức thanh toán hay Tài khoản Apple của bạn.";
+"统计与追踪" = "Phân tích và theo dõi";
+"App 里没有广告、统计或崩溃收集 SDK，也不做跨应用追踪。" = "Ứng dụng không có SDK quảng cáo, phân tích hay báo cáo sự cố, và không theo dõi bạn qua các ứng dụng khác.";
+"发给我们服务器（pearlhub.net）的数据" = "Dữ liệu gửi đến máy chủ của chúng tôi (pearlhub.net)";
+"公开数据" = "Dữ liệu công khai";
+"币价、矿池汇总和矿池费率。这些请求不带地址，也不带任何身份信息。" = "Giá PRL, tổng quan pool và phí pool. Các yêu cầu này không kèm địa chỉ hay bất kỳ thông tin nhận dạng nào.";
+"开启后才发送：推送令牌、提醒条件、界面语言，以及推送时段和时区。删掉全部提醒、结束盯盘后，服务器上的这些数据随之删除。" = "Chỉ gửi sau khi bạn bật: mã thông báo đẩy, điều kiện cảnh báo, ngôn ngữ ứng dụng, cùng khung giờ thông báo và múi giờ. Khi xóa hết cảnh báo hoặc dừng giá trên màn hình khóa, các dữ liệu này bị xóa khỏi máy chủ.";
+"价格提醒与锁屏盯盘" = "Cảnh báo giá và giá trên màn hình khóa";
+"开启后才发送：矿池、收益地址（F2Pool 为只读页链接和账户名）、监控名称和提醒延迟。服务器会保存矿池最近报告的矿机名和在线状态，用来判断掉线；关掉提醒或删除监控后即从服务器移除。" = "Chỉ gửi sau khi bạn bật: pool, địa chỉ nhận thưởng (với F2Pool là liên kết trang chỉ đọc và tên tài khoản), tên trình theo dõi và độ trễ. Máy chủ lưu tên máy đào và trạng thái trực tuyến mà pool báo gần nhất để phát hiện mất kết nối; tắt cảnh báo hoặc xóa trình theo dõi sẽ xóa dữ liệu khỏi máy chủ.";
+"购买后 Apple 会通知我们的服务器，服务器保存交易号、价格和国家或地区，用来处理退款。开启提醒或登录邮箱账号时，App 还会发送 Apple 签名的购买记录，用来确认高级版。" = "Sau khi mua, Apple thông báo cho máy chủ của chúng tôi; máy chủ lưu mã giao dịch, giá và quốc gia hoặc khu vực để xử lý hoàn tiền. Khi bạn bật cảnh báo hoặc đăng nhập bằng email, ứng dụng còn gửi bản ghi mua hàng có chữ ký của Apple để xác nhận Pro.";
+"高级版购买记录" = "Bản ghi mua Pro";
+"登录后才有：服务器保存邮箱、设备名称和登录时间，并同步矿池监控、提醒、地址簿、每个钱包的名称和第一个收款地址、显卡与电费设置、语言和外观。同步数据加密存储，但不是端到端加密，服务器能读取。" = "Chỉ khi bạn đăng nhập: máy chủ lưu email, tên thiết bị và thời gian đăng nhập, đồng thời đồng bộ trình theo dõi pool, cảnh báo, sổ địa chỉ, tên và địa chỉ nhận đầu tiên của mỗi ví, cài đặt GPU và tiền điện, ngôn ngữ và giao diện. Dữ liệu đồng bộ được mã hóa khi lưu trữ nhưng không mã hóa đầu cuối, nên máy chủ có thể đọc được.";
+"App 直接连接的第三方服务" = "Dịch vụ ứng dụng kết nối trực tiếp";
+"blockbook.pearlresearch.ai。查余额和记录时发送钱包的扩展公钥（xpub，可据此推出这个钱包的全部地址）；转账时广播本机签好的交易。" = "blockbook.pearlresearch.ai. Để hiển thị số dư và lịch sử, ứng dụng gửi khóa công khai mở rộng của ví (xpub, từ đó có thể suy ra mọi địa chỉ của ví); khi chuyển tiền, ứng dụng phát giao dịch đã ký trên thiết bị này.";
+"Pearl 区块浏览器" = "Trình khám phá khối Pearl";
+"添加矿池监控后，App 把收益地址（F2Pool 为只读页链接）发给对应矿池。" = "Với mỗi trình theo dõi pool bạn thêm, ứng dụng gửi địa chỉ nhận thưởng (với F2Pool là liên kết trang chỉ đọc) đến pool đó.";
+"矿池公开接口" = "API của pool đào";
+"SafeTrade、CoinGecko、WhatToMine、MiningPoolStats、open.er-api.com 等公开数据源，请求不带地址。" = "Các nguồn công khai như SafeTrade, CoinGecko, WhatToMine, MiningPoolStats và open.er-api.com. Các yêu cầu không kèm địa chỉ.";
+"行情与汇率" = "Giá và tỷ giá";
+"存在你设备上的数据" = "Dữ liệu lưu trên thiết bị của bạn";
+"钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。" = "Cơ sở dữ liệu ví, sổ địa chỉ, cài đặt và bộ nhớ đệm đều ở trên thiết bị này; cơ sở dữ liệu ví không nằm trong bản sao lưu. Thông tin đăng nhập được lưu trong Keychain của thiết bị này.";
+"本机" = "Thiết bị này";
+"矿池监控、提醒、地址簿、钱包名称、显卡与电费、语言和外观等设置，通过你自己的 iCloud 在你的设备间同步，我们无法访问。助记词从不同步。" = "Các cài đặt như trình theo dõi pool, cảnh báo, sổ địa chỉ, tên ví, GPU và tiền điện, ngôn ngữ và giao diện được đồng bộ giữa các thiết bị của bạn qua iCloud của chính bạn, chúng tôi không thể truy cập. Cụm từ khôi phục không bao giờ được đồng bộ.";
+"iCloud 同步（高级版）" = "Đồng bộ iCloud (Pro)";
+"开源代码" = "Mã nguồn mở";
+"App 和网页版前端完全由下面的公开仓库编译发布，服务器后台的代码也已公开。任何人都可以审查代码、自己编译。" = "Ứng dụng và giao diện web được biên dịch và phát hành hoàn toàn từ các kho công khai bên dưới, mã máy chủ cũng đã công khai. Ai cũng có thể xem xét mã và tự biên dịch.";
+"代码全部公开" = "Toàn bộ mã đều công khai";
+"App（iPhone / iPad / Mac）" = "Ứng dụng (iPhone / iPad / Mac)";
+"网页版前端" = "Giao diện web";
+"服务器后台" = "Máy chủ";

@@ -3,6 +3,16 @@
     {
       "filename" : "kryptex.png",
       "idiom" : "universal"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "kryptex-dark.png",
+      "idiom" : "universal"
     }
   ],
   "info" : {

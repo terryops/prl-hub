@@ -21,7 +21,7 @@ struct ContactsView: View {
                         Button { editing = ContactDraft() } label: {
                             Label(Loc("添加"), systemImage: "plus")
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.borderedProminent).tint(Pearl.plate)
                     }
                     .frame(maxWidth: .infinity)
                 } else {
@@ -117,20 +117,27 @@ struct ContactEditor: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Prompts, not titles: a Mac form draws a field's title beside it as a
+                // label, where it stays next to whatever is typed.
                 Section(Loc("名称")) {
-                    TextField(Loc("如：交易所 / 朋友"), text: $draft.name)
+                    TextField("", text: $draft.name, prompt: Text(Loc("如：交易所 / 朋友")))
+                        .labelsHidden().accessibilityLabel(Loc("名称"))
                         #if os(iOS)
                         .autocorrectionDisabled()
                         #endif
                 }
                 Section(Loc("地址")) {
-                    TextField("prl1…", text: $draft.address)
+                    TextField("", text: $draft.address, prompt: Text(verbatim: "prl1…"))
+                        .labelsHidden().accessibilityLabel(Loc("地址"))
                         .font(.body.monospaced())
                         #if os(iOS)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                         #endif
                 }
-                Section(Loc("备注（可选）")) { TextField(Loc("备注"), text: $draft.note) }
+                Section(Loc("备注（可选）")) {
+                    TextField("", text: $draft.note, prompt: Text(Loc("备注")))
+                        .labelsHidden().accessibilityLabel(Loc("备注"))
+                }
                 // Deleting lives here (not a swipe) since the list is custom cards.
                 if let id = draft.contactID {
                     Section {

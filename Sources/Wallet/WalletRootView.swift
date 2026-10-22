@@ -19,6 +19,7 @@ struct WalletRootView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .pearlScreenBackground()
             .animation(.snappy, value: store.phase)
         }
     }
@@ -33,19 +34,24 @@ struct WelcomeView: View {
             VStack(spacing: Pearl.Space.lg) {
                 PearlHero(minHeight: 190) {
                     VStack(spacing: Pearl.Space.sm) {
-                        PearlMascot(size: 88)
+                        PearlLogo(size: 72, showsWordmark: false)
+                            .overlay(alignment: .bottomTrailing) {
+                                PearlMascot(size: 40).offset(x: 20, y: 8)
+                            }
+                            .padding(.trailing, 16)
+                            .padding(.bottom, 8)
                         Text(Loc("$Pearl Hub"))
                             .font(.largeTitle.bold())
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Pearl.onHero)
                         Text(Loc("自托管 · 私钥与签名留在本机（钥匙串 / 安全隔区）"))
                             .font(.callout)
-                            .foregroundStyle(.white.opacity(0.9))
+                            .foregroundStyle(Pearl.onHero.opacity(0.9))
                             .multilineTextAlignment(.center)
                     }
                 }
 
                 VStack(spacing: Pearl.Space.md) {
-                    feature("lock.shield", Loc("安全存储"), Loc("助记词加密存于本机钥匙串，永不上传服务器"), Pearl.brand)
+                    feature("lock.shield", Loc("安全存储"), Loc("助记词加密存于本机钥匙串，永不上传服务器"), nil)
                     feature("arrow.left.arrow.right", Loc("便捷收发"), Loc("链上同步与广播交给远程节点"), Pearl.mint)
                     feature("chart.line.uptrend.xyaxis", Loc("行情与算力"), Loc("内置 PRL 挖矿监控"), Pearl.sunrise)
                 }
@@ -81,7 +87,7 @@ struct WelcomeView: View {
                 // Clones of open-source wallets get re-signed with a stealer inside. Names no
                 // other platform's store on purpose: guideline 2.3.10 rejects that.
                 Text(Loc("开源可校验 · 请勿从第三方下载，只认官方应用商店或自行编译"))
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .pearlExplanation(.footnote)
                     .multilineTextAlignment(.center)
 
                 Spacer(minLength: Pearl.Space.lg)
@@ -93,12 +99,12 @@ struct WelcomeView: View {
         .navigationTitle(Loc("欢迎"))
     }
 
-    @ViewBuilder private func feature(_ icon: String, _ title: String, _ sub: String, _ gradient: LinearGradient) -> some View {
+    @ViewBuilder private func feature(_ icon: String, _ title: String, _ sub: String, _ gradient: LinearGradient?) -> some View {
         HStack(spacing: Pearl.Space.md) {
             PearlIconBadge(systemImage: icon, gradient: gradient, size: 44)
             VStack(alignment: .leading, spacing: Pearl.Space.xxs) {
                 Text(title).font(.headline)
-                Text(sub).font(.caption).foregroundStyle(.secondary)
+                Text(sub).pearlExplanation()
             }
             Spacer()
         }

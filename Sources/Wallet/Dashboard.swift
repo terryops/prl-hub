@@ -7,6 +7,7 @@ struct DashboardView: View {
     @StateObject private var price = PRLPriceManager.shared
     @EnvironmentObject private var currency: CurrencyManager
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
     @State private var addingWallet = false
     @State private var managingWallets = false
     @State private var donating = false
@@ -23,6 +24,32 @@ struct DashboardView: View {
     private static let chipLabelFont = Font.footnote.weight(.bold)
     private static let chipPriceFont = Font.body.weight(.bold)
     #endif
+
+    private var isClassicNight: Bool {
+        AppPalette.current == .classic && colorScheme == .dark
+    }
+
+    /// A brighter pearl-blue gradient shared by the balance and action badges.
+    private var balanceGradient: LinearGradient {
+        guard isClassicNight else {
+            return Pearl.brandVivid
+        }
+        return ClassicNightBackground.gradient
+    }
+
+    private var chipPriceColor: Color {
+        isClassicNight
+            ? Color(red: 242 / 255, green: 209 / 255, blue: 134 / 255)
+            : Pearl.heroChipPrice
+    }
+
+    private var cardSurface: Color? {
+        isClassicNight ? Color(red: 43 / 255, green: 45 / 255, blue: 54 / 255) : nil
+    }
+
+    private var cardSecondary: Color {
+        isClassicNight ? .white.opacity(0.70) : .secondary
+    }
 
     /// Donations go to a mainnet address, so the entry only shows on mainnet — and never
     /// while the open wallet IS the donation wallet (that would just pay itself a fee).
@@ -112,23 +139,24 @@ struct DashboardView: View {
                 // Every row keeps a FIXED slot (placeholder until its data loads) so
                 // the hero never changes height — the layout settles first, then the
                 // real balance / fiat / address fade in without shoving anything.
-                PearlHero(minHeight: 0, padding: Pearl.Space.md, showSparkle: false) {
+                PearlHero(gradient: balanceGradient, minHeight: 0, padding: Pearl.Space.md,
+                          showSparkle: false, backdrop: isClassicNight ? AnyView(ClassicNightBackground()) : nil) {
                     VStack(spacing: Pearl.Space.xs) {
-                        // Top row: the gold 币价 chip on the right (the wallet name lives in the
+                        // Top row: the 币价 chip on the right (the wallet name lives in the
                         // toolbar switcher). The chip always holds its slot — "—" until the first
                         // price loads — so the hero never changes height.
                         HStack(spacing: Pearl.Space.sm) {
                             Spacer(minLength: Pearl.Space.xs)
                             HStack(spacing: 6) {
                                 Text(verbatim: "PRL").font(Self.chipLabelFont)
-                                    .foregroundStyle(.white.opacity(0.6))
+                                    .foregroundStyle(Pearl.onHeroChip.opacity(0.75))
                                 Text(unitPriceText ?? "—").font(Self.chipPriceFont).monospacedDigit()
-                                    .foregroundStyle(unitPriceText == nil ? Color.white.opacity(0.45) : Pearl.gold)
+                                    .foregroundStyle(unitPriceText == nil ? Pearl.onHeroChip.opacity(0.55) : chipPriceColor)
                                     .contentTransition(.numericText())
                             }
                             .lineLimit(1).minimumScaleFactor(0.7)
                             .padding(.horizontal, 12).padding(.vertical, 5)
-                            .background(.white.opacity(0.12), in: Capsule())
+                            .background(Pearl.heroChip, in: Capsule())
                             .accessibilityElement(children: .combine)
                             .accessibilityLabel(Loc("PRL 币价 %@", unitPriceText ?? "—"))
                             .animation(.snappy, value: unitPriceText)
@@ -146,18 +174,18 @@ struct DashboardView: View {
                                         .font(.system(.largeTitle, design: .rounded).weight(.bold))
                                     + Text(p.tail)
                                         .font(.system(.footnote, design: .rounded).weight(.bold))
-                                        .foregroundStyle(.white.opacity(0.6))
+                                        .foregroundStyle(Pearl.onHero.opacity(0.6))
                                     + Text(verbatim: " PRL")
                                         .font(.system(.callout, design: .rounded).weight(.semibold))
-                                        .foregroundStyle(.white.opacity(0.85))
+                                        .foregroundStyle(Pearl.onHero.opacity(0.85))
                                 )
-                                .foregroundStyle(.white)
+                                .foregroundStyle(Pearl.onHero)
                                 .opacity(store.balanceIsCached ? 0.7 : 1)
                                 .contentTransition(.numericText())
                             } else {
                                 Text(verbatim: "—— PRL")
                                     .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                                    .foregroundStyle(.white.opacity(0.45))
+                                    .foregroundStyle(Pearl.onHero.opacity(0.45))
                             }
                         }
                         .monospacedDigit()
@@ -171,11 +199,11 @@ struct DashboardView: View {
                         Group {
                             if hasBalance, let usd = price.value(of: store.balance.total) {
                                 Text(verbatim: "≈ " + currency.dual(usd))
-                                    .foregroundStyle(.white.opacity(store.balanceIsCached ? 0.6 : 0.85))
+                                    .foregroundStyle(Pearl.onHero.opacity(store.balanceIsCached ? 0.6 : 0.85))
                                     .contentTransition(.numericText())
                                     .accessibilityLabel(Loc("约合 %@", currency.dual(usd)))
                             } else {
-                                Text(Loc("同步余额…")).foregroundStyle(.white.opacity(0.7))
+                                Text(Loc("同步余额…")).foregroundStyle(Pearl.onHero.opacity(0.7))
                             }
                         }
                         .font(.callout.weight(.medium)).monospacedDigit()
@@ -211,7 +239,7 @@ struct DashboardView: View {
                 let rowH: CGFloat = 24
                 VStack(alignment: .leading, spacing: Pearl.Space.xs) {
                     HStack {
-                        Text(Loc("最近交易")).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        Text(Loc("最近交易")).font(.caption.weight(.semibold)).foregroundStyle(cardSecondary)
                         Spacer()
                         if store.historyReady && !recent.isEmpty {
                             NavigationLink { ActivityView(store: store) } label: {
@@ -225,7 +253,7 @@ struct DashboardView: View {
                             // 历史还没拉回来：3 行骨架占位（不要先显示"暂无交易记录"）。
                             ForEach(0..<3, id: \.self) { _ in txSkeletonRow().frame(height: rowH) }
                         } else if recent.isEmpty {
-                            Text(Loc("暂无交易记录")).font(.caption).foregroundStyle(.secondary)
+                            Text(Loc("暂无交易记录")).font(.caption).foregroundStyle(cardSecondary)
                                 .frame(maxWidth: .infinity, minHeight: rowH * 3 + Pearl.Space.xxs * 2, alignment: .center)
                         } else {
                             // 始终 3 个等高槽：有交易填真实行，没有的留等高空槽（高度恒定）。
@@ -237,7 +265,7 @@ struct DashboardView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md, frosted: true)
+                .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md, frosted: true, surface: cardSurface)
                 .animation(.snappy, value: store.backendReady)
 
                 PriceAlertInlineLink()
@@ -256,6 +284,11 @@ struct DashboardView: View {
             #if os(macOS)
             .containerRelativeFrame(.vertical, alignment: .center)
             #endif
+        }
+        .background {
+            if isClassicNight {
+                Color(red: 17 / 255, green: 18 / 255, blue: 22 / 255).ignoresSafeArea()
+            }
         }
         .navigationTitle(Loc("钱包"))
         .toolbar {
@@ -366,11 +399,14 @@ struct DashboardView: View {
     private func action<Dest: View>(_ title: String, _ icon: String, @ViewBuilder dest: () -> Dest) -> some View {
         NavigationLink(destination: dest()) {
             VStack(spacing: Pearl.Space.sm) {
-                PearlIconBadge(systemImage: icon)
+                PearlIconBadge(systemImage: icon, gradient: isClassicNight ? balanceGradient : nil)
+                // One line, shrunk to fit: "Empfangen" is a few points wider than a third of
+                // a phone, and wrapped as "Empfan-gen" in a tile taller than its neighbours.
                 Text(title).font(.callout.weight(.medium))
+                    .lineLimit(1).minimumScaleFactor(0.7)
             }
             .frame(maxWidth: .infinity)
-            .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md, frosted: true)
+            .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md, frosted: true, surface: cardSurface)
         }
         .buttonStyle(.plain)
     }
@@ -442,7 +478,7 @@ struct ReceiveView: View {
                     .foregroundStyle(Pearl.accent)
 
                     Text(Loc("把这个地址发给对方即可收到 PRL。点按「换一个地址」可生成新地址，更好地保护隐私。"))
-                        .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        .pearlExplanation().multilineTextAlignment(.center)
                 } else {
                     ProgressView(Loc("派生地址…")).frame(maxHeight: 240)
                 }
@@ -450,6 +486,7 @@ struct ReceiveView: View {
             .padding(Pearl.Space.screen).frame(maxWidth: 460).frame(maxWidth: .infinity)
             .animation(.snappy, value: store.address)
         }
+        .pearlScreenBackground()
         .navigationTitle(Loc("收款"))
         .task { await store.refreshIfStale() }
     }
@@ -572,7 +609,7 @@ struct SendView: View {
 
                 Button { prepare() } label: {
                     HStack(spacing: Pearl.Space.xs) {
-                        if preparing || sending { ProgressView().controlSize(.small).tint(.white) }
+                        if preparing || sending { ProgressView().controlSize(.small).tint(Pearl.onAccent) }
                         Text(sending ? Loc("签名并广播…") : preparing ? Loc("正在构建交易…") : Loc("发送"))
                         Image(systemName: "paperplane.fill")
                     }
@@ -584,13 +621,13 @@ struct SendView: View {
                     Label(result, systemImage: resultIsWarning ? "exclamationmark.triangle" : "xmark.octagon")
                         .font(.callout).foregroundStyle(resultIsWarning ? .orange : .red).textSelection(.enabled)
                 }
-                Label(Loc("交易在本机签名（私钥不离开设备），经 Blockbook 广播。"), systemImage: "lock.shield")
-                    .font(.caption).foregroundStyle(.secondary)
+                PearlInfoRow(Loc("交易在本机签名（私钥不离开设备），经 Blockbook 广播。"), systemImage: "lock.shield")
             }
             .padding(Pearl.Space.screen).frame(maxWidth: 520).frame(maxWidth: .infinity)
             .animation(.snappy, value: sending)
             .animation(.snappy, value: result)
         }
+        .pearlScreenBackground()
         .navigationTitle(Loc("转账"))
         // .alert (not .confirmationDialog): a confirmationDialog renders as a popover
         // anchored to this view on regular-width iPad/Mac, floating it over the nav bar.
@@ -813,7 +850,7 @@ struct RevealSeedView: View {
                         .font(.callout).foregroundStyle(.red).multilineTextAlignment(.center)
                 }
                 Text(Loc("助记词是你资产的唯一凭证")).font(.headline)
-                Text(Loc("需通过 Face ID / Touch ID 验证后才会显示")).font(.caption).foregroundStyle(.secondary)
+                Text(Loc("需通过 Face ID / Touch ID 验证后才会显示")).pearlExplanation()
                 Button {
                     authing = true
                     Task { let ok = await store.authenticate(reason: Loc("查看助记词")); authing = false; if ok { withAnimation { revealed = true } } }

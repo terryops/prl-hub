@@ -16,31 +16,30 @@ struct SettingsSection: View {
                 slider(Loc("电价 $/kWh"), $store.cfg.elec, 0...0.5, 0.005, 3, false)
                 slider(Loc("矿池抽水"), $store.cfg.poolFee, 0...0.1, 0.005, 3, false)
                 fxControl
-                slider(Loc("机柜功耗预算 W"), $store.powerBudgetW, 500...30000, 100, 0, false)
+                Toggle(Loc("机柜功耗"), isOn: $store.powerBudgetEnabled)
+                    .accessibilityIdentifier("mining.powerBudgetEnabled")
+                if store.powerBudgetEnabled {
+                    slider(Loc("机柜功耗预算 W"), $store.powerBudgetW, 500...30000, 100, 0, false)
+                }
                 slider(Loc("矿池同步能效 W/(TH/s)"), $store.cfg.syncWPerTH, 0...5, 0.1, 1, false)
-                Text(Loc("「矿池同步」的设备无法从链上得知功率，按此能效估电费（默认 1.8 ≈ RTX4090 级）。设 0 = 只看收入不扣电费。"))
-                    .font(.callout).foregroundColor(.secondary)
+                PearlInfoRow(Loc("「矿池同步」的设备无法从链上得知功率，按此能效估电费（默认 1.8 ≈ RTX4090 级）。设 0 = 只看收入不扣电费。"))
             }
             Section(Loc("难度趋势 / 扩容推演")) {
                 slider(Loc("难度月增长 %"), $store.cfg.diffGrowthMonthly, -20...200, 1, 0, store.live)
                 if store.cfg.hasDiffTrend {
                     let c = store.cfg
-                    Label(Loc("实时难度：当前 %@M · 近7天 %@ · 近3天 %@ · 近24h %@", f(c.diffNow/1e6,2), pctSigned(c.diffChange(vs: c.diff7)), pctSigned(c.diffChange(vs: c.diff3)), pctSigned(c.diffChange(vs: c.diff24))),
-                          systemImage: "chart.line.uptrend.xyaxis")
-                        .font(.callout).foregroundColor(.secondary)
+                    PearlInfoRow(Loc("实时难度：当前 %@M · 近7天 %@ · 近3天 %@ · 近24h %@", f(c.diffNow/1e6,2), pctSigned(c.diffChange(vs: c.diff7)), pctSigned(c.diffChange(vs: c.diff3)), pctSigned(c.diffChange(vs: c.diff24))),
+                             systemImage: "chart.line.uptrend.xyaxis")
                 }
                 Toggle(Loc("自身算力计入全网（扩容稀释每卡出币）"), isOn: $store.selfDilution)
-                Text(Loc("难度月增长 = 预计全网算力每月涨幅；出币 ∝ 1/全网算力，按日衰减，用于回本天数与 30/90 天预测。0 = 难度恒定。"))
-                    .font(.callout).foregroundColor(.secondary)
+                PearlInfoRow(Loc("难度月增长 = 预计全网算力每月涨幅；出币 ∝ 1/全网算力，按日衰减，用于回本天数与 30/90 天预测。0 = 难度恒定。"))
             }
             Section(Loc("租用")) {
                 Toggle(Loc("在【显卡对比】显示租金 / 租净列"), isOn: $store.rentEnabled)
-                Text(Loc("各显卡租金不同 → 在【显卡对比】选中某卡后于详情逐卡设置"))
-                    .font(.callout).foregroundColor(.secondary)
+                PearlInfoRow(Loc("各显卡租金不同 → 在【显卡对比】选中某卡后于详情逐卡设置"))
             }
             Section {
-                Text(Loc("电价、汇率、机柜预算、每卡租金、设备清单都会自动保存。"))
-                    .font(.callout).foregroundColor(.secondary)
+                PearlInfoRow(Loc("电价、汇率、机柜预算、每卡租金、设备清单都会自动保存。"))
             }
         }
         .formStyle(.grouped)
@@ -62,10 +61,8 @@ struct SettingsSection: View {
                                value: "1 USD ≈ " + f(store.cfg.fx, fxDigits(store.cfg.fx)) + " " + lc.code)
             }
         } else {
-            Label(Loc("未选副货币：挖矿金额按美元（USD）显示。可在「设置 → 货币」选择副货币后在此换算。"),
-                  systemImage: "dollarsign.circle")
-                .font(.callout).foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            PearlInfoRow(Loc("未选副货币：挖矿金额按美元（USD）显示。可在「设置 → 货币」选择副货币后在此换算。"),
+                         systemImage: "dollarsign.circle")
         }
     }
 

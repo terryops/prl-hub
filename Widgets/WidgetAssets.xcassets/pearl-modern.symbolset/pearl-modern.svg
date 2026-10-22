@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg
+PUBLIC "-//W3C//DTD SVG 1.1//EN"
+       "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="3300" height="2200">
+ <!--glyph: "pearl-modern", point size: 100.0, Pearl Hub custom symbol: hard-hat P-->
+ <style>.monochrome-0 {-sfsymbols-motion-group:0}
+</style>
+ <g id="Notes">
+  <rect height="2200" id="artboard" style="fill:white;opacity:1" width="3300" x="0" y="0"/>
+  <text id="template-version" style="stroke:none;fill:black;font-family:sans-serif;font-size:13;text-anchor:end;" transform="matrix(1 0 0 1 3036 1933)">Template v.3.0</text>
+ </g>
+ <g id="Guides">
+  <line id="Baseline-S" style="fill:none;stroke:#27AAE1;opacity:1;stroke-width:0.5;" x1="263" x2="3036" y1="696" y2="696"/>
+  <line id="Capline-S" style="fill:none;stroke:#27AAE1;opacity:1;stroke-width:0.5;" x1="263" x2="3036" y1="625.541" y2="625.541"/>
+  <line id="Baseline-M" style="fill:none;stroke:#27AAE1;opacity:1;stroke-width:0.5;" x1="263" x2="3036" y1="1126" y2="1126"/>
+  <line id="Capline-M" style="fill:none;stroke:#27AAE1;opacity:1;stroke-width:0.5;" x1="263" x2="3036" y1="1055.54" y2="1055.54"/>
+  <line id="Baseline-L" style="fill:none;stroke:#27AAE1;opacity:1;stroke-width:0.5;" x1="263" x2="3036" y1="1556" y2="1556"/>
+  <line id="Capline-L" style="fill:none;stroke:#27AAE1;opacity:1;stroke-width:0.5;" x1="263" x2="3036" y1="1485.54" y2="1485.54"/>
+  <line id="left-margin-Ultralight-S" style="fill:none;stroke:#00AEEF;stroke-width:0.5;opacity:1.0;" x1="523.711" x2="523.711" y1="600.785" y2="720.121"/>
+  <line id="right-margin-Ultralight-S" style="fill:none;stroke:#00AEEF;stroke-width:0.5;opacity:1.0;" x1="595.711" x2="595.711" y1="600.785" y2="720.121"/>
+  <line id="left-margin-Regular-S" style="fill:none;stroke:#00AEEF;stroke-width:0.5;opacity:1.0;" x1="1413.490" x2="1413.490" y1="600.785" y2="720.121"/>
+  <line id="right-margin-Regular-S" style="fill:none;stroke:#00AEEF;stroke-width:0.5;opacity:1.0;" x1="1485.490" x2="1485.490" y1="600.785" y2="720.121"/>
+  <line id="left-margin-Black-S" style="fill:none;stroke:#00AEEF;stroke-width:0.5;opacity:1.0;" x1="2303.270" x2="2303.270" y1="600.785" y2="720.121"/>
+  <line id="right-margin-Black-S" style="fill:none;stroke:#00AEEF;stroke-width:0.5;opacity:1.0;" x1="2375.270" x2="2375.270" y1="600.785" y2="720.121"/>
+ </g>
+ <g id="Symbols">
+  <g id="Ultralight-S" transform="matrix(1 0 0 1 523.711 696)">
+   <path class="monochrome-0 multicolor-0:tintColor hierarchical-0:primary" d="M15 -42 L15 -9 Q15 -3 21 -3 Q27 -3 27 -9 L27 -21 L38 -21 C54 -21 63 -29 63 -40 C63 -46 60 -50 56 -53 L15 -46 Z M28 -43 L37 -43 C42 -43 46 -41 46 -37 C46 -33 43 -31 37 -31 L28 -31 Z M13 -55 C13 -69 23 -78 37 -78 C51 -78 60 -68 61 -60 L13 -52 Z M9 -48 Q6 -48 6 -52 Q6 -55 10 -56 L64 -65 Q68 -66 69 -62 Q70 -58 66 -57 Z"/>
+  </g>
+  <g id="Regular-S" transform="matrix(1 0 0 1 1413.490 696)">
+   <path class="monochrome-0 multicolor-0:tintColor hierarchical-0:primary" d="M15 -42 L15 -9 Q15 -3 21 -3 Q27 -3 27 -9 L27 -21 L38 -21 C54 -21 63 -29 63 -40 C63 -46 60 -50 56 -53 L15 -46 Z M28 -43 L37 -43 C42 -43 46 -41 46 -37 C46 -33 43 -31 37 -31 L28 -31 Z M13 -55 C13 -69 23 -78 37 -78 C51 -78 60 -68 61 -60 L13 -52 Z M9 -48 Q6 -48 6 -52 Q6 -55 10 -56 L64 -65 Q68 -66 69 -62 Q70 -58 66 -57 Z"/>
+  </g>
+  <g id="Black-S" transform="matrix(1 0 0 1 2303.270 696)">
+   <path class="monochrome-0 multicolor-0:tintColor hierarchical-0:primary" d="M15 -42 L15 -9 Q15 -3 21 -3 Q27 -3 27 -9 L27 -21 L38 -21 C54 -21 63 -29 63 -40 C63 -46 60 -50 56 -53 L15 -46 Z M28 -43 L37 -43 C42 -43 46 -41 46 -37 C46 -33 43 -31 37 -31 L28 -31 Z M13 -55 C13 -69 23 -78 37 -78 C51 -78 60 -68 61 -60 L13 -52 Z M9 -48 Q6 -48 6 -52 Q6 -55 10 -56 L64 -65 Q68 -66 69 -62 Q70 -58 66 -57 Z"/>
+  </g>
+ </g>
+</svg>

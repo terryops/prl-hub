@@ -76,6 +76,11 @@ private func saneEH(_ eh: Double) -> Bool { eh > 1e-6 && eh < 1e6 }
 /// difficulty24/3/7 由整链难度序列按时间加权算出（见 averageDifficulty），与 WhatToMine 的
 /// 三个窗口实测相差均 <0.2%。返回已更新的字段名；空数组 = 这个源没用上，调用方回落。
 private func applyLordOfPearls(_ c: inout Config, live: Bool) async -> [String] {
+    if let snapshot = try? await SharedPublicData.shared.overview(force: live),
+       let network = snapshot.network, network.isUsable(at: Date()) {
+        return applySharedNetwork(&c, network)
+    }
+    guard !Task.isCancelled else { return [] }
     guard let s = try? await LordOfPearlsClient(live: live).publicStats(),
           let diff = s.difficulty, diff > 0,
           // 24h 实测优先；它缺席才退回 60 块窗口（口径略短，但仍是链上实测）。矿池总览的「占比」用的是同一个数。
@@ -91,6 +96,24 @@ private func applyLordOfPearls(_ c: inout Config, live: Bool) async -> [String] 
     if let reward = s.rewardPerBlock, reward > 0 {
         let pu = reward * 86400.0 / (diff * prlWorkPerDifficulty) * 1e12   // PRL / (TH/s) / 天
         if pu > 1e-6 && pu < 100 { c.perUnit = pu; got.append(Loc("出币")) }
+    }
+    return got
+}
+
+/// The calculator consumes the same chain snapshot and units as the pool table/Web.
+func applySharedNetwork(_ c: inout Config, _ network: SharedOverview.Network) -> [String] {
+    guard let diff = network.difficulty, diff > 0,
+          let hash = network.hashrate, saneEH(ehOf(hash)) else { return [] }
+    c.diffNow = diff
+    if let v = network.difficulty24h, v > 0 { c.diff24 = v }
+    if let v = network.difficulty3d, v > 0 { c.diff3 = v }
+    if let v = network.difficulty7d, v > 0 { c.diff7 = v }
+    c.nethashEH = ehOf(hash)
+    c.diffConst = hash / diff
+    var got = [Loc("全网算力")]
+    if let v = network.prlPerTHDay, v > 1e-6, v < 100 {
+        c.perUnit = v
+        got.append(Loc("出币"))
     }
     return got
 }
@@ -162,10 +185,17 @@ func fetchLive(_ input: Config, live: Bool = true) async -> (Config, Bool, Strin
 
 @MainActor
 final class PRLStore: ObservableObject {
+    private let defaults: UserDefaults
+    private let onChange: (String) -> Void
+    private var configurationOwner: String?
+    private var poolGeneration = 0
+    private var cloudSub: AnyCancellable?
+    private var accountSub: AnyCancellable?
     @Published var cfg = Config() { didSet { savePrefs() } }
     @Published var devices: [Device] = [] { didSet { saveDevices() } }
     @Published var rentByGPU: [String: Double] = [:] { didSet { saveRents() } }
     @Published var powerBudgetW: Double = 3000 { didSet { savePrefs() } }
+    @Published var powerBudgetEnabled = false { didSet { savePrefs() } }
     @Published var live = true { didSet { savePrefs() } }
     @Published var status = Loc("未刷新")
     @Published var lastUpdate = "—"
@@ -193,6 +223,7 @@ final class PRLStore: ObservableObject {
     /// at entry time). Synced alongside the rents so another device converts them
     /// correctly even when ITS own resolved secondary currency differs.
     private var rentCurrency = ""
+    private var savedRentFX: Double?
 
     // MARK: 币价历史（行情趋势图）
     /// Daily PRL/USDT candles for the 行情 price-trend chart. Reuses SafeTrade's
@@ -202,9 +233,12 @@ final class PRLStore: ObservableObject {
     private var lastPriceFetch: Date?
     private var priceSub: AnyCancellable?
 
-    init() {
-        devices = PRLStore.loadDevices()
-        rentByGPU = PRLStore.loadRents()
+    init(defaults: UserDefaults = .standard, onChange: @escaping (String) -> Void = CloudSync.push) {
+        self.defaults = defaults
+        self.onChange = onChange
+        configurationOwner = defaults.string(forKey: "account.current")
+        devices = PRLStore.loadDevices(defaults)
+        rentByGPU = PRLStore.loadRents(defaults)
         loadPrefsFromDefaults()
         initializing = false
         // Don't lose a still-pending coalesced save if the app is backgrounded right
@@ -216,9 +250,17 @@ final class PRLStore: ObservableObject {
         #endif
         resignSub = NotificationCenter.default.publisher(for: resign).sink { [weak self] _ in
             guard let self else { return }
-            if let work = self.prefsSave { work.cancel(); self.writePrefs() }
-            if let work = self.devicesSave { work.cancel(); self.writeDevices() }
-            if let work = self.rentsSave { work.cancel(); self.writeRents() }
+            self.flushPending()
+        }
+        accountSub = NotificationCenter.default.publisher(for: .accountPreferencesWillChange).sink { [weak self] _ in
+            self?.flushPending()
+        }
+        // The store can remain alive while Settings is open. Reload here so a
+        // hidden mining tab cannot later save the previous account's devices.
+        cloudSub = NotificationCenter.default.publisher(for: .cloudSyncDidUpdate).sink { [weak self] _ in
+            self?.reloadDevices()
+            self?.reloadPrefs()
+            self?.syncFx()
         }
         syncFx()   // align cfg.fx with the live secondary rate when in auto mode
         // Live mode shows the app-wide price the moment anything refreshes it (the
@@ -233,26 +275,29 @@ final class PRLStore: ObservableObject {
     /// Read all persisted prefs (cfg fields + toggles) from UserDefaults into the
     /// published state. Used at launch and when adopting an incoming iCloud change.
     private func loadPrefsFromDefaults() {
-        let d = UserDefaults.standard
-        if d.object(forKey: "prl.price") != nil { cfg.price = d.double(forKey: "prl.price") }
-        if d.object(forKey: "prl.neth") != nil { cfg.nethashEH = d.double(forKey: "prl.neth") }
-        if d.object(forKey: "prl.pu") != nil { cfg.perUnit = d.double(forKey: "prl.pu") }
-        if d.object(forKey: "prl.elec") != nil { cfg.elec = d.double(forKey: "prl.elec") }
-        if d.object(forKey: "prl.fee") != nil { cfg.poolFee = d.double(forKey: "prl.fee") }
-        if d.object(forKey: "prl.fx") != nil { cfg.fx = d.double(forKey: "prl.fx") }
-        if d.object(forKey: "prl.diffGrowth") != nil { cfg.diffGrowthMonthly = d.double(forKey: "prl.diffGrowth") }
-        if d.object(forKey: "prl.diffConst") != nil { cfg.diffConst = d.double(forKey: "prl.diffConst") }
-        if d.object(forKey: "prl.syncW") != nil { cfg.syncWPerTH = d.double(forKey: "prl.syncW") }
-        if d.object(forKey: "prl.selfDilution") != nil { selfDilution = d.bool(forKey: "prl.selfDilution") }
-        if d.object(forKey: "prl.budget") != nil { powerBudgetW = d.double(forKey: "prl.budget") }
-        if d.object(forKey: "prl.live") != nil { live = d.bool(forKey: "prl.live") }
-        if d.object(forKey: "prl.rentEnabled") != nil { rentEnabled = d.bool(forKey: "prl.rentEnabled") }
-        if d.object(forKey: "prl.rentCovers") != nil { rentCoversPower = d.bool(forKey: "prl.rentCovers") }
-        if d.object(forKey: "prl.fxManual") != nil { fxManual = d.bool(forKey: "prl.fxManual") }
-        if let rc = d.string(forKey: "prl.rentCcy"), !rc.isEmpty { rentCurrency = rc }
-        if let sv = d.string(forKey: "prl.sort"), let sk = SortKey(rawValue: sv) { sortKey = sk }
-        if let s = d.string(forKey: "prl.selected"), !s.isEmpty { selected = s }
-        if d.object(forKey: "prl.auto") != nil { setAuto(d.bool(forKey: "prl.auto")) }
+        let d = defaults, fallback = Config()
+        cfg.price = d.object(forKey: "prl.price") as? Double ?? fallback.price
+        cfg.nethashEH = d.object(forKey: "prl.neth") as? Double ?? fallback.nethashEH
+        cfg.perUnit = d.object(forKey: "prl.pu") as? Double ?? fallback.perUnit
+        cfg.elec = d.object(forKey: "prl.elec") as? Double ?? fallback.elec
+        cfg.poolFee = d.object(forKey: "prl.fee") as? Double ?? fallback.poolFee
+        cfg.fx = d.object(forKey: "prl.fx") as? Double ?? fallback.fx
+        cfg.diffGrowthMonthly = d.object(forKey: "prl.diffGrowth") as? Double ?? fallback.diffGrowthMonthly
+        cfg.diffConst = d.object(forKey: "prl.diffConst") as? Double ?? fallback.diffConst
+        cfg.syncWPerTH = d.object(forKey: "prl.syncW") as? Double ?? fallback.syncWPerTH
+        selfDilution = d.object(forKey: "prl.selfDilution") as? Bool ?? false
+        powerBudgetW = d.object(forKey: "prl.budget") as? Double ?? 3000
+        powerBudgetEnabled = d.object(forKey: "prl.budgetEnabled") as? Bool ?? false
+        live = d.object(forKey: "prl.live") as? Bool ?? true
+        rentEnabled = d.object(forKey: "prl.rentEnabled") as? Bool ?? true
+        rentCoversPower = d.object(forKey: "prl.rentCovers") as? Bool ?? true
+        fxManual = d.object(forKey: "prl.fxManual") as? Bool ?? false
+        rentCurrency = d.string(forKey: "prl.rentCcy") ?? ""
+        savedRentFX = d.object(forKey: "prl.rentFX") as? Double
+        sortKey = d.string(forKey: "prl.sort").flatMap(SortKey.init(rawValue:)) ?? .ownNet
+        if let value = d.string(forKey: "prl.selected") { selected = value.isEmpty ? nil : value }
+        else { selected = "RTX 5070" }
+        setAuto(d.object(forKey: "prl.auto") as? Bool ?? false)
     }
 
     /// Adopt PRL config (cfg fields + rents + toggles) pushed in from another
@@ -260,19 +305,30 @@ final class PRLStore: ObservableObject {
     /// we read them into the published state without bouncing them back up.
     func reloadPrefs() {
         applyingRemote = true
-        rentByGPU = PRLStore.loadRents()
+        let owner = defaults.string(forKey: "account.current")
+        if owner != configurationOwner {
+            configurationOwner = owner
+            prefsSave?.cancel(); prefsSave = nil
+            devicesSave?.cancel(); devicesSave = nil
+            rentsSave?.cancel(); rentsSave = nil
+            liveGeneration += 1; incomeGeneration += 1
+            poolGeneration += 1; syncing = false
+            cfg = Config(); liveReady = false; loading = false
+            actualIncome = []
+        }
+        rentByGPU = PRLStore.loadRents(defaults)
         loadPrefsFromDefaults()
         applyingRemote = false
     }
 
-    static func loadDevices() -> [Device] {
-        if let data = UserDefaults.standard.data(forKey: "prl.devices"),
+    static func loadDevices(_ defaults: UserDefaults = .standard) -> [Device] {
+        if let data = defaults.data(forKey: "prl.devices"),
            let ds = try? JSONDecoder().decode([Device].self, from: data) { return ds }
         return []   // 新用户从空设备清单开始（不预置任何示例设备）
     }
-    static func loadRents() -> [String: Double] {
-        if let data = UserDefaults.standard.data(forKey: "prl.rents"),
-           let m = try? JSONDecoder().decode([String: Double].self, from: data), !m.isEmpty { return m }
+    static func loadRents(_ defaults: UserDefaults = .standard) -> [String: Double] {
+        if let data = defaults.data(forKey: "prl.rents"),
+           let m = try? JSONDecoder().decode([String: Double].self, from: data) { return m }
         var def: [String: Double] = [:]
         for g in GPUS { def[g.name] = g.rentDefault }
         return def
@@ -291,8 +347,8 @@ final class PRLStore: ObservableObject {
 
     private func writeDevices() {
         devicesSave = nil
-        if let d = try? JSONEncoder().encode(devices) { UserDefaults.standard.set(d, forKey: "prl.devices") }
-        CloudSync.push("prl.devices")   // mirror 设备资料 to iCloud (no-op if not provisioned)
+        if let d = try? JSONEncoder().encode(devices) { defaults.set(d, forKey: "prl.devices") }
+        onChange("prl.devices")
     }
 
     /// Re-read 设备资料 after an incoming iCloud change from another device.
@@ -300,7 +356,7 @@ final class PRLStore: ObservableObject {
     /// adopt it into the published `devices` (without pushing it back up).
     func reloadDevices() {
         applyingRemote = true
-        devices = PRLStore.loadDevices()
+        devices = PRLStore.loadDevices(defaults)
         applyingRemote = false
     }
     func saveRents() {
@@ -314,13 +370,16 @@ final class PRLStore: ObservableObject {
 
     private func writeRents() {
         rentsSave = nil
-        if let d = try? JSONEncoder().encode(rentByGPU) { UserDefaults.standard.set(d, forKey: "prl.rents") }
+        if let d = try? JSONEncoder().encode(rentByGPU) { defaults.set(d, forKey: "prl.rents") }
         // Stamp the currency the rents are entered in so a device whose own secondary
         // currency differs still converts these numbers correctly.
         rentCurrency = localCode
-        UserDefaults.standard.set(rentCurrency, forKey: "prl.rentCcy")
-        CloudSync.push("prl.rents")
-        CloudSync.push("prl.rentCcy")
+        defaults.set(rentCurrency, forKey: "prl.rentCcy")
+        savedRentFX = rentCurrency == "USD" ? 1 : cfg.fx
+        defaults.set(savedRentFX, forKey: "prl.rentFX")
+        onChange("prl.rents")
+        onChange("prl.rentCcy")
+        onChange("prl.rentFX")
     }
     func savePrefs() {
         // Skip during init AND while adopting an incoming iCloud change: every
@@ -341,15 +400,22 @@ final class PRLStore: ObservableObject {
     private var prefsSave: DispatchWorkItem?
     private var resignSub: AnyCancellable?
 
+    func flushPending() {
+        if let work = prefsSave { work.cancel(); writePrefs() }
+        if let work = devicesSave { work.cancel(); writeDevices() }
+        if let work = rentsSave { work.cancel(); writeRents() }
+    }
+
     private func writePrefs() {
         prefsSave = nil
-        let d = UserDefaults.standard
+        let d = defaults
         d.set(cfg.price, forKey: "prl.price"); d.set(cfg.nethashEH, forKey: "prl.neth"); d.set(cfg.perUnit, forKey: "prl.pu")
         d.set(cfg.elec, forKey: "prl.elec"); d.set(cfg.poolFee, forKey: "prl.fee"); d.set(cfg.fx, forKey: "prl.fx")
         d.set(cfg.diffGrowthMonthly, forKey: "prl.diffGrowth"); d.set(cfg.diffConst, forKey: "prl.diffConst")
         d.set(cfg.syncWPerTH, forKey: "prl.syncW")
         d.set(selfDilution, forKey: "prl.selfDilution")
         d.set(powerBudgetW, forKey: "prl.budget")
+        d.set(powerBudgetEnabled, forKey: "prl.budgetEnabled")
         d.set(live, forKey: "prl.live"); d.set(rentEnabled, forKey: "prl.rentEnabled")
         d.set(rentCoversPower, forKey: "prl.rentCovers"); d.set(autoRefresh, forKey: "prl.auto")
         d.set(fxManual, forKey: "prl.fxManual")
@@ -357,10 +423,10 @@ final class PRLStore: ObservableObject {
         // Mirror user config to iCloud — but NOT the live market numbers
         // (price/neth/pu/diffConst), which each device refetches. push() no-ops
         // when a value is unchanged, so this is cheap even on every refresh.
-        for key in ["prl.elec", "prl.fee", "prl.fx", "prl.diffGrowth", "prl.syncW",
-                    "prl.selfDilution", "prl.budget", "prl.live", "prl.rentEnabled",
+        for key in ["prl.price", "prl.neth", "prl.pu", "prl.elec", "prl.fee", "prl.fx", "prl.diffGrowth", "prl.syncW",
+                    "prl.selfDilution", "prl.budget", "prl.budgetEnabled", "prl.live", "prl.rentEnabled",
                     "prl.rentCovers", "prl.fxManual", "prl.auto", "prl.sort", "prl.selected"] {
-            CloudSync.push(key)
+            onChange(key)
         }
     }
 
@@ -399,7 +465,7 @@ final class PRLStore: ObservableObject {
     private var rentFxRate: Double {
         let ccy = rentCurrency.isEmpty ? localCode : rentCurrency
         if ccy == "USD" { return 1 }
-        return CurrencyManager.shared.rate(ccy) ?? cfg.fx
+        return CurrencyManager.shared.rate(ccy) ?? savedRentFX ?? cfg.fx
     }
 
     func rent(for name: String) -> Double { rentByGPU[name] ?? gpu(name)?.rentDefault ?? 0 }
@@ -460,7 +526,10 @@ final class PRLStore: ObservableObject {
     /// Daily rent (¥) for the whole device-unit. A per-device override wins;
     /// otherwise fall back to the chip's rent (× card-equivalent for synced rigs).
     func devRent(_ dv: Device) -> Double {
-        if let r = dv.rentDaily { return r }
+        if let r = dv.rentDaily {
+            let rate = dv.rentCurrency.flatMap { CurrencyManager.shared.rate($0) } ?? dv.rentFX ?? rentFxRate
+            return r / max(0.0001, rate) * rentFxRate
+        }
         return dv.synced ? devCards(dv) * rent(for: dv.gpu) : rent(for: dv.gpu)
     }
 
@@ -507,6 +576,8 @@ final class PRLStore: ObservableObject {
     func syncFromPools() {
         guard !syncing else { return }
         syncing = true
+        poolGeneration += 1
+        let generation = poolGeneration
         Task { [weak self] in
             guard let self else { return }
             // Lenient read: one watch this build can't decode (a newer pool) must not empty
@@ -563,6 +634,7 @@ final class PRLStore: ObservableObject {
                                                           previousByName: previousByName))
                 }
             }
+            guard generation == self.poolGeneration else { return }
             let manual = self.devices.filter { !$0.synced }
             // Safety net: guarantee no two devices share an id before publishing — a
             // name collision across different addresses can still make mergedSyncedDevice

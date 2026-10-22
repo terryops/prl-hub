@@ -3,6 +3,16 @@
     {
       "filename" : "herominers.png",
       "idiom" : "universal"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "herominers-dark.png",
+      "idiom" : "universal"
     }
   ],
   "info" : {

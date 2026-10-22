@@ -1,0 +1,187 @@
+{
+  "inputs": {
+    "rows": [
+      {
+        "name": "Pearl Fortune",
+        "url": "https://pearlfortune.org",
+        "hashrate": 3000000000000000,
+        "blocks": 40,
+        "scheme": "PPS",
+        "fee": 5
+      },
+      {
+        "name": "Unknown Pool",
+        "url": "https://unknown.example",
+        "hashrate": null,
+        "blocks": null,
+        "scheme": null,
+        "fee": null
+      }
+    ],
+    "extras": {
+      "fortune": {
+        "pool_stats": {
+          "pool_fee_rate": 0.02,
+          "rolling_stats": [
+            {
+              "hours": 1,
+              "hashrate": 2000000000000000
+            },
+            {
+              "hours": 24,
+              "hashrate": 1000000000000000,
+              "total_coins": 80,
+              "expected_coins": 100,
+              "block_count": 25
+            }
+          ]
+        }
+      },
+      "mps": {
+        "block_time_average": 200,
+        "data": [
+          {
+            "url": "https://pearlfortune.org",
+            "hashrate": 9000000000000000,
+            "history_start": 1790114400,
+            "history_interval": 3600,
+            "history": [
+              100,
+              10,
+              "x"
+            ],
+            "hashrate_average_7d": 105,
+            "lastblocktime": 1790121480
+          }
+        ]
+      },
+      "chain": {
+        "lifetime": {
+          "top": [
+            {
+              "blocks": 1000,
+              "pool": {
+                "url": "https://pearlfortune.org"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "snapshot": {
+    "ok": true,
+    "schemaVersion": 1,
+    "ts": 1790121600,
+    "source": "lordofpearls",
+    "network": {
+      "source": "lordofpearls",
+      "ts": 1790121600,
+      "difficulty": 1000,
+      "hashrate": 5000000000000000000,
+      "blockTime": 200,
+      "reward": 2000,
+      "prlPerTHDay": 0.02,
+      "difficulty24h": 950,
+      "difficulty3d": 900,
+      "difficulty7d": 800
+    },
+    "rows": [
+      {
+        "id": "https://pearlfortune.org",
+        "name": "Pearl Fortune",
+        "url": "https://pearlfortune.org",
+        "hashrate": 2000000000000000,
+        "share": 0.0004,
+        "fee": 2,
+        "scheme": "PPLNS",
+        "solo": false,
+        "pps": false,
+        "blocksPerDay": 25,
+        "blocksSample": 25,
+        "sampleDays": 1,
+        "earningsPerPH": 80,
+        "theoreticalEarningsPerPH": 100,
+        "yieldRatio": 0.8,
+        "payouts": [
+          {
+            "scheme": "PPS",
+            "fee": 5,
+            "grossPerPH": 100,
+            "estimated": true,
+            "solo": false,
+            "realFeePercent": null
+          },
+          {
+            "scheme": "PPLNS",
+            "fee": 2,
+            "grossPerPH": 80,
+            "estimated": false,
+            "solo": false,
+            "realFeePercent": null
+          }
+        ],
+        "history": [
+          {
+            "ts": 1790114400,
+            "hashrate": 100
+          },
+          {
+            "ts": 1790118000,
+            "hashrate": 110
+          },
+          {
+            "ts": 1790121600,
+            "hashrate": null
+          }
+        ],
+        "averageHashrate7d": 105,
+        "lastBlockTime": 1790121480,
+        "lifetimeBlocks": 1000,
+        "trustworthy": true,
+        "source": "lordofpearls",
+        "hashFromPoolAPI": false,
+        "feeFromPoolAPI": true,
+        "devFee": null
+      },
+      {
+        "id": "https://unknown.example",
+        "name": "Unknown Pool",
+        "url": "https://unknown.example",
+        "hashrate": null,
+        "share": null,
+        "fee": null,
+        "scheme": null,
+        "solo": false,
+        "pps": false,
+        "blocksPerDay": null,
+        "blocksSample": null,
+        "sampleDays": 1,
+        "earningsPerPH": null,
+        "theoreticalEarningsPerPH": 646219.9196807648,
+        "yieldRatio": null,
+        "payouts": [
+          {
+            "scheme": null,
+            "fee": null,
+            "grossPerPH": null,
+            "estimated": true,
+            "solo": false,
+            "realFeePercent": null
+          }
+        ],
+        "history": [],
+        "averageHashrate7d": null,
+        "lastBlockTime": null,
+        "lifetimeBlocks": null,
+        "trustworthy": false,
+        "source": "lordofpearls",
+        "hashFromPoolAPI": false,
+        "feeFromPoolAPI": false,
+        "devFee": null
+      }
+    ],
+    "partial": false,
+    "stale": false
+  }
+}

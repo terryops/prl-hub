@@ -137,6 +137,13 @@ final class PriceLiveActivity: ObservableObject {
         scheduleRegister(token: token)
     }
 
+    /// Ask the surviving activity to redraw after a theme / icon change, preserving
+    /// the price's original timestamp and staleness deadline.
+    func refreshAppearance() {
+        guard let a = activity else { return }
+        Task { await a.update(a.content) }
+    }
+
     private func attach(_ a: Activity<PriceActivityAttributes>) {
         activity = a
         running = true
@@ -224,7 +231,7 @@ final class PriceLiveActivity: ObservableObject {
         req.timeoutInterval = 15
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        guard let (_, resp) = try? await URLSession.shared.data(for: req) else { return false }
+        guard let (_, resp) = try? await WebLinkStore.shared.data(for: req) else { return false }
         return (resp as? HTTPURLResponse)?.statusCode == 200
     }
 
@@ -236,11 +243,12 @@ final class PriceLiveActivity: ObservableObject {
         }
         var req = URLRequest(url: PriceAlertStore.endpoint.appendingPathComponent("live/\(token)"))
         req.httpMethod = "DELETE"
-        URLSession.shared.dataTask(with: req).resume()
+        Task { _ = try? await WebLinkStore.shared.data(for: req) }
     }
     #else
     func start() async {}
     func stop() async {}
     func foreground() {}
+    func refreshAppearance() {}
     #endif
 }

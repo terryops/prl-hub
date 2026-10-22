@@ -75,7 +75,7 @@ struct WithdrawConfirmSheet: View {
             }
             .safeAreaInset(edge: .bottom) {
                 Button { dismiss(); onConfirm() } label: { Text(Loc("确认提现")) }
-                    .buttonStyle(.pearl(Pearl.brand))
+                    .buttonStyle(.pearl)
                     .frame(maxWidth: 520)
                     .padding(.horizontal, Pearl.Space.screen)
                     .padding(.vertical, Pearl.Space.sm)

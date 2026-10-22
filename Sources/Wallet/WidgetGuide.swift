@@ -84,9 +84,7 @@ struct WidgetGuideSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Pearl.Space.lg) {
-                    Text(Self.intro)
-                        .font(.callout).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(Self.intro).pearlExplanation(.callout)
                     proStatus
                     VStack(alignment: .leading, spacing: Pearl.Space.md) {
                         ForEach(Array(Self.steps.enumerated()), id: \.offset) { i, text in
@@ -94,9 +92,11 @@ struct WidgetGuideSheet: View {
                         }
                     }
                     .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
+                    #if os(iOS)
+                    lockScreenGuide
+                    #endif
                     Text(Loc("小组件会定时自动刷新；打开 App 时会立即更新。"))
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .pearlExplanation()
                 }
                 .padding(Pearl.Space.screen)
                 .frame(maxWidth: 560)
@@ -119,6 +119,26 @@ struct WidgetGuideSheet: View {
         #endif
     }
 
+    #if os(iOS)
+    private var lockScreenGuide: some View {
+        VStack(alignment: .leading, spacing: Pearl.Space.md) {
+            Label(Loc("锁屏小组件"), systemImage: "lock.iphone")
+                .font(.headline)
+            Text(Loc("锁屏小组件免费使用，支持圆形、矩形和单行样式。"))
+                .pearlExplanation()
+            Text([Loc("PRL 报价"), Loc("PRL 1 小时涨跌幅"), Loc("PRL 24 小时涨跌幅"), Loc("报价与矿池监控")].joined(separator: " · "))
+                .font(.subheadline.weight(.medium))
+                .fixedSize(horizontal: false, vertical: true)
+            Text(Loc("报价与矿池监控会汇总「我的监控」中所有已启用的监控。"))
+                .pearlExplanation()
+            step(1, Loc("长按锁屏，点「自定」，再选择「锁定屏幕」。"))
+            step(2, Loc("点时间下方的小组件区域，搜索「Pearl Hub」，选择报价或涨跌幅。"))
+            step(3, Loc("时间上方的日期区域也能添加单行报价或涨跌幅。"))
+        }
+        .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
+    }
+    #endif
+
     @ViewBuilder private var proStatus: some View {
         if pro.isPro {
             Label(Loc("高级版已解锁，所有尺寸都能用。"), systemImage: "checkmark.seal.fill")
@@ -131,10 +151,9 @@ struct WidgetGuideSheet: View {
                     PearlBadge(text: Loc("高级版"), systemImage: "sparkles")
                 }
                 Text(Loc("小尺寸（币价和余额）免费使用。中、大尺寸还能看矿池算力和最近交易，没有高级版时会显示锁定画面，点它即可解锁。"))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .pearlExplanation()
                 Button { showingPaywall = true } label: { Text(Loc("解锁高级版")) }
-                    .buttonStyle(.pearl(Pearl.brand))
+                    .buttonStyle(.pearl)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
@@ -144,7 +163,7 @@ struct WidgetGuideSheet: View {
     private func step(_ n: Int, _ text: String) -> some View {
         HStack(alignment: .top, spacing: Pearl.Space.sm) {
             Text(verbatim: "\(n)")
-                .font(.caption.weight(.bold)).foregroundStyle(.white)
+                .font(.caption.weight(.bold)).foregroundStyle(Pearl.onAccent)
                 .frame(width: 22, height: 22)
                 .background(Pearl.brand, in: Circle())
             Text(text).font(.callout)

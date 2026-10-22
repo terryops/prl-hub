@@ -136,3 +136,87 @@ struct SafeTradeOrderTrackingTests {
         #expect(!SafeTradeIPIssue(ip: "203.0.113.9").isIPv6)
     }
 }
+
+struct CandleVolumeBandTests {
+    @Test func bandSitsUnderThePriceRange() {
+        let b = CandleVolumeBand(priceLow: 1.30, priceHigh: 1.50, maxVolume: 4000)
+        #expect(b.ceiling == 1.30)
+        // The band is `share` of the whole plot (band + price range).
+        #expect(abs((b.ceiling - b.floor) / (1.50 - b.floor) - CandleVolumeBand.share) < 1e-12)
+        #expect(b.top(0) == b.floor)
+        // The tallest bar stops short of the price range, leaving the caption's row.
+        #expect(abs(b.top(4000) - (b.floor + (b.ceiling - b.floor) * CandleVolumeBand.barShare)) < 1e-12)
+        #expect(abs(b.top(2000) - (b.floor + b.top(4000)) / 2) < 1e-12)
+        #expect(b.top(9000) == b.top(4000) && b.top(-5) == b.floor)
+    }
+
+    @Test func noVolumeDrawsNoBars() {
+        let b = CandleVolumeBand(priceLow: 1.30, priceHigh: 1.50, maxVolume: 0)
+        #expect(b.top(0) == b.floor && b.top(100) == b.floor)
+    }
+
+    /// Chinese has no unit for thousands, so three significant digits would print
+    /// 4,567 as "4570" — next to a tooltip that says 4,567.
+    @Test func compactVolumeKeepsWholeDigitsWithoutAUnit() {
+        let zh = Locale(identifier: "zh-Hans"), en = Locale(identifier: "en")
+        #expect(CandleChart.compactVolume(4567, locale: zh) == "4567")
+        #expect(CandleChart.compactVolume(12_345_678, locale: zh) == "1235万")
+        #expect(CandleChart.compactVolume(35_612, locale: zh) == "3.56万")
+        #expect(CandleChart.compactVolume(4567, locale: en) == "4.57K")
+        #expect(CandleChart.compactVolume(5.25, locale: en) == "5.25")
+    }
+
+    /// Spreading two fingers shows fewer candles, pinching more — never closer than
+    /// `minVisible`, never more than are loaded.
+    @Test func pinchZoomsBetweenTheClosestViewAndEverythingLoaded() {
+        #expect(CandleChart.zoomedCount(from: 60, scale: 2, loaded: 120) == 30)
+        #expect(CandleChart.zoomedCount(from: 60, scale: 0.5, loaded: 120) == 120)
+        #expect(CandleChart.zoomedCount(from: 60, scale: 0.1, loaded: 120) == 120)
+        #expect(CandleChart.zoomedCount(from: 60, scale: 50, loaded: 120) == CandleChart.minVisible)
+        // A stored count from a longer series, and a market with barely any history.
+        #expect(CandleChart.zoomedCount(from: 120, scale: 1, loaded: 80) == 80)
+        #expect(CandleChart.zoomedCount(from: 60, scale: 1, loaded: 5) == CandleChart.minVisible)
+        #expect(CandleChart.zoomedCount(from: 60, scale: 0, loaded: 120) == 60)
+        #expect(CandleChart.zoomedCount(from: 60, scale: .nan, loaded: 120) == 60)
+    }
+
+    /// A mouse wheel zooms a notch at a time: away from you closer, towards you further,
+    /// however small the turn is reported, and a fast spin no more than three notches.
+    @Test func mouseWheelZoomsANotchAtATime() {
+        #expect(CandleChart.wheelScale(lines: 1) == 1.15)
+        #expect(CandleChart.wheelScale(lines: 0.1) == 1.15)
+        #expect(abs(CandleChart.wheelScale(lines: -1) - 1 / 1.15) < 1e-9)
+        #expect(abs(CandleChart.wheelScale(lines: 40) - 1.15 * 1.15 * 1.15) < 1e-9)
+        #expect(abs(CandleChart.wheelScale(lines: -40) - 1 / (1.15 * 1.15 * 1.15)) < 1e-9)
+        #expect(CandleChart.wheelScale(lines: 0) == 1)
+        #expect(CandleChart.wheelScale(lines: .nan) == 1)
+        // A notch always moves the chart, at either end of the range, until it gets there.
+        #expect(CandleChart.zoomedCount(from: 60, scale: CandleChart.wheelScale(lines: 1), loaded: 120) == 52)
+        #expect(CandleChart.zoomedCount(from: 60, scale: CandleChart.wheelScale(lines: -1), loaded: 120) == 69)
+        #expect(CandleChart.zoomedCount(from: 21, scale: CandleChart.wheelScale(lines: 1), loaded: 120) == 20)
+        #expect(CandleChart.zoomedCount(from: 20, scale: CandleChart.wheelScale(lines: -1), loaded: 120) == 23)
+        #expect(CandleChart.zoomedCount(from: 119, scale: CandleChart.wheelScale(lines: -1), loaded: 120) == 120)
+    }
+
+    /// Dragging the chart to the right brings older candles in, a candle's width at a
+    /// time; it stops at the oldest one loaded, and at the latest going back.
+    @Test func draggingPansThroughTheLoadedCandles() {
+        // 60 candles across 300 points: 5 points each.
+        #expect(CandleChart.pannedOffset(from: 0, by: 50, plotWidth: 300, shown: 60, loaded: 120) == 10)
+        #expect(CandleChart.pannedOffset(from: 10, by: -20, plotWidth: 300, shown: 60, loaded: 120) == 6)
+        #expect(CandleChart.pannedOffset(from: 10, by: -500, plotWidth: 300, shown: 60, loaded: 120) == 0)
+        #expect(CandleChart.pannedOffset(from: 0, by: 5000, plotWidth: 300, shown: 60, loaded: 120) == 60)
+        // Everything loaded is on screen: nowhere to go. And zooming out pulls the window back in.
+        #expect(CandleChart.pannedOffset(from: 0, by: 200, plotWidth: 300, shown: 120, loaded: 120) == 0)
+        #expect(CandleChart.pannedOffset(from: 60, by: 0, plotWidth: 300, shown: 100, loaded: 120) == 20)
+        #expect(CandleChart.pannedOffset(from: 3, by: .nan, plotWidth: 300, shown: 60, loaded: 120) == 3)
+        #expect(CandleChart.pannedOffset(from: 3, by: 10, plotWidth: 0, shown: 60, loaded: 120) == 3)
+
+        #expect(CandleChart.window(loaded: 120, shown: 60, hidden: 0) == 60..<120)
+        #expect(CandleChart.window(loaded: 120, shown: 60, hidden: 10) == 50..<110)
+        #expect(CandleChart.window(loaded: 120, shown: 60, hidden: 60) == 0..<60)
+        // A market with hardly any history, and nothing loaded yet.
+        #expect(CandleChart.window(loaded: 5, shown: 20, hidden: 0) == 0..<5)
+        #expect(CandleChart.window(loaded: 0, shown: 20, hidden: 0) == 0..<0)
+    }
+}

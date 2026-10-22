@@ -99,6 +99,7 @@ struct TradeView: View {
             #if os(iOS)
             .scrollDismissesKeyboard(.interactively)
             #endif
+            .pearlScreenBackground()
             .navigationTitle(Loc("交易 · SafeTrade"))
             .navigationDestination(isPresented: $openAlerts) { PriceAlertsView() }
             .sheet(item: $withdrawing) { WithdrawView(trade: store, currency: $0.id).environmentObject(contacts) }
@@ -211,7 +212,7 @@ struct TradeView: View {
                 Label(Loc("未配置 SafeTrade API 密钥"), systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
                     .labelStyle(.titleOnly).font(.subheadline.weight(.semibold))
                 Text(Loc("前往「设置 → 交易（SafeTrade）」填入 API Key / Secret 后即可下单。"))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .pearlExplanation()
                 Button(Loc("如何获取 API 密钥")) { showingKeyGuide = true }
                     .buttonStyle(.borderless).font(.caption.weight(.semibold)).tint(Pearl.accent)
             }

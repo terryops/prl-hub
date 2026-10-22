@@ -52,8 +52,13 @@ enum WidgetFetch {
     /// Returns the value and when it was fetched.
     static func sharedPrlUsd(_ snap: WidgetSnapshot) async -> (usd: Double, at: Date)? {
         if snap.prlUsd > 0, let at = snap.prlUsdAt, Date().timeIntervalSince(at) < WidgetBridge.freshFor { return (snap.prlUsd, at) }
-        guard let v = await prlUsd() else { return nil }
-        return (v, Date())
+        guard let quote = await sharedMarketQuote(snap) else { return nil }
+        return (quote.usd, quote.at)
+    }
+
+    static func sharedMarketQuote(_ snap: WidgetSnapshot) async -> WidgetMarketQuote? {
+        if let quote = snap.marketQuote, quote.isFresh(maxAge: WidgetBridge.freshFor) { return quote }
+        return await WidgetQuoteRequest.shared.fetch()
     }
 
     /// Spot price of 1 PRL in USD. First the price-alert worker's (the exact value it
@@ -61,21 +66,18 @@ enum WidgetFetch {
     /// it can't reach the shared snapshot) — then the widgets and the Lock Screen agree.
     /// SafeTrade's public ticker if the worker is unreachable.
     static func prlUsd() async -> Double? {
-        // Its last stored row comes back even if its cron stopped: only a recent one counts.
-        if let obj = await json("https://pearlhub.net/v1/price", timeout: 6) as? [String: Any],
-           Date().timeIntervalSince1970 - double(obj["ts"]) < 300 {
-            let v = double(obj["usd"])
-            if v > 0 { return v }
-        }
-        return await safeTradeUsd()
+        await WidgetQuoteRequest.shared.fetch()?.usd
     }
 
-    private static func safeTradeUsd() async -> Double? {
+    fileprivate static func fetchMarketQuote() async -> WidgetMarketQuote? {
+        // Its last stored row comes back even if its cron stopped: only a recent one counts.
+        if let obj = await json("https://pearlhub.net/v1/price", timeout: 6) as? [String: Any],
+           let quote = WidgetMarketQuote.worker(obj), quote.isFresh() {
+            return quote
+        }
         guard let obj = await json("https://safetrade.com/api/v2/peatio/public/markets/prlusdt/tickers") as? [String: Any]
         else { return nil }
-        let t = (obj["ticker"] as? [String: Any]) ?? obj
-        let v = double(t["last"])
-        return v > 0 ? v : nil
+        return WidgetMarketQuote.safeTrade(obj)
     }
 
     struct PoolLive {
@@ -95,5 +97,21 @@ enum WidgetFetch {
               let s = try? await pool.source.miner(address, scope: .live) else { return nil }
         return PoolLive(hashrate: s.liveRateText, hashrateRaw: s.liveRate,
                         online: s.onlineCount, total: s.workers.count)
+    }
+}
+
+/// Several placed Lock Screen widgets can request timelines together. Share one
+/// in-flight request inside the extension rather than querying once per widget.
+private actor WidgetQuoteRequest {
+    static let shared = WidgetQuoteRequest()
+    private var inFlight: Task<WidgetMarketQuote?, Never>?
+
+    func fetch() async -> WidgetMarketQuote? {
+        if let inFlight { return await inFlight.value }
+        let task = Task { await WidgetFetch.fetchMarketQuote() }
+        inFlight = task
+        let quote = await task.value
+        inFlight = nil
+        return quote
     }
 }

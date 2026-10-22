@@ -5,6 +5,8 @@ import StoreKit
 enum AppLinks {
     static let telegram = URL(string: "https://t.me/prl_hub")!
     static let github = URL(string: "https://github.com/terryops/prl-hub")!
+    static let githubWeb = URL(string: "https://github.com/terryops/prl-hub-web")!
+    static let githubServer = URL(string: "https://github.com/terryops/prl-hub-server")!
 }
 
 // MARK: - App Store 评分提醒

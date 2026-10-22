@@ -18,15 +18,21 @@ import Foundation
 struct PearlMark: View {
     var size: CGFloat = 64
     var body: some View {
+        let modern = AppPalette.current == .modern
         ZStack {
-            // Body — pearlescent radial gradient (light core → violet/indigo edge)
+            // The modern mark is pearl-white with a soft blue sheen.
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [.white,
-                                 Pearl.teal.opacity(0.55),
-                                 Pearl.violet.opacity(0.85),
-                                 Pearl.indigo],
+                        colors: modern
+                            ? [.white,
+                               Color(red: 0.96, green: 0.98, blue: 1.00),
+                               Color(red: 0.79, green: 0.85, blue: 0.93),
+                               Color(red: 0.51, green: 0.63, blue: 0.77)]
+                            : [.white,
+                               Pearl.teal.opacity(0.55),
+                               Pearl.violet.opacity(0.85),
+                               Pearl.indigo],
                         center: UnitPoint(x: 0.36, y: 0.30),
                         startRadius: size * 0.02,
                         endRadius: size * 0.78)
@@ -34,7 +40,7 @@ struct PearlMark: View {
             // Iridescent sheen sweep
             Circle()
                 .fill(Pearl.sheen)
-                .opacity(0.35)
+                .opacity(modern ? 0 : 0.35)
                 .blendMode(.plusLighter)
             // Specular highlight
             Ellipse()
@@ -46,7 +52,7 @@ struct PearlMark: View {
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [.clear, Pearl.indigo.opacity(0.45)],
+                        colors: [.clear, Pearl.indigo.opacity(modern ? 0.16 : 0.45)],
                         center: UnitPoint(x: 0.65, y: 0.78),
                         startRadius: size * 0.30,
                         endRadius: size * 0.62)
@@ -56,12 +62,12 @@ struct PearlMark: View {
             Circle().strokeBorder(.white.opacity(0.28), lineWidth: max(0.8, size * 0.014))
         }
         .frame(width: size, height: size)
-        .shadow(color: Pearl.indigo.opacity(0.35), radius: size * 0.16, x: 0, y: size * 0.07)
+        .shadow(color: Pearl.shadow.opacity(0.35), radius: size * 0.16, x: 0, y: size * 0.07)
         .accessibilityHidden(true)
     }
 }
 
-/// Brand mark + "$Pearl Hub" wordmark, laid out horizontally.
+/// Brand mark + "Pearl Hub" wordmark, laid out horizontally.
 struct PearlLogo: View {
     var size: CGFloat = 56
     var showsWordmark = true
@@ -73,6 +79,7 @@ struct PearlLogo: View {
     /// tall header (e.g. the Settings top). The mark then dominates and the wordmark
     /// sits under it at a smaller size.
     var vertical = false
+    @AppStorage(AppIconChoice.key) var iconChoice: String?
     var body: some View {
         if vertical {
             VStack(spacing: size * 0.16) {
@@ -87,7 +94,7 @@ struct PearlLogo: View {
         }
     }
 
-    /// The "$Pearl Hub" wordmark sized relative to the mark (`scale` × `size`).
+    /// The "Pearl Hub" wordmark sized relative to the mark (`scale` × `size`).
     @ViewBuilder private func wordmarkLabel(scale: CGFloat) -> some View {
         if showsWordmark {
             Self.wordmark
@@ -97,57 +104,33 @@ struct PearlLogo: View {
     }
 
     @ViewBuilder private var mark: some View {
-        if transparentMark {
+        if transparentMark || AppIconChoice(stored: iconChoice) == .pearl {
             // Free-floating, background-removed mark (no tile/border) — just a soft shadow.
-            Image("AppLogoMark")
-                .resizable().interpolation(.high).scaledToFit()
-                .frame(width: size, height: size)
-                .shadow(color: Pearl.indigo.opacity(0.30), radius: size * 0.12, y: size * 0.05)
+            // Pearl and classic choices have cut-outs; see BrandMark.
+            BrandMark(size: size)
         } else {
-            // The real app icon (miner-pearl mascot), as a rounded app-style mark.
-            Image("AppLogo")
-                .resizable().interpolation(.high).scaledToFill()
-                .frame(width: size, height: size)
-                .clipShape(RoundedRectangle(cornerRadius: size * 0.225, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: size * 0.225, style: .continuous)
-                        .strokeBorder(.white.opacity(0.25), lineWidth: 0.5)
-                )
-                .shadow(color: Pearl.indigo.opacity(0.25), radius: size * 0.12, y: size * 0.05)
+            // The app icon this install is on, as a rounded app-style mark.
+            AppIconTile(choice: AppIconChoice(stored: iconChoice), size: size)
         }
     }
 
-    /// The wordmark: the "$PRL" ticker stays hard-hat gold and the rest ("Hub")
-    /// renders in pearl blue-violet. Splitting on the literal "$PRL" keeps the
-    /// gold tint correct wherever the ticker sits.
+    /// The app's name as the home screen shows it (no "$"), in the palette's blue accent.
     static var wordmark: Text {
-        let full = Loc("$Pearl Hub")
-        let ticker = "$PRL"
-        guard let r = full.range(of: ticker) else {
-            return Text(full).foregroundColor(Pearl.accent)
-        }
-        let before = String(full[..<r.lowerBound])
-        let after = String(full[r.upperBound...])
-        var text = Text("")
-        if !before.isEmpty { text = text + Text(before).foregroundColor(Pearl.accent) }
-        text = text + Text(ticker).foregroundColor(Pearl.gold)
-        if !after.isEmpty { text = text + Text(after).foregroundColor(Pearl.accent) }
-        return text
+        Text(verbatim: "Pearl Hub").foregroundColor(Pearl.accent)
     }
 }
 
-/// The 3D pearl-miner mascot as a free-floating, background-removed mark
-/// (transparent PNG, `AppLogoMark`) — used on the welcome/splash hero in place of
-/// the abstract `PearlMark` sphere. A soft indigo shadow lets it read on the
-/// brand gradient without an opaque tile behind it.
+/// The original pearl miner lives on as a small decorative companion, independent
+/// of the selected app icon. Its transparent artwork stays clear of the main branding.
 struct PearlMascot: View {
-    var size: CGFloat = 76
+    var size: CGFloat = 44
     var body: some View {
         Image("AppLogoMark")
             .resizable().interpolation(.high).scaledToFit()
             .frame(width: size, height: size)
-            .shadow(color: Pearl.indigo.opacity(0.35), radius: size * 0.14, x: 0, y: size * 0.06)
+            .shadow(color: Pearl.shadow.opacity(0.18), radius: size * 0.10, y: size * 0.04)
             .accessibilityHidden(true)
+            .allowsHitTesting(false)
     }
 }
 
@@ -175,7 +158,7 @@ struct PearlBackground: View {
     var body: some View {
         // Kept deliberately plain: a barely-there diagonal tint, no floating orbs,
         // so screens read clean and content stays the focus.
-        Pearl.wash
+        Pearl.canvas.overlay(Pearl.wash)
             .ignoresSafeArea()
             .allowsHitTesting(false)
     }
@@ -208,7 +191,7 @@ struct SparkleShape: Shape {
 // MARK: - Aurora hero banner
 
 /// A rounded brand-gradient banner with floating orbs and sparkles —
-/// a flexible header surface. Drop content inside.
+/// a flexible header surface. The modern palette uses a bright pearl-blue gradient.
 struct PearlHero<Content: View>: View {
     var gradient: LinearGradient = Pearl.brandVivid
     var minHeight: CGFloat = 0
@@ -217,6 +200,8 @@ struct PearlHero<Content: View>: View {
     /// The decorative top-right sparkle. Turn OFF when the banner places its own
     /// content there (e.g. the wallet dashboard's gold price chip) to avoid overlap.
     var showSparkle: Bool = true
+    /// A complete backdrop, including its highlights, in place of the default fill.
+    var backdrop: AnyView? = nil
     @ViewBuilder var content: () -> Content
 
     init(gradient: LinearGradient = Pearl.brandVivid,
@@ -224,12 +209,14 @@ struct PearlHero<Content: View>: View {
          cornerRadius: CGFloat = Pearl.Radius.lg,
          padding: CGFloat = Pearl.Space.xl,
          showSparkle: Bool = true,
+         backdrop: AnyView? = nil,
          @ViewBuilder content: @escaping () -> Content) {
         self.gradient = gradient
         self.minHeight = minHeight
         self.cornerRadius = cornerRadius
         self.padding = padding
         self.showSparkle = showSparkle
+        self.backdrop = backdrop
         self.content = content
     }
 
@@ -242,10 +229,16 @@ struct PearlHero<Content: View>: View {
             .frame(maxWidth: .infinity, minHeight: minHeight)
             .background {
                 ZStack {
-                    gradient
-                    GlowOrb(color: .white.opacity(0.18), diameter: 150).offset(x: -90, y: -60)
-                    GlowOrb(color: Pearl.teal.opacity(0.30), diameter: 130).offset(x: 120, y: 60)
-                    if showSparkle {
+                    if let backdrop {
+                        backdrop
+                    } else {
+                        gradient
+                        if AppPalette.current == .classic {
+                            GlowOrb(color: .white.opacity(0.18), diameter: 150).offset(x: -90, y: -60)
+                            GlowOrb(color: Pearl.teal.opacity(0.30), diameter: 130).offset(x: 120, y: 60)
+                        }
+                    }
+                    if showSparkle && AppPalette.current == .classic {
                         SparkleShape().fill(Pearl.gold.opacity(0.9)).frame(width: 12, height: 12).offset(x: 122, y: -40)
                     }
                 }
@@ -253,9 +246,9 @@ struct PearlHero<Content: View>: View {
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(.white.opacity(0.15), lineWidth: 1)
+                    .strokeBorder(Pearl.heroEdge, lineWidth: 1)
             )
-            .shadow(color: Pearl.indigo.opacity(0.12), radius: 10, x: 0, y: 5)
+            .shadow(color: Pearl.shadow.opacity(AppPalette.current == .modern ? 0.08 : 0.12), radius: 10, x: 0, y: 5)
     }
 }
 
@@ -268,15 +261,18 @@ struct PearlEmptyState<Action: View>: View {
     let title: String
     var message: String? = nil
     var gradient: LinearGradient = Pearl.brand
+    var showsMascot = false
     @ViewBuilder var action: () -> Action
 
     init(systemImage: String, title: String, message: String? = nil,
          gradient: LinearGradient = Pearl.brand,
+         showsMascot: Bool = false,
          @ViewBuilder action: @escaping () -> Action = { EmptyView() }) {
         self.systemImage = systemImage
         self.title = title
         self.message = message
         self.gradient = gradient
+        self.showsMascot = showsMascot
         self.action = action
     }
 
@@ -289,6 +285,9 @@ struct PearlEmptyState<Action: View>: View {
                 Image(systemName: systemImage)
                     .font(.system(size: 50, weight: .semibold))
                     .foregroundStyle(gradient)
+                if showsMascot {
+                    PearlMascot(size: 48).offset(x: 50, y: 40)
+                }
             }
             VStack(spacing: 6) {
                 Text(title).font(.title3.weight(.semibold))

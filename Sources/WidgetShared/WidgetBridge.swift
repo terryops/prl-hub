@@ -20,6 +20,10 @@ import WidgetKit
 enum WidgetBridge {
     static let homeKind = "PRLHubWidget"
     static let lockKind = "PRLHubLockWidget"
+    static let quoteKind = "PRLHubQuoteWidget"
+    static let change1hKind = "PRLHubChange1hWidget"
+    static let change24hKind = "PRLHubChange24hWidget"
+    static let quoteMiningKind = "PRLHubQuoteMiningWidget"
 
     /// How long a published figure counts as current: widget reloads inside this
     /// window reuse it instead of fetching their own.
@@ -87,8 +91,10 @@ enum WidgetBridge {
         if s.pools == pools {
             // Unchanged: only keep the "just published" stamp current (no reload).
             guard isStale(s.poolsAt, now: now) else { return }
+            let wasStale = isStale(s.poolsAt, now: now, maxAge: WidgetMarketQuote.staleAfter)
             s.poolsAt = now
             WidgetStore.save(s)
+            if wasStale { reloadQuoteMining() }
             return
         }
         s.pools = pools
@@ -96,6 +102,7 @@ enum WidgetBridge {
         s.updatedAt = now
         WidgetStore.save(s)
         reloadHome()
+        reloadQuoteMining()
     }
 
     /// A fresh PRL price (only overwrites with a good value, never 0/unknown).
@@ -117,6 +124,22 @@ enum WidgetBridge {
         guard changed else { return }            // unchanged price → no reload (15–60 s polls)
         reloadLock()
         reloadHome()
+    }
+
+    /// Publish rolling changes even when the spot price itself has not moved.
+    static func updateMarketQuote(_ quote: WidgetMarketQuote) {
+        guard quote.isFresh() else { return }
+        var s = WidgetStore.load()
+        let before = s
+        guard s.applyMarketQuote(quote) else { return }
+        if before.prlUsd != s.prlUsd { s.updatedAt = max(s.updatedAt, quote.at) }
+        WidgetStore.save(s)
+        if before.marketQuote?.isFresh(maxAge: WidgetMarketQuote.staleAfter) != true
+            || before.marketQuote?.change1h != quote.change1h
+            || before.marketQuote?.change24h != quote.change24h || before.prlUsd != s.prlUsd {
+            reloadLock()
+        }
+        if before.prlUsd != s.prlUsd { reloadHome() }
     }
 
     /// The secondary currency or its rate changed (nil = show USD only).
@@ -149,6 +172,15 @@ enum WidgetBridge {
         reload(kind: homeKind)
     }
 
+    /// Appearance changes refresh immediately, independently of the data throttle.
+    @discardableResult
+    static func updateAppearance(palette: String, icon: String, mode: String) -> Bool {
+        guard WidgetAppearance(palette: palette, icon: icon, mode: mode).save() else { return false }
+        reload(kind: homeKind)
+        reloadLock()
+        return true
+    }
+
     /// No stamp, or one at least `maxAge` old.
     nonisolated static func isStale(_ at: Date?, now: Date, maxAge: TimeInterval = restampAfter) -> Bool {
         at.map { now.timeIntervalSince($0) >= maxAge } ?? true
@@ -175,11 +207,16 @@ enum WidgetBridge {
         }
     }
 
-    /// The Lock Screen widget shows only the price, which the app hands it in the
-    /// snapshot — reloading it costs no network, so it follows the price directly.
+    /// All Lock Screen variants share the app's price and rolling-change snapshot.
     static func reloadLock() {
         #if os(iOS)
-        reload(kind: lockKind)
+        for kind in [lockKind, quoteKind, change1hKind, change24hKind, quoteMiningKind] { reload(kind: kind) }
+        #endif
+    }
+
+    private static func reloadQuoteMining() {
+        #if os(iOS)
+        reload(kind: quoteMiningKind)
         #endif
     }
 

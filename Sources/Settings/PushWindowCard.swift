@@ -15,8 +15,7 @@ struct PushHereCard: View {
                 Text(Loc("在这台 Mac 上推送")).font(.headline)
                 Text(store.pushHere ? Loc("提醒触发时，这台 Mac 也会弹出通知。")
                                     : Loc("这台 Mac 不弹通知。提醒仍会通过 iCloud 同步，在你的其他设备上推送。"))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .pearlExplanation()
             }
             Spacer(minLength: 0)
             Toggle(Loc("在这台 Mac 上推送"), isOn: Binding(get: { store.pushHere }, set: { store.setPushHere($0) }))

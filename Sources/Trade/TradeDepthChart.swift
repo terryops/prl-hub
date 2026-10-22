@@ -79,7 +79,7 @@ struct DepthSection: View {
                 Text(Loc("买卖深度图是高级版功能"))
                     .font(.subheadline.weight(.semibold))
                 Text(Loc("看清各价位的挂单量，以及买盘和卖盘谁更强"))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .pearlExplanation()
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                 Button(Loc("解锁高级版")) { showingPaywall = true }

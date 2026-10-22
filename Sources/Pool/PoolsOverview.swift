@@ -30,9 +30,10 @@ struct PoolOverview: Identifiable {
     var blocksSample: Int = 0
     /// Measured earnings per PH·day (PRL), gross of fee: pool's blocks × reward ÷ hashrate.
     var earningsPerPH: Double?
+    /// Gross theoretical PRL/PH·day on the same source/window as the observed yield.
+    var theoreticalEarningsPerPH: Double?
     var blocksEstimated = false
     var feePercent: Double?
-    var feeNote: String?
     /// True when the hashrate had to come from the pool's own API because the overview
     /// source doesn't carry one for it — footnoted, so the row isn't silently mixed-basis.
     var hashFromPoolAPI = false
@@ -43,6 +44,21 @@ struct PoolOverview: Identifiable {
     /// aggregator has them wrong (Kryptex). Footnoted, since it changes how 收益/PH is derived.
     var feeFromPoolAPI = false
     var error: String?
+    var hashrateHistory: [PoolHashratePoint] = []
+    var averageHashrate7d: Double?
+    var lastBlockDate: Date?
+    var lifetimeBlocks: Int?
+    var ppsMeasurement: PPSFeeMeasurement?
+    var sharedPayouts: [PoolPayoutComparison]?
+    var sharedTrustworthy: Bool?
+
+    /// Observed block yield relative to the expected yield over the same window.
+    /// A PPS contract's payout is independent of pool luck, so leave that comparison blank.
+    var yieldRatio: Double? {
+        guard !isPPS, !isSolo, let actual = earningsPerPH,
+              let expected = theoreticalEarningsPerPH, expected > 0 else { return nil }
+        return actual / expected
+    }
 
     var share: Double? {
         guard let p = poolHashrate, let n = networkHashrate, n > 0 else { return nil }
@@ -56,7 +72,90 @@ struct PoolOverview: Identifiable {
     var isPPS: Bool { (feeType ?? "").uppercased().hasPrefix("PPS") || (feeType ?? "").uppercased().hasPrefix("FPPS") }
     /// True when the measured yield rests on enough blocks to mean something. A PPS row's
     /// figure isn't measured at all, so it can't take the "best measured yield" badge either.
-    var yieldTrustworthy: Bool { !isSolo && !isPPS && blocksSample >= 20 && earningsPerPH != nil }
+    var yieldTrustworthy: Bool { sharedTrustworthy ?? (!isSolo && !isPPS && blocksSample >= 20 && earningsPerPH != nil) }
+
+    /// Only PPS contracts participate in the real-cost column and its sorting.
+    var realFeePercent: Double? {
+        payoutComparisons.first(where: \.isPPS)?.realFeePercent
+    }
+
+    /// Keep PF as one physical pool, so its two contracts never double-count hashrate.
+    var payoutComparisons: [PoolPayoutComparison] {
+        if let sharedPayouts, !sharedPayouts.isEmpty {
+            return sharedPayouts.map { original in
+                var value = original
+                if value.isPPS { value.measurement = ppsMeasurement }
+                return value
+            }
+        }
+        if name == "Pearl Fortune", !isSolo {
+            return [
+                PoolPayoutComparison(scheme: "PPS", feePercent: 5,
+                                     grossPerPH: theoreticalEarningsPerPH,
+                                     theoreticalPerPH: theoreticalEarningsPerPH, estimated: true,
+                                     measurement: ppsMeasurement),
+                PoolPayoutComparison(scheme: "PPLNS", feePercent: feePercent ?? 2,
+                                     grossPerPH: earningsPerPH,
+                                     theoreticalPerPH: theoreticalEarningsPerPH,
+                                     estimated: blocksEstimated || blocksSample < 20),
+            ]
+        }
+        return [PoolPayoutComparison(scheme: feeType ?? "—", feePercent: feePercent,
+                                     grossPerPH: earningsPerPH,
+                                     theoreticalPerPH: theoreticalEarningsPerPH,
+                                     estimated: isPPS || blocksEstimated || blocksSample < 20,
+                                     solo: isSolo, measurement: ppsMeasurement)]
+    }
+}
+
+/// A dated, paired observation. Actual credits and independent theoretical work earnings
+/// are inputs; the advertised commission is deliberately absent.
+struct PPSFeeMeasurement: Codable, Sendable {
+    static let defaultsKey = "pool.ppsMeasuredFees"
+    let pool: String
+    let scheme: String
+    let netPRL: Double
+    let expectedPRL: Double
+    let start: Double
+    let end: Double
+    let measuredAt: Double
+    let estimated: Bool
+    let sampleCount: Int
+    var theoryBasis: String? = nil
+
+    var realFeePercent: Double? {
+        guard theoryBasis == "hashrate_chain",
+              netPRL.isFinite, netPRL >= 0, expectedPRL.isFinite, expectedPRL > 0,
+              start.isFinite, end.isFinite, start > 0, end > start,
+              measuredAt.isFinite, measuredAt >= end, sampleCount > 0 else { return nil }
+        let value = (1 - netPRL / expectedPRL) * 100
+        return value.isFinite ? value : nil
+    }
+}
+
+/// PPS income shortfall against theory. Shared and SOLO contracts leave real cost blank.
+struct PoolPayoutComparison {
+    let scheme: String
+    let feePercent: Double?
+    let grossPerPH: Double?
+    let theoreticalPerPH: Double?
+    let estimated: Bool
+    var solo = false
+    var measurement: PPSFeeMeasurement?
+
+    var isPPS: Bool { scheme.uppercased().hasPrefix("PPS") || scheme.uppercased().hasPrefix("FPPS") }
+
+    var netPerPH: Double? {
+        guard let gross = grossPerPH, gross.isFinite, gross >= 0,
+              let fee = feePercent, fee.isFinite, (0...100).contains(fee) else { return nil }
+        return gross * (1 - fee / 100)
+    }
+
+    var realFeePercent: Double? {
+        guard isPPS, !solo, let measurement,
+              measurement.scheme.uppercased() == scheme.uppercased() else { return nil }
+        return measurement.realFeePercent
+    }
 }
 
 /// Which feed the current rows came from — it decides the footnotes, because the columns
@@ -76,6 +175,7 @@ final class PoolsOverviewStore: ObservableObject {
     @Published var sampleDays: Double = 0
     /// Drives the "数据来源 …" caption; .poolAPIs until a source answers.
     @Published var source: PoolsSource = .poolAPIs
+    @Published private(set) var updatedAt: Date?
 
     /// The aggregators re-poll the pools every ~10 minutes (lordofpearls sends max-age=300 on
     /// /pools), so re-entering the section within 5 minutes shows what's here.
@@ -90,21 +190,36 @@ final class PoolsOverviewStore: ObservableObject {
         loading = true
         defer { loading = false }
         let live = force
+        if let snapshot = try? await SharedPublicData.shared.overview(force: force), !snapshot.rows.isEmpty {
+            guard !Task.isCancelled else { return }
+            pools = Self.build(snapshot)
+            source = snapshot.source == "lordofpearls" ? .lordOfPearls : .miningPoolStats
+            sampleDays = snapshot.source == "lordofpearls" ? 1 : (snapshot.rows.first?.sampleDays ?? 1)
+            fetchedAt = Date()
+            updatedAt = Date(timeIntervalSince1970: snapshot.ts)
+            return
+        }
+        guard !Task.isCancelled else { return }
+        let measurementData = try? await Self.serverFeeData(live: live)
         if let rows = try? await Self.lordOfPearls(live: live), !rows.isEmpty {
-            pools = rows
+            pools = Self.applyMeasurements(rows, data: measurementData)
             sampleDays = 1          // the site's block column is a flat 24h count
             source = .lordOfPearls
             fetchedAt = Date()
+            updatedAt = fetchedAt
             return
         }
         // Left the section mid-load: the requests above were cancelled, not refused — don't
         // fall through and replace a good (shared) table with a fallback built from failures.
         guard !Task.isCancelled else { return }
         if let mps = try? await MiningPoolStatsClient(live: live).fetch() {
-            pools = Self.build(mps, kryptex: try? await KryptexClient().poolStats(live: live))
+            async let kryptex = try? KryptexClient().poolStats(live: live)
+            async let fortune = try? PearlFortuneClient().summary(live: live)
+            pools = Self.applyMeasurements(Self.build(mps, kryptex: await kryptex, fortune: await fortune), data: measurementData)
             sampleDays = mps.sampleDays
             source = .miningPoolStats
             fetchedAt = Date()
+            updatedAt = fetchedAt
             return
         }
         guard !Task.isCancelled else { return }
@@ -115,18 +230,83 @@ final class PoolsOverviewStore: ObservableObject {
         async let p = Self.pearlHash(live: live)
         async let f = Self.pearlFortune(live: live)
         async let k = Self.kryptex(live: live)
+        async let chainTask = try? LordOfPearlsClient(live: live).publicStats()
         // Sorted by hashrate like the primary path — the table renders rows in the order it
         // is handed them, so an unsorted fallback would shuffle the ranking under the user.
-        let rows = [await a, await l, await h, await p, await f, await k]
+        var rows = [await a, await l, await h, await p, await f, await k]
+        if let chain = await chainTask, let reward = chain.rewardPerBlock,
+           let difficulty = chain.averageDifficulty(days: 1) ?? chain.difficulty {
+            let theoretical = reward * 86400 * 1e15 / (difficulty * prlWorkPerDifficulty)
+            for i in rows.indices where rows[i].theoreticalEarningsPerPH == nil && rows[i].name != "Pearl Fortune" {
+                rows[i].theoreticalEarningsPerPH = theoretical
+            }
+        }
         guard !Task.isCancelled else { return }
-        pools = rows.sorted { ($0.poolHashrate ?? 0) > ($1.poolHashrate ?? 0) }
+        pools = Self.applyMeasurements(rows.sorted { ($0.poolHashrate ?? 0) > ($1.poolHashrate ?? 0) }, data: measurementData)
         sampleDays = 1
         source = .poolAPIs
         // A fallback table is a degraded answer — worth retrying on the next visit.
         fetchedAt = nil
+        updatedAt = pools.contains { $0.poolHashrate != nil } ? Date() : nil
+    }
+
+    /// Explicit server observations only. Never read a device-specific audit cache.
+    static func applyMeasurements(_ rows: [PoolOverview], data: Data? = nil) -> [PoolOverview] {
+        guard let data, let measurements = try? JSONDecoder().decode([PPSFeeMeasurement].self, from: data) else { return rows }
+        return rows.map { original in
+            var row = original
+            row.ppsMeasurement = measurements.filter { observation in
+                observation.pool == row.name && observation.realFeePercent != nil &&
+                    row.payoutComparisons.contains { $0.isPPS && $0.scheme.uppercased() == observation.scheme.uppercased() }
+            }
+                .max { $0.measuredAt < $1.measuredAt }
+            return row
+        }
+    }
+
+    private static func serverFeeData(live: Bool) async throws -> Data {
+        struct Reply: Decodable { let ok: Bool; let measurements: [PPSFeeMeasurement] }
+        let data = try await PoolHTTP.get("https://pearlhub.net/v1/pool-fees", live: live)
+        let reply = try JSONDecoder().decode(Reply.self, from: data)
+        guard reply.ok else { throw URLError(.badServerResponse) }
+        return try JSONEncoder().encode(reply.measurements)
     }
 
     // MARK: lordofpearls → the table
+
+    /// Use the same normalized rows as Web, including each source's actual window.
+    static func build(_ snapshot: SharedOverview) -> [PoolOverview] {
+        snapshot.rows.map { row in
+            var pool = PoolOverview(id: row.id, name: row.name, site: row.url,
+                                    gradient: gradients[row.name] ?? Pearl.wash,
+                                    feeType: row.scheme, isSolo: row.solo,
+                                    poolHashrate: row.hashrate, networkHashrate: snapshot.network?.hashrate,
+                                    miners: row.miners, blocksPerDay: row.blocksPerDay,
+                                    blocksSample: row.blocksSample ?? 0,
+                                    earningsPerPH: row.earningsPerPH,
+                                    theoreticalEarningsPerPH: row.theoreticalEarningsPerPH,
+                                    blocksEstimated: row.payouts?.first(where: { $0.scheme == row.scheme })?.estimated ?? ((row.blocksSample ?? 0) < 20),
+                                    feePercent: row.fee, hashFromPoolAPI: row.hashFromPoolAPI ?? false,
+                                    fromMiningPoolStats: row.source == "miningpoolstats",
+                                    feeFromPoolAPI: row.feeFromPoolAPI ?? false)
+            pool.hashrateHistory = (row.history ?? []).map { PoolHashratePoint(time: $0.ts, hashrate: $0.hashrate) }
+            pool.averageHashrate7d = row.averageHashrate7d
+            pool.lastBlockDate = row.lastBlockTime.map { Date(timeIntervalSince1970: $0) }
+            pool.lifetimeBlocks = row.lifetimeBlocks
+            pool.sharedTrustworthy = row.trustworthy
+            pool.sharedPayouts = row.payouts?.map {
+                PoolPayoutComparison(scheme: $0.scheme ?? "—", feePercent: $0.fee,
+                                     grossPerPH: $0.grossPerPH, theoreticalPerPH: row.theoreticalEarningsPerPH,
+                                     estimated: $0.estimated, solo: $0.solo)
+            }
+            if let observation = row.realFeeMeasurement, observation.pool == row.name,
+               observation.realFeePercent != nil,
+               pool.payoutComparisons.contains(where: { $0.isPPS && $0.scheme == observation.scheme }) {
+                pool.ppsMeasurement = observation
+            }
+            return pool
+        }
+    }
 
     /// The /pools table joined to the chain numbers /api/public publishes: the table itself
     /// carries neither the network hashrate (→ 占比) nor the block reward (→ 收益/PH·天).
@@ -139,23 +319,30 @@ final class PoolsOverviewStore: ObservableObject {
         async let heroTask = HeroMinersClient().stats(live: live)
         async let mpsTask = MiningPoolStatsClient(live: live).fetch()
         async let kryptexTask = KryptexClient().poolStats(live: live)
+        async let fortuneTask = PearlFortuneClient().summary(live: live)
         let rows = try await rowsTask
         let chain = try? await chainTask
         let hero = try? await heroTask
         return build(rows, chain: chain,
                      heroHashrate: hero?.poolHashrate,
                      mps: try? await mpsTask,
-                     kryptex: try? await kryptexTask)
+                     kryptex: try? await kryptexTask,
+                     fortune: try? await fortuneTask,
+                     heroFeePercent: hero?.config?.fee?.value)
     }
 
     static func build(_ rows: [LOPPool], chain: LOPPublic?, heroHashrate: Double?,
-                      mps: MPSCoin?, kryptex: KryptexPoolStats? = nil) -> [PoolOverview] {
+                      mps: MPSCoin?, kryptex: KryptexPoolStats? = nil,
+                      fortune: PFSummary? = nil, heroFeePercent: Double? = nil) -> [PoolOverview] {
         // The 24h chain-identity figure, the same one the monitor's dashboard shows: the
         // site's own 60-block `networkhashps` ran ~10% high, understating every pool's 占比.
         let network = chain?.networkHashrate24h ?? chain?.networkHashrate
         let reward = chain?.rewardPerBlock ?? mps?.rewardPerBlock ?? 0
         let expected = networkYield(reward: reward, network: network,
                                     blockTime: chain?.blockTime24h ?? chain?.blockTimeSec)
+        let theoretical = chain?.averageDifficulty(days: 1).flatMap { difficulty in
+            reward > 0 ? reward * 86400 * 1e15 / (difficulty * prlWorkPerDifficulty) : nil
+        } ?? expected
         var out = rows.map { r -> PoolOverview in
             let key = brandKey(r.host)
             let name = pretty[key] ?? r.name       // the site's own label when we have no better
@@ -165,7 +352,7 @@ final class PoolsOverviewStore: ObservableObject {
             // Its own API is the same kind of poll the site runs for every other row.
             let filled = r.hashrate == nil && key == "herominers.com" ? heroHashrate : nil
             let hps = r.hashrate ?? filled
-            let solo = (r.payout ?? "").uppercased().contains("SOLO") || r.url.lowercased().contains("solo")
+            let solo = (r.payout ?? "").uppercased() == "SOLO" || r.url.lowercased().contains("solo")
             var o = PoolOverview(id: r.url.isEmpty ? r.name : r.url,
                                  name: name,
                                  site: r.url,
@@ -179,22 +366,40 @@ final class PoolsOverviewStore: ObservableObject {
                                  blocksSample: r.blocks24h ?? 0,
                                  feePercent: r.feePercent,
                                  hashFromPoolAPI: filled != nil)
+            o.theoreticalEarningsPerPH = theoretical
             // BEFORE the yield below: the correction can flip the row to PPS, and a PPS row's
             // 收益/PH is the network's expected value rather than a block count.
             if name == "Kryptex", let k = kryptex { applyKryptex(&o, k) }
+            if name == "Pearl Fortune" { o.feeType = "PPLNS"; o.feePercent = 2 }
+            if name == "PearlHash" { o.feePercent = PearlHashClient.fee }
+            if name == "HeroMiners", let heroFeePercent { o.feePercent = heroFeePercent }
             if o.isPPS {
-                o.earningsPerPH = expected         // a fixed rate per share — see isPPS
-            } else if reward > 0, let h = hps, h > 0, let b = r.blocks24h, b > 0 {
+                o.earningsPerPH = theoretical      // a fixed rate per share — see isPPS
+            } else if reward > 0, let h = hps, h > 0, let b = r.blocks24h, b >= 0 {
                 // Measured, luck-included yield over the same 24h the block column counts.
                 o.earningsPerPH = Double(b) * reward / (h / 1e15)
                 o.blocksEstimated = b < 20         // too few blocks to trust → shown as "~"
             }
-            if name == "HeroMiners" {
-                o.feeNote = Loc("矿池 0%，SRBMiner 抽水约 3%")
+            if name == "Pearl Fortune", let fortune { applyFortune(&o, fortune) }
+            if let history = mps?.data.first(where: {
+                samePoolHost(host($0), key: key) && !($0.url ?? "").lowercased().contains("solo")
+            }) {
+                applyHistory(&o, history)
+            }
+            let matchesPool: (LOPPublic.PoolIdentity?) -> Bool = { identity in
+                guard let url = identity?.url, let host = URLComponents(string: url)?.host else { return false }
+                return samePoolHost(host.lowercased(), key: key)
+            }
+            let lifetime = (chain?.lifetime?.top ?? []).filter { matchesPool($0.pool) }.compactMap(\.blocks)
+            if !lifetime.isEmpty { o.lifetimeBlocks = lifetime.reduce(0, +) }
+            let recent = (chain?.leaderboard?.recent_blocks ?? []).filter { matchesPool($0.pool) }
+                .compactMap(\.time).filter { $0.isFinite && $0 > 0 }.max()
+            if let recent {
+                o.lastBlockDate = max(o.lastBlockDate ?? .distantPast, Date(timeIntervalSince1970: recent))
             }
             return o
         }
-        if let f2 = mps.flatMap({ f2pool($0, network: network, reward: reward, expected: expected) }) {
+        if let f2 = mps.flatMap({ f2pool($0, network: network) }) {
             out.append(f2)
         }
         // The site ranks by live hashrate; re-sort so the rows it didn't rank itself
@@ -207,8 +412,7 @@ final class PoolsOverviewStore: ObservableObject {
     /// and F2Pool publishes no pool-level API to fill the gap from. miningpoolstats does carry
     /// it, so the row is merged from there — measured on THAT source's window (its last-1000-
     /// block sample, ≈4 days) rather than the table's 24h, hence the footnote.
-    private static func f2pool(_ c: MPSCoin, network: Double?, reward: Double,
-                               expected: Double?) -> PoolOverview? {
+    private static func f2pool(_ c: MPSCoin, network: Double?) -> PoolOverview? {
         guard let p = c.data.first(where: { host($0) == "f2pool.com" }), p.hps > 0 else { return nil }
         let days = c.sampleDays, sample = p.blocksIn1000
         var o = PoolOverview(id: p.url ?? "f2pool.com",
@@ -219,14 +423,17 @@ final class PoolsOverviewStore: ObservableObject {
                              poolHashrate: p.hps,
                              networkHashrate: network,
                              miners: p.minerCount,
-                             blocksPerDay: days > 0 && sample > 0 ? Double(sample) / days : nil,
+                             blocksPerDay: days > 0 && p.blocks_1000 != nil && sample >= 0 ? Double(sample) / days : nil,
                              blocksSample: sample,
                              feePercent: p.fee?.value,
                              fromMiningPoolStats: true)
+        o.theoreticalEarningsPerPH = networkYield(reward: c.rewardPerBlock,
+                                                  network: c.network, blockTime: c.blockTime)
+        applyHistory(&o, p)
         if o.isPPS {
-            o.earningsPerPH = expected             // 2% PPS — a contract, not a block count
-        } else if reward > 0, days > 0, sample > 0 {
-            o.earningsPerPH = Double(sample) * reward / (days * p.hps / 1e15)
+            o.earningsPerPH = o.theoreticalEarningsPerPH
+        } else if c.rewardPerBlock > 0, days > 0, p.blocks_1000 != nil, sample >= 0 {
+            o.earningsPerPH = Double(sample) * c.rewardPerBlock / (days * p.hps / 1e15)
             o.blocksEstimated = sample < 20
         }
         return o
@@ -277,6 +484,18 @@ final class PoolsOverviewStore: ObservableObject {
         pretty.keys.first { host == $0 || host.hasSuffix("." + $0) } ?? host
     }
 
+    /// Kryptex has two public domains; its history and live API use different ones.
+    private static func samePoolHost(_ host: String, key: String) -> Bool {
+        let other = brandKey(host)
+        return other == key || (pretty[other] != nil && pretty[other] == pretty[key])
+    }
+
+    private static func applyHistory(_ o: inout PoolOverview, _ p: MPSPool) {
+        o.hashrateHistory = p.hashrateHistory
+        o.averageHashrate7d = (p.hashrate_average_7d?.value).flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+        o.lastBlockDate = p.lastBlockDate
+    }
+
     // MARK: miningpoolstats → the table
 
     /// Pretty names for the pools worth naming; everything else keeps its own domain, which is
@@ -291,11 +510,12 @@ final class PoolsOverviewStore: ObservableObject {
         "himpool.com": "HimPool", "nushypool.com": "NushyPool", "akoyapool.com": "AkoyaPool",
     ]
 
+    /// Each pool's own colour — the same in either palette (配色), so from `Pearl.classic`.
     private static let gradients: [String: LinearGradient] = [
-        "AlphaPool": Pearl.brand, "Lucky Pool": Pearl.mint, "HeroMiners": Pearl.positive,
-        "PearlHash": Pearl.brandVivid, "Pearl Fortune": Pearl.sunrise, "Kryptex": Pearl.negative,
+        "AlphaPool": Pearl.classic.brand, "Lucky Pool": Pearl.classic.mint, "HeroMiners": Pearl.classic.positive,
+        "PearlHash": Pearl.classic.brandVivid, "Pearl Fortune": Pearl.classic.sunrise, "Kryptex": Pearl.classic.negative,
         // Teal-led, matching the slice the donut already gives F2Pool.
-        "F2Pool": LinearGradient(colors: [Pearl.teal, Pearl.accent],
+        "F2Pool": LinearGradient(colors: [Pearl.classic.teal, Pearl.classic.accent],
                                  startPoint: .topLeading, endPoint: .bottomTrailing),
     ]
 
@@ -313,7 +533,8 @@ final class PoolsOverviewStore: ObservableObject {
         return String(s)
     }
 
-    static func build(_ c: MPSCoin, kryptex: KryptexPoolStats? = nil) -> [PoolOverview] {
+    static func build(_ c: MPSCoin, kryptex: KryptexPoolStats? = nil,
+                      fortune: PFSummary? = nil) -> [PoolOverview] {
         let reward = c.rewardPerBlock, days = c.sampleDays, network = c.network
         let expected = networkYield(reward: reward, network: network > 0 ? network : nil,
                                     blockTime: c.blockTime)
@@ -340,23 +561,25 @@ final class PoolsOverviewStore: ObservableObject {
                                      networkHashrate: network > 0 ? network : nil,
                                      miners: p.minerCount,
                                      workers: p.workerCount,
-                                     blocksPerDay: days > 0 && sample > 0 ? Double(sample) / days : nil,
+                                     blocksPerDay: days > 0 && p.blocks_1000 != nil && sample >= 0 ? Double(sample) / days : nil,
                                      blocksSample: sample,
                                      feePercent: p.fee?.value)
+                o.theoreticalEarningsPerPH = expected
+                applyHistory(&o, p)
                 // Before the yield, as in the lordofpearls path — the correction decides
                 // whether this row is measured at all.
                 if name == "Kryptex", let k = kryptex { applyKryptex(&o, k) }
+                if name == "Pearl Fortune" { o.feeType = "PPLNS"; o.feePercent = 2 }
+                if name == "PearlHash" { o.feePercent = PearlHashClient.fee }
                 if o.isPPS {
                     o.earningsPerPH = expected          // fixed rate per share — see isPPS
-                } else if reward > 0, days > 0, hps > 0, sample > 0 {
+                } else if reward > 0, days > 0, hps > 0, p.blocks_1000 != nil, sample >= 0 {
                     // Measured, luck-included yield: what this pool's hashrate ACTUALLY earned
                     // over the sample, per PH per day. Gross of fee — fee has its own column.
                     o.earningsPerPH = Double(sample) * reward / (days * hps / 1e15)
                     o.blocksEstimated = sample < 20     // too few blocks to trust → shown as "~"
                 }
-                if name == "HeroMiners" {
-                    o.feeNote = Loc("矿池 0%，SRBMiner 抽水约 3%")
-                }
+                if name == "Pearl Fortune", let fortune { applyFortune(&o, fortune) }
                 return o
             }
     }
@@ -365,7 +588,7 @@ final class PoolsOverviewStore: ObservableObject {
 
     private static func alpha(live: Bool) async -> PoolOverview {
         var o = PoolOverview(id: "AlphaPool", name: "AlphaPool",
-                             site: "https://pearl.alphapool.tech", gradient: Pearl.brand)
+                             site: "https://pearl.alphapool.tech", gradient: Pearl.classic.brand)
         do {
             let s = try await PoolClient().stats(live: live)
             let coin = s.coins?.first
@@ -386,7 +609,7 @@ final class PoolsOverviewStore: ObservableObject {
 
     private static func lucky(live: Bool) async -> PoolOverview {
         var o = PoolOverview(id: "Lucky Pool", name: "Lucky Pool",
-                             site: "https://pearl.luckypool.io", gradient: Pearl.mint)
+                             site: "https://pearl.luckypool.io", gradient: Pearl.classic.mint)
         do {
             let v = try await LuckyPoolClient().statsV2(live: live)
             o.feePercent = v.config?.fee
@@ -408,11 +631,10 @@ final class PoolsOverviewStore: ObservableObject {
 
     private static func hero(live: Bool) async -> PoolOverview {
         var o = PoolOverview(id: "HeroMiners", name: "HeroMiners",
-                             site: "https://pearl.herominers.com", gradient: Pearl.positive)
-        o.feePercent = HeroMinersClient.fee   // 3.0 — pool 0%, but PRL needs SRBMiner (~3% dev fee)
-        o.feeNote = Loc("矿池 0%，SRBMiner 抽水约 3%")
+                             site: "https://pearl.herominers.com", gradient: Pearl.classic.positive)
         do {
             let s = try await HeroMinersClient().stats(live: live)
+            o.feePercent = s.config?.fee?.value
             o.poolHashrate = s.poolHashrate   // realHashrate, else the >>32 field scaled back up
             o.miners = s.pool?.miners
             o.workers = s.pool?.workers
@@ -436,7 +658,7 @@ final class PoolsOverviewStore: ObservableObject {
 
     private static func pearlHash(live: Bool) async -> PoolOverview {
         var o = PoolOverview(id: "PearlHash", name: "PearlHash",
-                             site: "https://pearlhash.xyz", gradient: Pearl.brandVivid)
+                             site: "https://pearlhash.xyz", gradient: Pearl.classic.brandVivid)
         o.feePercent = PearlHashClient.fee
         do {
             let client = PearlHashClient()
@@ -472,7 +694,7 @@ final class PoolsOverviewStore: ObservableObject {
     /// yardstick the corrections above are written against.
     private static func kryptex(live: Bool) async -> PoolOverview {
         var o = PoolOverview(id: "Kryptex", name: "Kryptex",
-                             site: "https://pool.kryptex.com/prl", gradient: Pearl.negative)
+                             site: "https://pool.kryptex.com/prl", gradient: Pearl.classic.negative)
         do {
             let client = KryptexClient()
             async let blocksTask = try? client.blocks(live: live)
@@ -493,158 +715,589 @@ final class PoolsOverviewStore: ObservableObject {
                                                ?? s.rewardPerBlock ?? 0,
                                            network: o.networkHashrate,
                                            blockTime: KryptexClient.blockTime(from: blocks))
+            o.theoreticalEarningsPerPH = o.earningsPerPH
         } catch { o.error = Loc("暂时无法获取矿池数据") }
         return o
     }
 
     private static func pearlFortune(live: Bool) async -> PoolOverview {
         var o = PoolOverview(id: "Pearl Fortune", name: "Pearl Fortune",
-                             site: "https://pearlfortune.org", gradient: Pearl.sunrise)
+                             site: "https://pearlfortune.org", gradient: Pearl.classic.sunrise,
+                             feeType: "PPLNS", feePercent: 2)
         do {
             let s = try await PearlFortuneClient().summary(live: live)
-            let roll = Dictionary(
-                (s.pool_stats?.rolling_stats ?? []).compactMap { r in r.hours.map { ($0, r) } },
-                uniquingKeysWith: { a, _ in a })
-            o.feePercent = (s.pool_stats?.pool_fee_rate).map { ($0 * 10000).rounded() / 100 }
-            o.networkHashrate = (s.stats?.network_hashrate).map(parseHashrate)
-            o.poolHashrate = (roll[1]?.hashrate).flatMap { $0 > 0 ? $0 : nil } ?? roll[24]?.hashrate
-            if let r24 = roll[24] {
-                o.blocksPerDay = (r24.block_count).map(Double.init)
-                o.blocksSample = r24.block_count ?? 0
-                if let coins = r24.total_coins, let hps = r24.hashrate, hps > 0 {
-                    o.earningsPerPH = coins / (hps / 1e15)
-                }
-            }
+            applyFortune(&o, s)
         } catch { o.error = Loc("暂时无法获取矿池数据") }
         return o
+    }
+
+    /// PF supplies actual and expected coins for the SAME rolling window and work sample.
+    static func applyFortune(_ o: inout PoolOverview, _ s: PFSummary) {
+        o.feeType = "PPLNS"
+        o.feePercent = s.pool_stats?.pool_fee_rate.map { ($0 * 10000).rounded() / 100 } ?? 2
+        o.feeFromPoolAPI = true
+        // PF's own network figure only when the row has none (its stand-alone row): a table
+        // built with the chain's 24h figure keeps that for every row, or this pool's 占比
+        // would be measured against a different network from the others'.
+        o.networkHashrate = o.networkHashrate ?? s.stats?.network_hashrate.map(parseHashrate)
+        let roll = s.pool_stats?.rolling_stats ?? []
+        if let h = roll.first(where: { $0.hours == 1 })?.hashrate, h > 0 { o.poolHashrate = h }
+        guard let r24 = roll.first(where: { $0.hours == 24 }),
+              let h = r24.hashrate, h > 0 else { return }
+        if o.poolHashrate == nil { o.poolHashrate = h }
+        o.blocksPerDay = r24.block_count.map(Double.init)
+        o.blocksSample = r24.block_count ?? 0
+        o.blocksEstimated = o.blocksSample < 20
+        // Clear older-source values when this window omits either half of the comparison.
+        o.earningsPerPH = r24.total_coins.map { $0 / (h / 1e15) }
+        o.theoreticalEarningsPerPH = r24.expected_coins.map { $0 / (h / 1e15) }
     }
 }
 
 /// Pool overview rendered as a section inside the PRL monitor's segmented control.
 struct PoolsOverviewSection: View {
     @ObservedObject private var store = PoolsOverviewStore.shared
+    @Environment(\.locale) private var locale
+    @State private var showingNotes = false
+    @State private var showingShare = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Pearl.Space.lg) {
-                PearlSectionHeader(Loc("矿池总览"), systemImage: "server.rack",
-                                   subtitle: Loc("全部 Pearl 矿池对比：费率 · 出块 · 每 PH 收益 · 算力（无需地址）"))
-                if store.pools.isEmpty && store.loading {
-                    ProgressView().frame(maxWidth: .infinity, minHeight: 140)
-                } else {
-                    PoolComparisonTable(pools: store.pools, sampleDays: store.sampleDays,
-                                        source: store.source)
-                    HashShareChart(pools: store.pools)
+        GeometryReader { geometry in
+            // The phone's table (PoolComparisonTable.mobileTable) takes the same cut.
+            let compact = geometry.size.width - 60 < 720
+            ScrollView {
+                VStack(alignment: .leading, spacing: compact ? 14 : 20) {
+                    if compact {
+                        // The 矿池 pill right above already names the page: on a phone
+                        // the big title only pushed the table down.
+                        updateStatus
+                    } else {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .firstTextBaseline) {
+                                title
+                                Spacer(minLength: 24)
+                                updateStatus
+                            }
+                            VStack(alignment: .leading, spacing: 12) {
+                                title
+                                updateStatus
+                            }
+                        }
+                    }
+                    if store.pools.isEmpty && store.loading {
+                        ProgressView().frame(maxWidth: .infinity, minHeight: 200)
+                    } else if store.pools.isEmpty {
+                        PearlEmptyState(systemImage: "server.rack", title: Loc("矿池总览"),
+                                        message: Loc("暂时无法获取矿池数据"))
+                    } else {
+                        PoolComparisonTable(pools: store.pools, source: store.source,
+                                            availableWidth: min(geometry.size.width - 60, 1500))
+                        DisclosureGroup(Loc("数据说明"), isExpanded: $showingNotes) {
+                            PoolComparisonNotes(pools: store.pools, sampleDays: store.sampleDays,
+                                                source: store.source)
+                                .padding(.top, 12)
+                        }
+                        .font(.callout)
+                        .pearlCard(padding: 16, radius: 12)
+                        DisclosureGroup(Loc("算力占比"), isExpanded: $showingShare) {
+                            HashShareChart(pools: store.pools).padding(.top, 12)
+                        }
+                        .font(.callout)
+                        .pearlCard(padding: 16, radius: 12)
+                    }
                 }
+                .padding(compact ? 16 : 20)
+                .frame(maxWidth: 1540)
+                .frame(maxWidth: .infinity)
             }
-            .animation(.snappy, value: store.pools.map(\.id))
-            .padding(Pearl.Space.screen).frame(maxWidth: 860).frame(maxWidth: .infinity)
+            .refreshable { await store.refresh(force: true) }
         }
-        .task { await store.refresh() }                  // within the 5-min TTL: no network
-        .refreshable { await store.refresh(force: true) }
+        .task { await store.refresh() }
+    }
+
+    private var title: some View {
+        Text(Loc("矿池总览"))
+            .font(.system(size: 30, weight: .bold))
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var updateStatus: some View {
+        HStack(spacing: 12) {
+            if let updated = store.updatedAt {
+                Text(Loc("更新于 %@", updated.formatted(.dateTime.hour().minute().locale(locale))))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Text(store.source == .miningPoolStats ? f(store.sampleDays, 1) + "d" : "24h")
+                .font(.callout.weight(.semibold).monospacedDigit())
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(Pearl.surface, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Pearl.surfaceEdge))
+            Button { Task { await store.refresh(force: true) } } label: {
+                if store.loading { ProgressView().controlSize(.small) }
+                else { Image(systemName: "arrow.clockwise") }
+            }
+            .buttonStyle(.plain)
+            .disabled(store.loading)
+            .accessibilityLabel(Loc("刷新矿池数据"))
+        }
     }
 }
 
-/// 矿池 · 手续费 · 出块/天 · 收益/PH·天 · 算力 · 占比 · 矿工.
-/// Every measured column spans the same window for every pool (see MPSCoin.sampleDays), so the
-/// rows are actually comparable. Sorted by hashrate; the green badge marks the best measured
-/// yield among pools whose sample is big enough to trust (never a SOLO pool — that's a lottery).
+/// A roomy comparison table on iPad/Mac; the same metrics stack on a narrow phone.
+/// Missing figures stay missing, and the existing PPS / low-sample distinctions remain visible.
 private struct PoolComparisonTable: View {
     let pools: [PoolOverview]
-    let sampleDays: Double
     let source: PoolsSource
+    let availableWidth: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.locale) private var locale
+    @State private var sortColumn: Column = .hashrate
+    @State private var ascending = false
 
-    // Sized so a typical value fits at full size — a cell that overflows gets scaled down by
-    // minimumScaleFactor, and one row rendering a hair smaller than its neighbours is exactly
-    // the kind of "the font is different" wrongness the eye catches even when it can't name it.
-    private let wName: CGFloat = 150, wFee: CGFloat = 46, wBlk: CGFloat = 58,
-                wEarn: CGFloat = 100, wHash: CGFloat = 92, wShare: CGFloat = 52, wMiners: CGFloat = 58
+    private enum Column: CaseIterable {
+        case name, hashrate, trend, earnings, blocks, fee, realFee, lastBlock
 
-    private var best: Double {
-        pools.filter(\.yieldTrustworthy).compactMap(\.earningsPerPH).max() ?? -1
+        var fraction: CGFloat {
+            switch self {
+            case .name: 0.18
+            case .hashrate: 0.14
+            case .trend: 0.105
+            case .earnings: 0.14
+            case .blocks: 0.11
+            case .fee: 0.08
+            case .realFee: 0.12
+            case .lastBlock: 0.125
+            }
+        }
+    }
+
+    private var tableWidth: CGFloat { max(availableWidth, 1080) }
+    /// The phone's table. Each cell keeps to its figure and one line under it, so a
+    /// row stays short and the eye can run down a column.
+    private var compact: Bool { availableWidth < 720 }
+    private var lineGap: CGFloat { compact ? 3 : 8 }
+    private var best: Double { pools.filter(\.yieldTrustworthy).compactMap(\.earningsPerPH).max() ?? -1 }
+    private var sortedPools: [PoolOverview] {
+        let selectedColumn = sortColumn
+        let ascending = ascending
+        return pools.sorted { a, b in
+            if selectedColumn == .name {
+                return ascending ? a.name < b.name : a.name > b.name
+            }
+            func value(_ pool: PoolOverview) -> Double? {
+                switch selectedColumn {
+                case .hashrate: pool.poolHashrate
+                case .earnings: pool.isSolo ? nil : pool.earningsPerPH
+                case .blocks: pool.blocksPerDay
+                case .fee: pool.feePercent
+                case .realFee: pool.realFeePercent
+                case .lastBlock: pool.lastBlockDate?.timeIntervalSince1970
+                default: nil
+                }
+            }
+            // Missing values always sort to the end, including in ascending order.
+            guard let av = value(a) else { return value(b) == nil ? a.name < b.name : false }
+            guard let bv = value(b) else { return true }
+            if av == bv { return a.name < b.name }
+            return ascending ? av < bv : av > bv
+        }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Pearl.Space.sm) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 0) {
+        if availableWidth < 720 {
+            mobileTable
+        } else {
+            ScrollView(.horizontal) {
+                VStack(spacing: 0) {
                     headerRow
-                    Divider().padding(.top, 5)
-                    ForEach(Array(pools.enumerated()), id: \.element.id) { idx, p in
-                        dataRow(p)
-                        if idx < pools.count - 1 { Divider() }
+                    ForEach(sortedPools) { pool in
+                        Divider()
+                        dataRow(pool)
                     }
                 }
+                .frame(width: tableWidth)
             }
-            footnotes
+            .background(Pearl.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Pearl.surfaceEdge, lineWidth: 1))
         }
-        .pearlCard()
+    }
+
+    // One shared horizontal scroll keeps every pool's columns aligned. The name
+    // column stays outside it, so the pool remains identifiable at any offset.
+    private var mobileColumns: [Column] { [.hashrate, .realFee, .fee, .earnings, .blocks, .trend, .lastBlock] }
+    private func mobileWidth(_ column: Column) -> CGFloat {
+        switch column {
+        case .name: 120
+        case .hashrate: 128
+        case .realFee: 118
+        case .fee: 90
+        case .earnings: 132
+        case .blocks: 116
+        case .trend: 110
+        case .lastBlock: 124
+        }
+    }
+    private func rowHeight(_ pool: PoolOverview) -> CGFloat {
+        let schemes = pool.payoutComparisons.count > 1
+        return compact ? (schemes ? 108 : 76) : (schemes ? 126 : 100)
+    }
+
+    private var mobileTable: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 0) {
+                VStack(spacing: 0) {
+                    heading(.name, width: mobileWidth(.name))
+                    ForEach(sortedPools) { pool in
+                        Divider()
+                        VStack(alignment: .leading, spacing: lineGap) {
+                            if let url = URL(string: pool.site), ["http", "https"].contains(url.scheme ?? "") {
+                                Link(pool.name, destination: url).foregroundStyle(.primary)
+                            } else { Text(pool.name) }
+                            Text(pool.share.map { f($0 * 100, 1) + "%" } ?? "—")
+                                .font(.caption2).foregroundStyle(.secondary)
+                            if pool.isSolo { Text("SOLO").font(.caption2).foregroundStyle(.orange) }
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .multilineTextAlignment(.leading)   // a Link that wraps centres its lines
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 10)
+                        .frame(width: mobileWidth(.name), height: rowHeight(pool), alignment: .leading)
+                    }
+                }
+                .frame(width: mobileWidth(.name))
+                .accessibilityIdentifier("pool-comparison-names")
+                Rectangle().fill(Pearl.surfaceEdge).frame(width: 1)
+                ScrollView(.horizontal) {
+                    VStack(spacing: 0) {
+                        HStack(spacing: 0) {
+                            ForEach(mobileColumns, id: \.self) { heading($0, width: mobileWidth($0)) }
+                        }
+                        ForEach(sortedPools) { pool in
+                            Divider()
+                            HStack(spacing: 0) {
+                                ForEach(mobileColumns, id: \.self) { column in
+                                    cell(pool, column: column)
+                                        .padding(.horizontal, 8)
+                                        .frame(width: mobileWidth(column), alignment: .trailing)
+                                }
+                            }
+                            .frame(height: rowHeight(pool))
+                        }
+                    }
+                }
+                .accessibilityIdentifier("pool-comparison-metrics")
+            }
+            Label(Loc("左右滑动查看完整对比"), systemImage: "arrow.left.and.right")
+                .font(.caption2).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(10)
+        }
+        .background(Pearl.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Pearl.surfaceEdge))
+        .accessibilityIdentifier("pool-comparison-table")
+    }
+
+    private func columnTitle(_ column: Column) -> String {
+        switch column {
+        case .name: Loc("矿池")
+        case .hashrate: Loc("总算力")
+        case .trend: Loc("7 天算力")
+        case .earnings: Loc("预估收益")
+        case .blocks: Loc(source == .miningPoolStats ? "出块/天" : "24h 出块")
+        case .fee: Loc("手续费")
+        case .realFee: Loc("真实费用")
+        case .lastBlock: Loc("最近出块")
+        }
     }
 
     private var headerRow: some View {
-        HStack(spacing: 12) {
-            Text(Loc("矿池")).frame(width: wName, alignment: .leading)
-            Text(Loc("手续费")).frame(width: wFee, alignment: .trailing)
-            Text(Loc("出块/天")).frame(width: wBlk, alignment: .trailing)
-            Text(Loc("收益/PH·天")).frame(width: wEarn, alignment: .trailing)
-            Text(Loc("总算力")).frame(width: wHash, alignment: .trailing)
-            Text(Loc("占比")).frame(width: wShare, alignment: .trailing)
-            Text(Loc("矿工")).frame(width: wMiners, alignment: .trailing)
+        HStack(spacing: 0) {
+            ForEach(Column.allCases, id: \.self) { column in
+                heading(column, width: tableWidth * column.fraction)
+            }
         }
-        .font(.caption).foregroundStyle(.secondary)
-        .lineLimit(1).minimumScaleFactor(0.6)
     }
 
-    @ViewBuilder private func dataRow(_ p: PoolOverview) -> some View {
-        let tilde = p.blocksEstimated ? "~" : ""
-        let isBest = p.yieldTrustworthy && p.earningsPerPH == best
-        HStack(spacing: 12) {
-            HStack(spacing: 8) {
-                // The pool's own logo for the ones the app has one for (the names here are
-                // PoolKind's); any other pool keeps the generic badge.
-                if let kind = PoolKind(rawValue: p.name) {
-                    PoolIcon(pool: kind, size: 22)
-                } else {
-                    PearlIconBadge(systemImage: "server.rack", gradient: p.gradient, size: 22)
+    private func heading(_ column: Column, width: CGFloat) -> some View {
+        HStack(spacing: 4) {
+            if column == .trend {
+                Text(columnTitle(column)).frame(maxWidth: .infinity)
+            } else {
+                Button {
+                    if sortColumn == column { ascending.toggle() }
+                    else { sortColumn = column; ascending = column == .fee || column == .realFee || column == .name }
+                } label: {
+                    HStack(spacing: 5) {
+                        Text(columnTitle(column))
+                        if sortColumn == column {
+                            Image(systemName: ascending ? "arrow.up" : "arrow.down").font(.caption2)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: column == .name ? .leading : .trailing)
+                    .contentShape(Rectangle())
                 }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(p.name).font(.callout.weight(.medium)).lineLimit(1).minimumScaleFactor(0.7)
-                    // ALWAYS render the type line, "—" when the feed omits it (PearlHash does,
-                    // and it sorts first) — an `if let` here left that one row a single-line
-                    // cell, so its name centred against everyone else's two-line cell and read
-                    // as a different font size.
-                    Text(p.feeType ?? "—").font(.caption2)
-                        .foregroundStyle(p.isSolo ? Color.orange : .secondary)
+                .buttonStyle(.plain)
+            }
+            if column == .realFee, availableWidth >= 720 { RealFeeHelpButton() }
+        }
+        .padding(.horizontal, availableWidth < 720 ? 8 : 16)
+        .frame(width: width)
+        .foregroundStyle(sortColumn == column ? Color.primary : .secondary)
+        .font(.caption.weight(.medium))
+        .frame(height: 46)
+        .background(Color.primary.opacity(0.025))
+    }
+
+
+    private func dataRow(_ pool: PoolOverview) -> some View {
+        HStack(spacing: 0) {
+            ForEach(Column.allCases, id: \.self) { column in
+                cell(pool, column: column)
+                    .padding(.horizontal, 16)
+                    .frame(width: tableWidth * column.fraction,
+                           alignment: column == .name ? .leading : .trailing)
+            }
+        }
+        .frame(height: rowHeight(pool))
+        .background(alignment: .leading) {
+            Color.cyan.opacity(colorScheme == .dark ? 0.10 : 0.07)
+                .frame(width: tableWidth * min(max(pool.share ?? 0, 0), 1))
+        }
+    }
+
+    @ViewBuilder private func cell(_ pool: PoolOverview, column: Column) -> some View {
+        switch column {
+        case .name: poolName(pool)
+        case .hashrate:
+            VStack(alignment: .trailing, spacing: lineGap) {
+                value(pool.poolHashrate.map(formatHashrate))
+                if let average = pool.averageHashrate7d {
+                    secondary(Loc("7 天均值 %@", formatHashrate(average)))
+                } else if let miners = pool.miners {
+                    secondary("\(Loc("矿工")) · \(miners.formatted())")
                 }
             }
-            .frame(width: wName, alignment: .leading)
-            num(p.feePercent.map { f($0, $0 == $0.rounded() ? 0 : 1) + "%" }, width: wFee)
-            // A decimal only when there is one to show: lordofpearls' column is an exact 24h
-            // count, so "6.0 blocks" would read as precision that isn't being claimed, while
-            // miningpoolstats' blocks÷days genuinely lands between whole numbers.
-            num(p.blocksPerDay.map { f($0, $0 < 10 && $0 != $0.rounded() ? 1 : 0) }, width: wBlk)
-            num(p.earningsPerPH.map { tilde + f($0, 1) }, width: wEarn,
-                color: isBest ? .green : (p.isSolo || p.blocksEstimated ? .secondary : .primary),
-                bold: isBest)
-            num(p.poolHashrate.map(formatHashrate), width: wHash)
-            num(p.share.map { f($0 * 100, 1) + "%" }, width: wShare)
-            num(p.miners.map { "\($0)" }, width: wMiners)
+        case .trend:
+            PoolHashrateSparkline(points: pool.hashrateHistory).frame(height: 42)
+        case .earnings:
+            VStack(alignment: .trailing, spacing: lineGap) {
+                ForEach(pool.payoutComparisons.indices, id: \.self) { index in
+                    let comparison = pool.payoutComparisons[index]
+                    let contract = comparison.scheme.hasPrefix("PPS") || comparison.scheme.hasPrefix("FPPS")
+                    value(comparison.solo ? nil : comparison.grossPerPH.map {
+                        (contract ? "≈" : (comparison.estimated ? "~" : "")) + f($0, 1) + " PRL"
+                    }, color: pool.yieldTrustworthy && pool.earningsPerPH == best && !contract ? .green : .primary)
+                    if pool.payoutComparisons.count > 1 { secondary(comparison.scheme) }
+                }
+                secondary(Loc("每 PH/天"))
+            }
+        case .blocks:
+            VStack(alignment: .trailing, spacing: lineGap) {
+                value(pool.blocksPerDay.map {
+                    (pool.fromMiningPoolStats || source == .miningPoolStats ? "≈" : "") +
+                        f($0, $0 < 10 && $0 != $0.rounded() ? 1 : 0)
+                })
+                if pool.fromMiningPoolStats { secondary(Loc("出块/天")) }
+                else if let ratio = pool.yieldRatio {
+                    secondary(Loc("%@ 的理论值", f(ratio * 100, 0) + "%"))
+                }
+            }
+        case .fee, .realFee:
+            VStack(alignment: .trailing, spacing: lineGap) {
+                ForEach(pool.payoutComparisons.indices, id: \.self) { index in
+                    let comparison = pool.payoutComparisons[index]
+                    if column == .fee || comparison.isPPS || !pool.payoutComparisons.contains(where: \.isPPS) {
+                        let amount = column == .fee ? comparison.feePercent : comparison.realFeePercent
+                        HStack(spacing: 4) {
+                            if column == .realFee, amount != nil {
+                                RealFeeHelpButton(observation: comparison.measurement)
+                            }
+                            value(amount.map {
+                                (column == .realFee && comparison.measurement?.estimated == true ? "≈" : "") +
+                                    (column == .realFee ? f($0, 2) + "%" : percent($0))
+                            })
+                        }
+                        if pool.payoutComparisons.count > 1 { secondary(comparison.scheme) }
+                    }
+                }
+                if pool.payoutComparisons.count == 1 { secondary(pool.feeType ?? "—") }
+                // On a phone the sample period is left to the ⓘ beside the figure, which
+                // gives it in full.
+                if column == .realFee, !compact, pool.realFeePercent != nil, let observation = pool.ppsMeasurement {
+                    secondary(Loc("样本 %@", samplePeriod(observation)))
+                }
+            }
+        case .lastBlock:
+            VStack(alignment: .trailing, spacing: lineGap) {
+                if let date = pool.lastBlockDate {
+                    value(relativeDate(date))
+                } else { value(nil) }
+                if let count = pool.lifetimeBlocks { secondary(Loc("累计 %@ 块", count.formatted())) }
+            }
         }
-        .padding(.vertical, 8)
     }
 
-    private func num(_ s: String?, width: CGFloat, color: Color = .primary, bold: Bool = false) -> some View {
-        Text(s ?? "—")
-            .font(.callout.monospacedDigit())
-            .fontWeight(bold ? .semibold : .regular)
-            .foregroundStyle(s == nil ? Color.secondary : color)
-            .lineLimit(1).minimumScaleFactor(0.6)
-            .frame(width: width, alignment: .trailing)
+    private func poolName(_ pool: PoolOverview) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(pool.name).font(.system(size: 20, weight: .semibold))
+                if let url = URL(string: pool.site), ["http", "https"].contains(url.scheme ?? "") {
+                    Link(destination: url) {
+                        Image(systemName: "arrow.up.right.square").font(.caption)
+                            .foregroundStyle(.secondary)
+                    }.accessibilityLabel(pool.name)
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            secondary(pool.share.map { Loc("全网占比 %@", f($0 * 100, 1) + "%") } ?? "—")
+            if pool.isSolo { Text("SOLO").font(.caption2.weight(.medium)).foregroundStyle(.orange) }
+        }
     }
 
-    @ViewBuilder private var footnotes: some View {
+    private func value(_ text: String?, color: Color = .primary) -> some View {
+        Text(text ?? "—")
+            .font(.system(size: availableWidth < 720 ? 15 : availableWidth < 1280 ? 18 : 20, weight: .semibold).monospacedDigit())
+            .foregroundStyle(text == nil ? .secondary : color)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func secondary(_ text: String) -> some View {
+        Text(text).font(.caption).foregroundStyle(.secondary)
+            .lineLimit(compact ? 1 : nil).minimumScaleFactor(compact ? 0.8 : 1)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func percent(_ amount: Double) -> String {
+        let rounded = (amount * 10).rounded() / 10
+        return f(rounded == 0 ? 0 : rounded, rounded == rounded.rounded() ? 0 : 1) + "%"
+    }
+
+    private func samplePeriod(_ observation: PPSFeeMeasurement) -> String {
+        let formatter = DateIntervalFormatter()
+        formatter.locale = locale
+        formatter.dateStyle = .short
+        formatter.timeStyle = .none
+        return formatter.string(from: Date(timeIntervalSince1970: observation.start),
+                                to: Date(timeIntervalSince1970: observation.end))
+    }
+
+    private func relativeDate(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = locale
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+/// Shared explanation next to the desktop column title and each phone metric.
+/// Its button stays separate from sorting so opening help never reorders pools.
+private struct RealFeeHelpButton: View {
+    var observation: PPSFeeMeasurement? = nil
+    @Environment(\.locale) private var locale
+    @State private var showingExplanation = false
+
+    private var explanation: String {
+        guard let observation, observation.realFeePercent != nil else {
+            return Loc("这是按各矿池标注的样本时间段，计算的实际结算收益相对理论收益的折损率。")
+        }
+        let formatter = DateIntervalFormatter()
+        formatter.locale = locale
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        let period = formatter.string(from: Date(timeIntervalSince1970: observation.start),
+                                      to: Date(timeIntervalSince1970: observation.end))
+        return Loc("这是 %@ 期间，实际结算收益相对理论收益的折损率。", period)
+    }
+
+    var body: some View {
+        Button { showingExplanation = true } label: {
+            Image(systemName: "questionmark.circle")
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Loc("真实费用说明"))
+        .accessibilityIdentifier("pool-real-fee-help")
+        .help(Loc("真实费用说明"))
+        .popover(isPresented: $showingExplanation, arrowEdge: .top) {
+            HStack(alignment: .top, spacing: 10) {
+                Text(explanation)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button { showingExplanation = false } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.semibold))
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Loc("关闭"))
+            }
+            .foregroundStyle(.primary)
+            .padding(16)
+            .frame(width: 280)
+            .fixedSize(horizontal: false, vertical: true)
+            .presentationCompactAdaptation(.popover)
+        }
+    }
+}
+
+/// The chart uses source timestamps and preserves gaps in the delta-encoded feed.
+private struct PoolHashrateSparkline: View {
+    let points: [PoolHashratePoint]
+
+    var body: some View {
+        if points.compactMap(\.hashrate).count >= 2 {
+            Canvas { context, size in
+                let valid = points.compactMap(\.hashrate)
+                guard let first = points.first, let last = points.last, last.time > first.time,
+                      let low = valid.min(), let high = valid.max() else { return }
+                let range = max(high - low, max(high * 0.02, 1))
+                var line = Path()
+                var connected = false
+                var lastPosition: CGPoint?
+                for sample in points {
+                    guard let rate = sample.hashrate else { connected = false; continue }
+                    let x = 2 + (size.width - 4) * (sample.time - first.time) / (last.time - first.time)
+                    let y = 3 + (size.height - 6) * (high == low ? 0.5 : 1 - (rate - low) / range)
+                    let position = CGPoint(x: x, y: y)
+                    if connected { line.addLine(to: position) } else { line.move(to: position) }
+                    connected = true
+                    lastPosition = position
+                }
+                var baseline = Path()
+                baseline.move(to: CGPoint(x: 2, y: size.height - 1))
+                baseline.addLine(to: CGPoint(x: size.width - 2, y: size.height - 1))
+                context.stroke(baseline, with: .color(.secondary.opacity(0.18)), lineWidth: 1)
+                context.stroke(line, with: .color(.cyan), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                if let end = lastPosition, points.last?.hashrate != nil {
+                    context.fill(Path(ellipseIn: CGRect(x: end.x - 2.5, y: end.y - 2.5, width: 5, height: 5)),
+                                 with: .color(.cyan))
+                }
+            }
+            .accessibilityLabel(Loc("7 天算力"))
+        } else {
+            Text("—").font(.callout).foregroundStyle(.tertiary).frame(maxWidth: .infinity)
+        }
+    }
+}
+
+private struct PoolComparisonNotes: View {
+    let pools: [PoolOverview]
+    let sampleDays: Double
+    let source: PoolsSource
+    var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(Loc("收益/PH·天 = 该池实际挖到的块 × 单块奖励 ÷ 算力（PRL，未扣手续费）；绿色 = 最高。"))
+            Text(Loc("真实费用 =（1 − 实际结算收益 ÷ 同期理论收益）× 100%；负值表示收益高于理论。"))
+            Text(Loc("真实费用仅计算 PPS、PPS+ 与 FPPS；其他方案或数据不足显示「—」。不含矿工软件抽水及转账费。"))
+            if pools.contains(where: { $0.name == "Pearl Fortune" }) {
+                Text(Loc("PF 保留两种方案的公示费率，仅计算 PPS 的真实费用。"))
+            }
             if source == .lordOfPearls {
                 Text(Loc("出块为最近 24 小时链上实测（按 coinbase 归属统计），算力取自各矿池自身 API。"))
             }
@@ -657,23 +1310,22 @@ private struct PoolComparisonTable: View {
             if pools.contains(where: \.isSolo) {
                 Text(Loc("SOLO 池为「彩票式」收益，不参与最高收益的比较。"))
             }
-            if pools.contains(where: \.isPPS) {
+            if pools.contains(where: { $0.payoutComparisons.contains(where: \.isPPS) }) {
                 Text(Loc("PPS 池按份额固定结算，收益/PH·天 取全网期望值（与该池运气无关），不参与最高收益的比较。"))
-            }
-            if pools.contains(where: { $0.feeNote != nil }) {
-                Text(Loc("HeroMiners：矿池 0%，需 SRBMiner（矿工端抽水约 3%）。"))
+                Text(Loc("「≈」表示估算，可能包含算力统计、观测缺口补估和链上历史插值误差；结果反映样本期收益折损，不等同于矿池公示手续费或额外抽水。"))
             }
             if pools.contains(where: \.hashFromPoolAPI) {
                 Text(Loc("HeroMiners 的算力数据源未收录，改取矿池自身 API。"))
             }
             // No numbers spelled out here: they come from the API and would go stale in the
             // footnote the moment the pool changed them — the row already shows them.
-            if pools.contains(where: \.feeFromPoolAPI) {
+            if pools.contains(where: { $0.name == "Kryptex" && $0.feeFromPoolAPI }) {
                 Text(Loc("Kryptex 的费率与结算方式取自矿池自身 API（数据源记录有误）。"))
             }
             if source == .lordOfPearls, pools.contains(where: \.fromMiningPoolStats) {
                 Text(Loc("F2Pool 数据源未收录，该行取自 miningpoolstats（出块按其最近 1000 个区块口径）。"))
             }
+            Text(Loc("走势展示近 7 天算力；数据缺失时显示「—」。"))
             switch source {
             case .lordOfPearls:    Text(Loc("数据来源：lordofpearls.xyz"))
             case .miningPoolStats: Text(Loc("数据来源：miningpoolstats.stream"))
@@ -700,9 +1352,9 @@ private struct HashShareChart: View {
     }
 
     private static let colors: [String: Color] = [
-        "AlphaPool": Pearl.accent, "Lucky Pool": .mint, "HeroMiners": .green,
-        "PearlHash": Pearl.gold, "Pearl Fortune": .orange, "Kryptex": .purple,
-        "F2Pool": Pearl.teal,
+        "AlphaPool": Pearl.classic.accent, "Lucky Pool": .mint, "HeroMiners": .green,
+        "PearlHash": Pearl.classic.gold, "Pearl Fortune": .orange, "Kryptex": .purple,
+        "F2Pool": Pearl.classic.teal,
     ]
 
     private var slices: [Slice] {

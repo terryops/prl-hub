@@ -56,6 +56,9 @@ struct WidgetSnapshot: Codable {
     /// before this field existed still decode. Lets a widget reuse the app's
     /// just-fetched price instead of fetching its own, slightly different one.
     var prlUsdAt: Date?
+    /// Last complete market quote for Lock Screen price / change widgets. Optional
+    /// so snapshots from before those widgets were added continue to decode.
+    var marketQuote: WidgetMarketQuote?
     /// The user's secondary currency (设置 → 货币) with the app's cached rate; nil when
     /// they show USD only (or the rate hasn't loaded yet).
     var fiat: WidgetFiat?

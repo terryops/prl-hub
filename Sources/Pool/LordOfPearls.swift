@@ -58,8 +58,19 @@ struct LOPPublic: Decodable {
         let networkhashps: Double?        // H/s, computed over the last 60 blocks
         let avg_block_time_s: Double?     // seconds, same 60-block window
     }
-    struct Block: Decodable { let reward: Double? }   // PRL, already scaled
+    struct PoolIdentity: Decodable { let url: String? }
+    struct Miner: Decodable {
+        let address: String?
+        let blocks: Int?
+        let pool: PoolIdentity?
+    }
+    struct Block: Decodable {
+        let reward: Double?   // PRL, already scaled
+        let time: Double?
+        let pool: PoolIdentity?
+    }
     struct Leaderboard: Decodable {
+        let top: [Miner]?
         let recent_blocks: [Block]?
         let total_blocks: Int?      // blocks the whole network found inside `window`
         let window: Double?         // length of that count, in `window_unit`
@@ -69,7 +80,10 @@ struct LOPPublic: Decodable {
     /// spacing is ≈19h — wide enough that a 24h window can hold a single point (see
     /// `averageDifficulty`, which interpolates the window edge rather than pretend).
     struct DiffPoint: Decodable { let t: Double?; let diff: Double? }
-    struct Lifetime: Decodable { let hashrate_series: [DiffPoint]? }
+    struct Lifetime: Decodable {
+        let hashrate_series: [DiffPoint]?
+        let top: [Miner]?
+    }
 
     let ts: Double?                       // when the site built this snapshot (unix seconds)
     let network: Network?

@@ -39,10 +39,7 @@ struct PriceAlertsView: View {
                 } else {
                     ProPaywallCard(pro: pro)
                 }
-                Label(Loc("价格提醒只需要本机的推送令牌和提醒条件，不涉及钱包地址或余额。"), systemImage: "lock.shield")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                PearlInfoRow(Loc("价格提醒只需要本机的推送令牌和提醒条件，不涉及钱包地址或余额。"), systemImage: "lock.shield")
                     .padding(.horizontal, Pearl.Space.xs)
             }
             .padding(Pearl.Space.screen)

@@ -136,7 +136,9 @@ struct DashboardSection: View {
                 }
 
                 DiffProjection(store: store, fl: fl, ready: ready)
-                PowerBar(store: store, watts: fl.watts)
+                if store.powerBudgetEnabled {
+                    PowerBar(store: store, watts: fl.watts)
+                }
             }
             .padding(Pearl.Space.screen)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -177,7 +179,7 @@ struct DashboardSection: View {
                     .accessibilityLabel(Loc("刷新"))
             }
             Toggle(Loc("自动"), isOn: Binding(get: { store.autoRefresh }, set: { store.setAuto($0) }))
-                .toggleStyle(.switch).controlSize(.mini).font(.caption).fixedSize()
+                .toggleStyle(.switch).tint(Pearl.switchOn).controlSize(.mini).font(.caption).fixedSize()
         }
     }
 
@@ -235,14 +237,13 @@ struct DiffProjection: View {
                 let d7 = c.diffChange(vs: c.diff7), d3 = c.diffChange(vs: c.diff3), d24 = c.diffChange(vs: c.diff24)
                 let trendHint = store.live ? Loc("月增长已按近7天趋势自动估算")
                                            : Loc("仅供参考，月增长可在【参数】手动设")
-                Label(Loc("实时难度 %@M · 近7天 %@ · 近3天 %@ · 近24h %@　（%@）", f(c.diffNow/1e6,2), pctSigned(d7), pctSigned(d3), pctSigned(d24), trendHint),
-                      systemImage: "chart.line.uptrend.xyaxis")
-                    .font(.callout).foregroundColor(d7.isFinite && d7 > 0 ? .orange : .secondary)
+                PearlInfoRow(Loc("实时难度 %@M · 近7天 %@ · 近3天 %@ · 近24h %@　（%@）", f(c.diffNow/1e6,2), pctSigned(d7), pctSigned(d3), pctSigned(d24), trendHint),
+                             systemImage: "chart.line.uptrend.xyaxis",
+                             tint: d7.isFinite && d7 > 0 ? .orange : Pearl.accent)
             }
             if store.selfDilution {
-                Label(Loc("已计入自身算力稀释：你占全网 %@%% · 单卡出币 ×%@", f(share*100,3), f(dilution,3)),
-                      systemImage: "person.2.fill")
-                    .font(.callout).foregroundColor(.secondary)
+                PearlInfoRow(Loc("已计入自身算力稀释：你占全网 %@%% · 单卡出币 ×%@", f(share*100,3), f(dilution,3)),
+                             systemImage: "person.2.fill")
             }
         }
         .pearlCard()

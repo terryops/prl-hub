@@ -3,6 +3,16 @@
     {
       "filename" : "f2pool.png",
       "idiom" : "universal"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "f2pool-dark.png",
+      "idiom" : "universal"
     }
   ],
   "info" : {

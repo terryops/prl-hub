@@ -443,10 +443,9 @@ struct WithdrawView: View {
             // SafeTrade keys may only withdraw with Enable Withdraw; the key's Trusted
             // IPs list gates every call it makes, withdrawals included.
             Text(Loc("API 密钥需在 SafeTrade 开启 Enable Withdraw；它的 Trusted IPs 白名单对所有请求都生效，不只是提现。"))
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .pearlExplanation()
             Button { focused = false; confirming = true } label: { Text(Loc("提现")) }
-                .buttonStyle(.pearl(Pearl.brand))
+                .buttonStyle(.pearl)
                 .disabled(!canSubmit)
         }
         .pearlCard()

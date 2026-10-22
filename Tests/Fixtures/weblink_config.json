@@ -1,0 +1,41 @@
+{
+  "lang": "zh-Hans",
+  "wallets": [],
+  "settingsUpdated": 1790000300000,
+  "window": { "start": 480, "end": 1380, "tz": "Asia/Shanghai" },
+  "monitors": [
+    {
+      "id": "6F1B7C2A-1111-4C1C-9C43-000000000001", "updated": 1790000300000,
+      "pool": "Kryptex", "addr": "prl1p8wznc8tkhlkjaq7v8ycugz93rgs8uezq6px7873934kh35nk9q2qlz0q9m",
+      "label": "Garage", "alert": true, "after": 900, "paused": false
+    },
+    {
+      "id": "6F1B7C2A-1111-4C1C-9C43-000000000002", "updated": 1790000300000,
+      "pool": "F2Pool", "addr": "0123456789abcdef0123456789abcdef", "acct": "My Rig",
+      "label": "F2Pool", "alert": false, "after": 600, "paused": false
+    },
+    {
+      "id": "6F1B7C2A-1111-4C1C-9C43-000000000003", "updated": 1790000300000,
+      "pool": "AlphaPool", "addr": "prl1pmkyxyht58rzhe7cj9ha7ncpm6r28x6g0htq93ffs5hsh7lqsxj7qw9pyjv",
+      "label": "AlphaPool", "alert": false, "after": 600, "paused": true
+    }
+  ],
+  "monitorOrder": {
+    "ids": [
+      "6F1B7C2A-1111-4C1C-9C43-000000000001",
+      "6F1B7C2A-1111-4C1C-9C43-000000000002",
+      "6F1B7C2A-1111-4C1C-9C43-000000000003"
+    ],
+    "updated": 1790000300000
+  },
+  "rules": [
+    {
+      "id": "A1B2C3D4-0000-4000-8000-000000000001", "updated": 1790000000500,
+      "kind": "above", "value": 1.2, "window": 0, "enabled": true, "seen_fired": 0, "repeat": false
+    },
+    {
+      "id": "A1B2C3D4-0000-4000-8000-000000000002", "updated": 1790000100000,
+      "kind": "move", "value": 5, "window": 3600, "enabled": false, "seen_fired": 1790000100, "repeat": false
+    }
+  ]
+}

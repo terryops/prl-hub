@@ -43,9 +43,7 @@ struct SafeTradeSettingsSection: View {
             Button { showingGuide = true } label: {
                 Label(Loc("如何获取 API 密钥"), systemImage: "questionmark.circle")
             }
-            Label(Loc("API 密钥存于 iCloud 钥匙串（端到端加密，仅你可见），在各设备间同步；助记词不同步，仅存于本机钥匙串。"), systemImage: "key.icloud")
-                .font(.footnote).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            PearlInfoRow(Loc("API 密钥存于 iCloud 钥匙串（端到端加密，仅你可见），在各设备间同步；助记词不同步，仅存于本机钥匙串。"), systemImage: "key.icloud")
         }
         .sheet(isPresented: $showingGuide) { SafeTradeKeyGuide() }
         .onAppear { masked = Self.readMasked() }

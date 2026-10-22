@@ -326,6 +326,7 @@ final class WalletStore: ObservableObject {
         let d = UserDefaults.standard
         if let data = try? JSONEncoder().encode(wallets) { d.set(data, forKey: walletsKey) }
         d.set(activeWalletID, forKey: activeWalletKey)
+        WebLinkStore.walletsChanged()
     }
 
     /// The open wallet's entry in `wallets`.

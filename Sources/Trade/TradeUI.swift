@@ -51,8 +51,7 @@ struct UntrustedIPCard: View {
             Label(Loc("当前网络的 IP 不在密钥的白名单里"), systemImage: "network.badge.shield.half.filled")
                 .font(.subheadline.weight(.semibold)).foregroundStyle(.orange)
             Text(Loc("这把 API 密钥设置了 Trusted IPs，SafeTrade 只接受名单里的 IP。SafeTrade 看到你现在的 IP 是："))
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .pearlExplanation()
             HStack(spacing: Pearl.Space.sm) {
                 if let ip = issue.ip {
                     Text(verbatim: ip).font(.callout.monospaced()).textSelection(.enabled)
@@ -71,11 +70,9 @@ struct UntrustedIPCard: View {
             Text(issue.isIPv6
                  ? Loc("这是 IPv6 地址：白名单里如果只有 IPv4，可能需要把这个 IPv6 地址也加进 Trusted IPs。")
                  : Loc("把上面这个 IP 加进这把密钥的 Trusted IPs 即可。"))
-                .font(.caption)
-                .fixedSize(horizontal: false, vertical: true)
+                .pearlExplanation()
             Text(Loc("同一个网络下，手机可能时而用 IPv4、时而用 IPv6 连接，IPv6 地址也会定期变化；换网络后 IP 也会变。开着代理或 VPN 时，这里显示的是代理的出口 IP。"))
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .pearlExplanation()
             Button(Loc("在哪里设置 Trusted IPs")) { showingGuide = true }
                 .buttonStyle(.borderless).font(.caption.weight(.semibold)).tint(Pearl.accent)
         }

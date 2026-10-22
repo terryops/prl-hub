@@ -4,6 +4,8 @@ import Combine
 /// Root navigation shell — a 5-tab TabView (bottom bar on iPhone, top on Mac).
 /// Owns the single shared WalletStore and applies the app-wide appearance.
 struct RootView: View {
+    // Recover the active identity before any store reads or seeds preferences.
+    private let account = WebLinkStore.shared
     // Plain @State, NOT @SceneStorage: a cold launch must always open on 钱包,
     // never restore whatever tab the previous session ended on.
     //
@@ -20,6 +22,10 @@ struct RootView: View {
         return 0
     }
     @AppStorage("ui.appearance") private var appearance = "system"   // system | light | dark
+    // Watched so that a change of palette (设置 → 外观 → 配色) rebuilds the tree below.
+    @AppStorage(AppPalette.key) private var paletteStored: String?
+    @AppStorage(AppIconChoice.key) private var iconStored: String?
+    private var palette: AppPalette { _ = paletteStored; return AppPalette.current }
     @Environment(\.scenePhase) private var scenePhase
     // Not observed here: RootView only injects it. Observing would re-evaluate the whole
     // TabView on every wallet publish; the screens that show wallet state observe it.
@@ -30,30 +36,41 @@ struct RootView: View {
     var body: some View {
         TabView(selection: $tab) {
             WalletRootView()
-                .tabItem { Label(Loc("钱包"), systemImage: "bitcoinsign.circle") }
+                .tabItem {
+                    Label(Loc("钱包"), image: "TabWallet")
+                }
                 .tag(0)
 
             // Trade tab gated off for the App Store build (guideline 3.1.5 crypto
             // exchange risk). Flip AppFeatures.tradeEnabled to restore it.
             if AppFeatures.tradeEnabled {
                 TradeView()
-                    .tabItem { Label(Loc("交易"), systemImage: "arrow.left.arrow.right.circle") }
+                    .tabItem {
+                        Label(Loc("交易"), image: "TabTrade")
+                    }
                     .tag(1)
             }
 
             PRLMonitorView()
-                .tabItem { Label(Loc("挖矿监控"), systemImage: "chart.line.uptrend.xyaxis") }
+                .tabItem {
+                    Label(Loc("挖矿监控"), image: "TabMining")
+                }
                 .tag(2)
 
             PoolView()
-                .tabItem { Label(Loc("我的监控"), systemImage: "square.stack.3d.up.fill") }
+                .tabItem {
+                    Label(Loc("我的监控"), image: "TabMonitor")
+                }
                 .tag(3)
 
             SettingsView()
-                .tabItem { Label(Loc("设置"), systemImage: "gearshape") }
+                .tabItem {
+                    Label(Loc("设置"), image: "TabSettings")
+                }
                 .tag(4)
         }
         .tint(Pearl.accent)                       // brand accent for all default-tinted controls
+        .toggleStyle(PearlSwitchStyle())          // …but a switch that is on has a colour of its own
         // Widget deep links — a tap on the widget's price/balance/pool region opens
         // the app here with a pearlhub:// URL; jump to that destination's tab. The
         // 交易 tab only exists when trading is enabled, so a price (→交易) tap falls
@@ -75,10 +92,18 @@ struct RootView: View {
         .environmentObject(loc)
         .environmentObject(currency)
         // Re-resolve the chosen language for the whole tree, and rebuild it on
-        // switch so every Loc(...) call site re-evaluates immediately.
+        // switch so every Loc(...) call site re-evaluates immediately. The same for the
+        // palette: every Pearl colour is looked up as a view is built.
         .environment(\.locale, loc.language.locale)
-        .id(loc.language)
+        .id(TreeIdentity(language: loc.language, palette: palette))
         .task {
+            // Ahead of the launch counter below, which it reads: an install that has
+            // launched before keeps the icon it had (设置 → 外观 → 应用图标).
+            AppIconChoice.adoptDefault()
+            // Likewise: only an install that synced before queues its edits while sync is off.
+            CloudSync.adoptDefault()
+            publishWidgetAppearance()
+            Task { await AppIconChoice.applyAtLaunch() }
             // One tick on the 评分提醒 counter per launch — the prompt itself is asked for
             // much later, from 我的监控, and only once the gates in ReviewPrompt allow it.
             ReviewPrompt.registerLaunch()
@@ -98,9 +123,13 @@ struct RootView: View {
                 CloudSync.refresh()
                 PriceAlertStore.shared.foreground()
                 PriceLiveActivity.shared.foreground()
+                WebLinkStore.shared.foreground()
                 Task { await currency.refreshIfStale() }
             }
         }
+        .onChange(of: paletteStored) { _, _ in publishWidgetAppearance() }
+        .onChange(of: iconStored) { _, _ in publishWidgetAppearance() }
+        .onChange(of: appearance) { _, _ in publishWidgetAppearance() }
         .onReceive(NotificationCenter.default.publisher(for: .cloudSyncDidUpdate)) { _ in
             contacts.reload()
             wallet.adoptSyncedMeta()   // wallet name / network synced from another device
@@ -115,6 +144,19 @@ struct RootView: View {
         .frame(minWidth: 900, minHeight: 600)
         #endif
     }
+
+    private func publishWidgetAppearance() {
+        if WidgetBridge.updateAppearance(palette: palette.rawValue,
+                                         icon: AppIconChoice.current.rawValue, mode: appearance) {
+            PriceLiveActivity.shared.refreshAppearance()
+        }
+    }
+}
+
+/// What the tree is rebuilt for.
+private struct TreeIdentity: Hashable {
+    var language: AppLanguage
+    var palette: AppPalette
 }
 
 #Preview {

@@ -76,7 +76,7 @@ struct AddWalletView: View {
                     VStack(spacing: Pearl.Space.sm) {
                         PearlIconBadge(systemImage: "wallet.pass", size: 56)
                         Text(Loc("每个钱包单独保存助记词，可随时在钱包页左上角切换。"))
-                            .font(.callout).foregroundStyle(.secondary)
+                            .pearlExplanation()
                             .multilineTextAlignment(.center)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -147,7 +147,7 @@ struct ManageWalletsView: View {
                             Button { startRename(w) } label: {
                                 Label(Loc("重命名"), systemImage: "pencil")
                             }
-                            .tint(Pearl.indigo)
+                            .tint(Pearl.plate)
                         }
                         .contextMenu {
                             Button { startRename(w) } label: { Label(Loc("重命名"), systemImage: "pencil") }

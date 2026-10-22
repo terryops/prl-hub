@@ -3,6 +3,16 @@
     {
       "filename" : "alphapool.png",
       "idiom" : "universal"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "alphapool-dark.png",
+      "idiom" : "universal"
     }
   ],
   "info" : {

@@ -30,6 +30,7 @@ struct PearlLockWidget: Widget {
 struct LockEntry: TimelineEntry {
     let date: Date
     let snap: WidgetSnapshot
+    var appearance: WidgetAppearance = .load()
 }
 
 struct LockProvider: TimelineProvider {
@@ -45,10 +46,11 @@ struct LockProvider: TimelineProvider {
         Task {
             let usd = await WidgetFetch.sharedPrlUsd(WidgetStore.load())
             var snap = WidgetStore.load()
-            if let usd {
+            if let usd, usd.at > (snap.prlUsdAt ?? .distantPast) {
                 snap.prlUsd = usd.usd
                 // Share a price it fetched itself, so the app / home widget can reuse it.
-                if usd.at > (snap.prlUsdAt ?? .distantPast) { snap.prlUsdAt = usd.at; WidgetStore.save(snap) }
+                snap.prlUsdAt = usd.at
+                WidgetStore.save(snap)
             }
 
             // One entry now, plus one at each of the next two midnights, so the date flips on
@@ -94,7 +96,7 @@ struct LockWidgetView: View {
     var body: some View {
         switch family {
         case .accessoryInline:
-            (Text(Image("pearl", label: Text(verbatim: "PRL"))) + Text(verbatim: " \(price)"))
+            (Text(Image(entry.appearance.symbolName, label: Text(verbatim: "PRL"))) + Text(verbatim: " \(price)"))
                 .widgetURL(WidgetDeepLink.trade.url)
         default:
             Text(verbatim: "\(dateLine) \(price)")

@@ -17,10 +17,14 @@ struct CatalogSection: View {
         VStack(spacing: 0) {
             HStack {
                 Text(Loc("排序")).font(.subheadline).foregroundColor(.secondary)
+                    .lineLimit(1).minimumScaleFactor(0.7)
                 Picker(Loc("排序"), selection: $store.sortKey) {
                     ForEach(SortKey.allCases) { Text(Loc($0.rawValue)).tag($0) }
                 }
                 .pickerStyle(.menu).labelsHidden()
+                // Its own width: left to the row, the label is given the width of another
+                // option and a longer one wraps ("Nach / Nettogewinn / (eigen)").
+                .fixedSize()
                 Spacer()
             }
             .padding(.horizontal).padding(.vertical, 8)
@@ -83,6 +87,7 @@ struct GPURow: View {
         HStack(spacing: Pearl.Space.sm) {
             PearlIconBadge(systemImage: "memorychip",
                 gradient: selected ? Pearl.brandVivid : (positive ? Pearl.positive : Pearl.negative),
+                glyph: selected ? Pearl.onHero : nil,
                 size: 36)
             VStack(alignment: .leading, spacing: 2) {
                 Text(k.g.name).font(.body.bold())
@@ -131,7 +136,7 @@ struct GPUDetailView: View {
                 if let name, let g = gpu(name) {
                     let c = store.cfg; let k = compute(g, c)
                     HStack(spacing: Pearl.Space.sm) {
-                        PearlIconBadge(systemImage: "memorychip", gradient: Pearl.brandVivid, size: 44)
+                        PearlIconBadge(systemImage: "memorychip", gradient: Pearl.brandVivid, glyph: Pearl.onHero, size: 44)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(g.name).font(.title.bold())
                         }
@@ -147,7 +152,7 @@ struct GPUDetailView: View {
                         info(Loc("90天净"), store.localSymbol + f(k.net90 * c.fx, 0), profitColor(k.net90))
                         if c.diffGrowthMonthly != 0 {
                             Text(Loc("↑ 已按难度月增 %@%% 衰减；在【参数】可调", f(c.diffGrowthMonthly,0)))
-                                .font(.caption).foregroundColor(.secondary)
+                                .pearlExplanation(.footnote)
                         }
                     }
                     .pearlCard()
@@ -210,7 +215,7 @@ struct GPUDetailView: View {
                 Text(store.sym(Loc("本卡租金 ¥")) + f(rentDay / 24, 2) + Loc("/小时")).font(.callout.monospacedDigit())
             }
             info(Loc("折合"), store.localSymbol + f(rentDay, 0) + Loc("/天 · $") + f(rentDay / c.fx, 2) + Loc("/天"))
-            Toggle(Loc("租金含电费"), isOn: $store.rentCoversPower).font(.callout).toggleStyle(.switch)
+            Toggle(Loc("租金含电费"), isOn: $store.rentCoversPower).font(.callout).toggleStyle(.switch).tint(Pearl.switchOn)
             info(Loc("租净利"), store.localSymbol + f(net * c.fx, 1) + Loc("/天 · 回报 ") + f(roi, 0) + "%", profitColor(net))
             info(Loc("安全垫"), Loc("币价 $") + f(bePrice, 3) + Loc(" 归零"))
             info("", Loc("全网 ") + f(beNet, 1) + Loc(" EH/s 归零"))

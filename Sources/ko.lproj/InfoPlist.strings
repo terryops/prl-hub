@@ -1,0 +1,6 @@
+/* App display name — "Pearl Hub" for every language. No leading "$": iOS/macOS
+   treat a leading $ as a build variable and drop the name (falls back to CFBundleName). */
+"CFBundleDisplayName" = "Pearl Hub";
+"CFBundleName" = "Pearl Hub";
+/* Face ID prompt (查看助记词 / 转账 / 提现). */
+"NSFaceIDUsageDescription" = "Pearl Hub는 복구 문구를 표시하거나 자금을 보내기 전에 Face ID로 본인인지 확인합니다.";

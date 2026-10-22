@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             // Start StoreKit's Transaction.updates listener at launch, not whenever
             // something first happens to touch ProStore.
             _ = ProStore.shared
+            _ = WebLinkStore.shared   // recover identity before reading alert caches
             PriceAlertStore.shared.launch()
         }
         return true
@@ -58,8 +59,14 @@ enum OrientationLock {
 
     static var isOn: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
 
+    /// The full-screen K-line is open: landscape only, whatever the lock says.
+    @MainActor private static var chartOpen = false
+    /// Whether the app stood upright when the full-screen K-line opened, to go back to.
+    @MainActor private static var portraitBeforeChart = true
+
     @MainActor static var mask: UIInterfaceOrientationMask {
         guard UIDevice.current.userInterfaceIdiom == .phone else { return .all }
+        if chartOpen { return .landscape }
         return isOn ? .portrait : .allButUpsideDown
     }
 
@@ -67,15 +74,35 @@ enum OrientationLock {
     /// switched on while the phone is held sideways.
     @MainActor static func apply() {
         for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
-            for window in scene.windows {
-                var vc = window.rootViewController
-                while let v = vc {
-                    v.setNeedsUpdateOfSupportedInterfaceOrientations()
-                    vc = v.presentedViewController
-                }
-            }
+            requery(scene)
             if isOn, UIDevice.current.userInterfaceIdiom == .phone {
                 scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            }
+        }
+    }
+
+    /// Turn the phone's screen sideways for the full-screen K-line (CandleFullScreen),
+    /// and back when it closes: upright under the lock, or if it was upright before.
+    @MainActor static func chart(open: Bool) {
+        guard UIDevice.current.userInterfaceIdiom == .phone, open != chartOpen else { return }
+        chartOpen = open
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            if open { portraitBeforeChart = !scene.interfaceOrientation.isLandscape }
+            requery(scene)
+            if open, !scene.interfaceOrientation.isLandscape {
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
+            } else if !open, isOn || portraitBeforeChart {
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            }
+        }
+    }
+
+    @MainActor private static func requery(_ scene: UIWindowScene) {
+        for window in scene.windows {
+            var vc = window.rootViewController
+            while let v = vc {
+                v.setNeedsUpdateOfSupportedInterfaceOrientations()
+                vc = v.presentedViewController
             }
         }
     }
@@ -88,6 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UNUserNotificationCenter.current().delegate = push
         Task { @MainActor in
             _ = ProStore.shared   // start StoreKit's Transaction.updates listener at launch
+            _ = WebLinkStore.shared   // recover identity before reading alert caches
             PriceAlertStore.shared.launch()
         }
     }

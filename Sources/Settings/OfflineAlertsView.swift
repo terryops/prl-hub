@@ -51,10 +51,7 @@ struct OfflineAlertsView: View {
     }
 
     private func note(_ text: String, systemImage: String) -> some View {
-        Label(text, systemImage: systemImage)
-            .font(.caption).foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        PearlInfoRow(text, systemImage: systemImage)
             .padding(.horizontal, Pearl.Space.xs)
     }
 
@@ -66,8 +63,7 @@ struct OfflineAlertsView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(Loc("矿机掉线，第一时间知道")).font(.headline)
                 Text(Loc("矿机离线达到你设定的时长就推送通知，恢复上线后再通知一次，不用打开 App。服务器每 3 分钟向矿池查询一次。"))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .pearlExplanation()
             }
             Spacer(minLength: 0)
         }
@@ -109,7 +105,7 @@ struct OfflineAlertsView: View {
             AlertSyncFailure(store: push)
             if !store.canAddMore {
                 Text(Loc("最多可为 %d 个监控开启掉线提醒。", OfflineAlertStore.maxWatches))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .pearlExplanation(.footnote)
                     .padding(.top, Pearl.Space.xs)
             }
         }
@@ -211,7 +207,7 @@ struct OfflineAlertHintCard: View {
                             if !pro.isPro { PearlBadge(text: Loc("高级版"), systemImage: "sparkles").fixedSize() }
                         }
                         Text(Loc("矿机离线 10 分钟以上就推送通知。点这里为你的监控开启。"))
-                            .font(.caption).foregroundStyle(.secondary)
+                            .pearlExplanation()
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
                     }

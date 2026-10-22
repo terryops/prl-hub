@@ -34,8 +34,7 @@ struct LiveActivityCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Loc("锁屏盯盘")).font(.headline)
                     Text(Loc("锁屏和灵动岛实时显示 PRL 价格，约每分钟更新，最长 8 小时。"))
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .pearlExplanation()
                 }
                 Spacer(minLength: 0)
                 if busy {
@@ -74,8 +73,7 @@ struct LiveActivityCard: View {
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).font(.subheadline.weight(.medium))
-                    Text(detail).font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(detail).pearlExplanation(.footnote)
                 }
                 Spacer(minLength: 0)
             }

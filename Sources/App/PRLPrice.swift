@@ -65,7 +65,12 @@ final class PRLPriceManager: ObservableObject {
         inFlight = true
         defer { inFlight = false }
 
-        var price = await AlertQuote.fetch().flatMap { $0.isFresh ? $0.usd : nil }
+        let quote = await AlertQuote.fetch()
+        if let quote, quote.isFresh, let at = quote.at {
+            WidgetBridge.updateMarketQuote(WidgetMarketQuote(usd: quote.usd, change1h: quote.change1h,
+                                                            change24h: quote.change24h, at: at))
+        }
+        var price = quote.flatMap { $0.isFresh ? $0.usd : nil }
         if price == nil { price = await fetchPRLUsdSafeTrade() }
         if price == nil {
             // Fallback: WhatToMine's PRL→BTC exchange_rate × live BTC/USD.

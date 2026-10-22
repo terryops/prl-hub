@@ -90,7 +90,7 @@ struct DonateView: View {
                 PearlBadge(text: Loc("开源项目 · GPL-3.0"),
                            systemImage: "chevron.left.forwardslash.chevron.right", tint: Pearl.accent)
                 Text(Loc("Pearl Hub 是免费的开源项目，全部代码公开在 GitHub，没有广告和追踪。你的捐赠会直接支持它持续更新。"))
-                    .font(.callout).foregroundStyle(.secondary)
+                    .pearlExplanation()
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                 Link(destination: AppLinks.github) {
@@ -127,7 +127,7 @@ struct DonateView: View {
                     Button(Loc("捐赠")) {
                         if let a = customAmount { prepare(a) }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.borderedProminent).tint(Pearl.plate)
                     .disabled(busy || !(customAmount.map(canAfford) ?? false))
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
@@ -154,7 +154,7 @@ struct DonateView: View {
             .font(.caption).foregroundStyle(.secondary)
 
             Text(Loc("捐赠会从当前钱包直接转到开发者地址，在本机签名并广播，手续费从余额扣除。"))
-                .font(.caption).foregroundStyle(.secondary)
+                .pearlExplanation()
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -211,9 +211,7 @@ struct DonateView: View {
             }
             .pearlCard(padding: Pearl.Space.md)
 
-            Label(Loc("在本机签名，上链后不可撤销"), systemImage: "lock.shield")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            PearlInfoRow(Loc("在本机签名，上链后不可撤销"), systemImage: "lock.shield")
 
             VStack(spacing: Pearl.Space.sm) {
                 Button { donate(p) } label: {

@@ -7,15 +7,21 @@
   recovery phrase stays in the device Keychain; SafeTrade API keys go only to the
   exchange the user configures (iCloud Keychain, end-to-end encrypted) — never to us.
 
-  NSPrivacyCollectedDataTypes: what the optional alert service (pearlhub.net —
-  price alerts, 掉线提醒, the Lock Screen live price) keeps while one of them is on.
-  Nothing is sent before that. All for app functionality, none linked to an identity
-  (there are no accounts), none used for tracking. Keep in step with the App Privacy
-  answers in App Store Connect and with site/privacy.html:
+  NSPrivacyCollectedDataTypes: what our service (pearlhub.net) keeps. Without an
+  email account that is only while price alerts, 掉线提醒 or the Lock Screen live
+  price are on. With the optional email account (2.0) it all belongs to that
+  account, so every type is declared linked. All for app functionality, none
+  used for tracking. Keep in step with the App Privacy answers in App Store
+  Connect and with site/privacy.html:
+    • Email address    — the account's sign-in email
     • Device ID        — the APNs / Live Activity push token
-    • User ID          — 掉线提醒: the pool payout address (F2Pool: read-only page key
-                         and account name) of a monitor the user switched it on for
+    • User ID          — the account id; 掉线提醒: the pool payout address (F2Pool:
+                         read-only page key and account name) of a monitor the user
+                         switched it on for
     • Purchase history — the Pro purchase's transaction id (entitlement, refunds)
+    • Other user content — what the account syncs: monitors, devices, contacts
+                         (names, addresses, notes), the wallets' public receive
+                         addresses and names, and settings
     • Other data       — the alert settings: conditions, monitor names, language,
                          push hours and time zone
 
@@ -35,9 +41,21 @@
     <array>
         <dict>
             <key>NSPrivacyCollectedDataType</key>
+            <string>NSPrivacyCollectedDataTypeEmailAddress</string>
+            <key>NSPrivacyCollectedDataTypeLinked</key>
+            <true/>
+            <key>NSPrivacyCollectedDataTypeTracking</key>
+            <false/>
+            <key>NSPrivacyCollectedDataTypePurposes</key>
+            <array>
+                <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSPrivacyCollectedDataType</key>
             <string>NSPrivacyCollectedDataTypeDeviceID</string>
             <key>NSPrivacyCollectedDataTypeLinked</key>
-            <false/>
+            <true/>
             <key>NSPrivacyCollectedDataTypeTracking</key>
             <false/>
             <key>NSPrivacyCollectedDataTypePurposes</key>
@@ -49,7 +67,7 @@
             <key>NSPrivacyCollectedDataType</key>
             <string>NSPrivacyCollectedDataTypeUserID</string>
             <key>NSPrivacyCollectedDataTypeLinked</key>
-            <false/>
+            <true/>
             <key>NSPrivacyCollectedDataTypeTracking</key>
             <false/>
             <key>NSPrivacyCollectedDataTypePurposes</key>
@@ -61,7 +79,7 @@
             <key>NSPrivacyCollectedDataType</key>
             <string>NSPrivacyCollectedDataTypePurchaseHistory</string>
             <key>NSPrivacyCollectedDataTypeLinked</key>
-            <false/>
+            <true/>
             <key>NSPrivacyCollectedDataTypeTracking</key>
             <false/>
             <key>NSPrivacyCollectedDataTypePurposes</key>
@@ -73,7 +91,19 @@
             <key>NSPrivacyCollectedDataType</key>
             <string>NSPrivacyCollectedDataTypeOtherDataTypes</string>
             <key>NSPrivacyCollectedDataTypeLinked</key>
+            <true/>
+            <key>NSPrivacyCollectedDataTypeTracking</key>
             <false/>
+            <key>NSPrivacyCollectedDataTypePurposes</key>
+            <array>
+                <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSPrivacyCollectedDataType</key>
+            <string>NSPrivacyCollectedDataTypeOtherUserContent</string>
+            <key>NSPrivacyCollectedDataTypeLinked</key>
+            <true/>
             <key>NSPrivacyCollectedDataTypeTracking</key>
             <false/>
             <key>NSPrivacyCollectedDataTypePurposes</key>

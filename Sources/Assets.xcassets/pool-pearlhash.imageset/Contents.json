@@ -3,6 +3,16 @@
     {
       "filename" : "pearlhash.png",
       "idiom" : "universal"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "pearlhash-dark.png",
+      "idiom" : "universal"
     }
   ],
   "info" : {

@@ -16,38 +16,20 @@ struct GPU: Identifiable {
     let rentDefault: Double   // 默认租金，内部按日存储 ¥/天；UI 以 ¥/小时(=÷24) 录入/展示
 }
 
-let GPUS: [GPU] = [
-    GPU(name: "RTX 5090",          pearl: 309, watts: 575,  price: 2200,  rentDefault: 120),
-    // 国行 D 版：CUDA 数与 5090 相同，但 AI TOPS 被限到 2375/3352≈0.708；cuPOW 是矩阵乘 → 按 TOPS 比例推算
-    GPU(name: "RTX 5090 D",        pearl: 219, watts: 575,  price: 2300,  rentDefault: 70),
-    // D V2：算力同 5090 D，显存砍到 24GB/384-bit（原 32GB/512-bit），带宽降级再略减
-    GPU(name: "RTX 5090 D V2",     pearl: 205, watts: 575,  price: 2400,  rentDefault: 65),
-    GPU(name: "RTX 5080",          pearl: 186, watts: 360,  price: 1000,  rentDefault: 65),
-    GPU(name: "RTX 5070 Ti",       pearl: 137, watts: 300,  price: 750,   rentDefault: 50),
-    GPU(name: "RTX 5070",          pearl: 96,  watts: 250,  price: 550,   rentDefault: 38),
-    GPU(name: "RTX 5060 Ti",       pearl: 78,  watts: 180,  price: 430,   rentDefault: 27),
-    GPU(name: "RTX 4090",          pearl: 250, watts: 450,  price: 1600,  rentDefault: 60),
-    // 国行 D 版：14592/16384≈0.891 的削减（CUDA 与 Tensor 同比例），按算力比推算
-    GPU(name: "RTX 4090 D",        pearl: 223, watts: 425,  price: 1700,  rentDefault: 55),
-    GPU(name: "RTX 4080 Super",    pearl: 160, watts: 320,  price: 1000,  rentDefault: 50),
-    GPU(name: "RTX 4080",          pearl: 148, watts: 320,  price: 900,   rentDefault: 44),
-    GPU(name: "RTX 4070 Ti Super", pearl: 135, watts: 285,  price: 800,   rentDefault: 42),
-    GPU(name: "RTX 4070 Super",    pearl: 108, watts: 220,  price: 600,   rentDefault: 32),
-    GPU(name: "RTX 4060 Ti",       pearl: 67,  watts: 160,  price: 350,   rentDefault: 22),
-    GPU(name: "RTX 4060",          pearl: 46,  watts: 115,  price: 300,   rentDefault: 16),
-    GPU(name: "RTX 4060 Laptop",   pearl: 40,  watts: 90,   price: 1000,  rentDefault: 0),
-    GPU(name: "NVIDIA B200",       pearl: 775, watts: 1000, price: 40000, rentDefault: 600),
-    GPU(name: "NVIDIA H100",       pearl: 615, watts: 700,  price: 27000, rentDefault: 430),
-    GPU(name: "NVIDIA L40S",       pearl: 286, watts: 350,  price: 8000,  rentDefault: 200),
-    GPU(name: "NVIDIA A100",       pearl: 131, watts: 400,  price: 12000, rentDefault: 110),
-    GPU(name: "NVIDIA L4",         pearl: 94,  watts: 72,   price: 2400,  rentDefault: 70),
-    GPU(name: "RTX 3090",          pearl: 110, watts: 350,  price: 700,   rentDefault: 35),
-    GPU(name: "RTX 3090 Ti",       pearl: 88,  watts: 450,  price: 800,   rentDefault: 38),
-    GPU(name: "RTX 3070",          pearl: 68,  watts: 220,  price: 300,   rentDefault: 22),
-    GPU(name: "RTX 3080",          pearl: 65,  watts: 320,  price: 350,   rentDefault: 22),
-    GPU(name: "RTX 3060 Ti",       pearl: 62,  watts: 200,  price: 250,   rentDefault: 19),
-    GPU(name: "DGX Spark GB10",    pearl: 50,  watts: 240,  price: 4000,  rentDefault: 0),
-]
+extension GPU: Decodable {
+    enum CodingKeys: String, CodingKey { case name, pearl = "th", watts, price, rentDefault }
+}
+
+/// 显卡参考表（算力 / 功率 / 价格 / 租金），读打包进 App 的同目录 gpus.json。
+/// 后台 /v1/gpus 和网页版用的也是这个文件，改数据只改它，App 随新版本更新。
+struct GPUCatalog: Decodable {
+    let gpus: [GPU]
+    static let bundled: [GPU] = Bundle.main.url(forResource: "gpus", withExtension: "json")
+        .flatMap { try? Data(contentsOf: $0) }
+        .flatMap { try? JSONDecoder().decode(GPUCatalog.self, from: $0) }?.gpus ?? []
+}
+
+let GPUS: [GPU] = GPUCatalog.bundled
 func gpu(_ name: String) -> GPU? { GPUS.first { $0.name == name } }
 
 /// 链上恒等式的常数：算力 = 难度 × 2^48 ÷ 出块时间。
@@ -125,13 +107,15 @@ struct Device: Identifiable, Codable {
     /// nil = use the chip's default rent.
     /// Lets each rented rig use a different price (different rental providers).
     var rentDaily: Double? = nil
+    var rentCurrency: String? = nil
+    var rentFX: Double? = nil
     /// Stable pool-sync identity. Lets a later sync refresh hashrate while keeping
     /// user-edited name/GPU/rent/hour fields on the same worker/address.
     var sourceKey: String? = nil
     var synced: Bool { customPearl != nil }
 }
 extension Device {   // 容错解码：旧存档缺字段时回退默认值
-    enum CodingKeys: String, CodingKey { case id, name, gpu, count, rented, hoursPerDay, customPearl, rentDaily, sourceKey }
+    enum CodingKeys: String, CodingKey { case id, name, gpu, count, rented, hoursPerDay, customPearl, rentDaily, rentCurrency, rentFX, sourceKey }
     init(from dec: Decoder) throws {
         let c = try dec.container(keyedBy: CodingKeys.self)
         id          = (try? c.decode(UUID.self,   forKey: .id))          ?? UUID()
@@ -142,6 +126,8 @@ extension Device {   // 容错解码：旧存档缺字段时回退默认值
         hoursPerDay = (try? c.decode(Double.self, forKey: .hoursPerDay)) ?? 24
         customPearl = try? c.decode(Double.self, forKey: .customPearl)
         rentDaily   = try? c.decode(Double.self, forKey: .rentDaily)
+        rentCurrency = try? c.decode(String.self, forKey: .rentCurrency)
+        rentFX = try? c.decode(Double.self, forKey: .rentFX)
         sourceKey   = try? c.decode(String.self, forKey: .sourceKey)
     }
 }
@@ -155,6 +141,19 @@ enum SortKey: String, CaseIterable, Identifiable {
     case ownNet = "按自有净利", rentNet = "按租用净利", beRent = "按平衡租金"
     case pearl = "按算力", effic = "按能效 P/W"
     var id: String { rawValue }
+    var accountValue: String {
+        switch self {
+        case .ownNet: return "ownNet"
+        case .rentNet: return "rentNet"
+        case .beRent: return "breakEvenRent"
+        case .pearl: return "hash"
+        case .effic: return "efficiency"
+        }
+    }
+    init?(accountValue: String) {
+        guard let value = Self.allCases.first(where: { $0.accountValue == accountValue }) else { return nil }
+        self = value
+    }
 }
 
 // MARK: - 格式化助手

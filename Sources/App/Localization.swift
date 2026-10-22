@@ -4,8 +4,8 @@ import Combine
 // ============================================================
 // Pearl Localization
 // ------------------------------------------------------------
-// In-app, runtime-switchable localization for the five shipped
-// languages. The app ships its UI copy keyed by the original
+// In-app, runtime-switchable localization for the shipped languages
+// (`AppLanguage`). The app ships its UI copy keyed by the original
 // Simplified-Chinese source string — `Loc("设置")` returns the
 // translation for the currently-selected language, falling back
 // to English, then to the Chinese key itself, when a translation
@@ -39,6 +39,16 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     case zhHans = "zh-Hans"      // 简体中文 (the source language)
     case vi
     case id                      // Bahasa Indonesia
+    case es
+    case ptBR = "pt-BR"          // Português (Brasil)
+    case fr
+    case de
+    case it
+    case tr
+    case ja
+    case ko
+    case hi
+    case th
 
     var id: String { rawValue }
 
@@ -62,6 +72,16 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         case .zhHans: return "简体中文"
         case .vi:     return "Tiếng Việt"
         case .id:     return "Bahasa Indonesia"
+        case .es:     return "Español"
+        case .ptBR:   return "Português (Brasil)"
+        case .fr:     return "Français"
+        case .de:     return "Deutsch"
+        case .it:     return "Italiano"
+        case .tr:     return "Türkçe"
+        case .ja:     return "日本語"
+        case .ko:     return "한국어"
+        case .hi:     return "हिन्दी"
+        case .th:     return "ไทย"
         }
     }
 }
