@@ -423,11 +423,21 @@ enum WebLinkMerge {
             var stamp = now
             if let known {
                 stamp = known.content.matches(mine) ? known.updated : max(now, known.updated + 1)
-            } else if twins.contains(w.id), let t = theirs?.monitor, !t.matches(mine) {
-                // Never compared before: keep what either side had set up.
-                if !w.hasAlias { mine.label = t.label }
-                if t.alert, !mine.alert { mine.alert = true; mine.after = t.after; mine.again = t.again }
-                stamp = max(now, (theirs?.updated ?? 0) + 1)
+            } else if let theirs, theirs.deleted {
+                // Never compared from this device, and deleted there: the same id means this is
+                // an old copy of that very monitor (iCloud brought it), not one set up here.
+                stamp = theirs.updated
+            } else if let theirs, let t = theirs.monitor, !t.matches(mine) {
+                // Never compared from this device (its first sync, or the same monitor set up on
+                // both sides): the account's copy wins. This device's may be an old iCloud copy of
+                // it, and taking it would undo what another device changed since — a monitor
+                // switched back on there came back paused. Only what was set up here alone is
+                // added: an alias the account lacks, an offline alert it doesn't have on.
+                var merged = t
+                if w.hasAlias, t.label == PoolKind(rawValue: t.pool)?.label { merged.label = mine.label }
+                if mine.alert, !t.alert { merged.alert = true; merged.after = mine.after; merged.again = mine.again }
+                mine = merged
+                stamp = merged.matches(t) ? theirs.updated : max(now, theirs.updated + 1)
                 _ = adopt(mine, for: w.id)
             }
             // Not changed on the web since the last sync, yet not what it was then: an older

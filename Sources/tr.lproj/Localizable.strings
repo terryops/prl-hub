@@ -1179,7 +1179,7 @@
 "SafeTrade、CoinGecko、WhatToMine、MiningPoolStats、open.er-api.com 等公开数据源，请求不带地址。" = "SafeTrade, CoinGecko, WhatToMine, MiningPoolStats ve open.er-api.com gibi herkese açık kaynaklar. Bu istekler adres taşımaz.";
 "行情与汇率" = "Fiyatlar ve döviz kurları";
 "存在你设备上的数据" = "Cihazlarınızda saklananlar";
-"钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。" = "Cüzdan veritabanı, adres defteri, ayarlar ve önbellekler bu cihazda kalır; cüzdan veritabanı yedeklere girmez. Giriş bilgileri bu cihazın Anahtar Zinciri'nde saklanır.";
+"钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。登录后还有一张登录票经 iCloud 钥匙串同步（Apple 端到端加密），你的其他设备凭它免验证码登录。" = "Cüzdan veritabanı, adres defteri, ayarlar ve önbellekler bu cihazda kalır; cüzdan veritabanı yedeklere girmez. Giriş bilgileri bu cihazın Anahtar Zinciri'nde saklanır. Giriş yaptıktan sonra bir giriş bileti de iCloud Anahtar Zinciri üzerinden eşzamanlanır (Apple tarafından uçtan uca şifreli); böylece diğer cihazlarınız kod olmadan giriş yapabilir.";
 "本机" = "Bu cihaz";
 "矿池监控、提醒、地址簿、钱包名称、显卡与电费、语言和外观等设置，通过你自己的 iCloud 在你的设备间同步，我们无法访问。助记词从不同步。" = "Havuz izleyicileri, alarmlar, adres defteri, cüzdan adları, GPU'lar ve elektrik maliyeti, dil ve görünüm gibi ayarlar kendi iCloud'unuz üzerinden cihazlarınız arasında eşzamanlanır; buna erişimimiz yoktur. Kurtarma ifadesi asla eşzamanlanmaz.";
 "iCloud 同步（高级版）" = "iCloud eşzamanlama (Pro)";
@@ -1189,3 +1189,10 @@
 "App（iPhone / iPad / Mac）" = "Uygulama (iPhone / iPad / Mac)";
 "网页版前端" = "Web arayüzü";
 "服务器后台" = "Sunucu";
+
+/* 邮箱账号: sign in once, on every device (DeviceTicket) */
+"登录未完成，请用邮箱登录" = "Giriş tamamlanmadı. Lütfen e-posta ile giriş yapın.";
+"其他设备已登录" = "Başka bir cihazda giriş yapıldı";
+"%@ 已在你的其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "%@ başka bir cihazınızda giriş yapmış. Burada kod olmadan doğrudan giriş yapabilirsiniz; bu cihazın ayarları korunur.";
+"你的账号已在其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "Hesabınızla başka bir cihazınızda giriş yapılmış. Burada kod olmadan doğrudan giriş yapabilirsiniz; bu cihazın ayarları korunur.";
+"直接登录" = "Doğrudan giriş yap";

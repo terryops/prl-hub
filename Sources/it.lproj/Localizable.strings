@@ -1179,7 +1179,7 @@
 "SafeTrade、CoinGecko、WhatToMine、MiningPoolStats、open.er-api.com 等公开数据源，请求不带地址。" = "Fonti pubbliche come SafeTrade, CoinGecko, WhatToMine, MiningPoolStats e open.er-api.com. Queste richieste non contengono indirizzi.";
 "行情与汇率" = "Prezzi e tassi di cambio";
 "存在你设备上的数据" = "Archiviato sui tuoi dispositivi";
-"钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。" = "Database del portafoglio, rubrica, impostazioni e cache restano su questo dispositivo, e il database del portafoglio è escluso dai backup. Le credenziali di accesso sono conservate nel portachiavi di questo dispositivo.";
+"钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。登录后还有一张登录票经 iCloud 钥匙串同步（Apple 端到端加密），你的其他设备凭它免验证码登录。" = "Database del portafoglio, rubrica, impostazioni e cache restano su questo dispositivo, e il database del portafoglio è escluso dai backup. Le credenziali di accesso sono conservate nel portachiavi di questo dispositivo. Dopo l'accesso, un ticket di accesso viene sincronizzato anche tramite il portachiavi di iCloud (crittografato end-to-end da Apple), così gli altri tuoi dispositivi accedono senza codice.";
 "本机" = "Questo dispositivo";
 "矿池监控、提醒、地址簿、钱包名称、显卡与电费、语言和外观等设置，通过你自己的 iCloud 在你的设备间同步，我们无法访问。助记词从不同步。" = "Impostazioni come monitor dei pool, avvisi, rubrica, nomi dei portafogli, GPU e costo dell'elettricità, lingua e aspetto si sincronizzano tra i tuoi dispositivi tramite il tuo iCloud, a cui non abbiamo accesso. La frase di recupero non viene mai sincronizzata.";
 "iCloud 同步（高级版）" = "Sincronizzazione iCloud (Pro)";
@@ -1189,3 +1189,10 @@
 "App（iPhone / iPad / Mac）" = "App (iPhone / iPad / Mac)";
 "网页版前端" = "Frontend web";
 "服务器后台" = "Server";
+
+/* 邮箱账号: sign in once, on every device (DeviceTicket) */
+"登录未完成，请用邮箱登录" = "Accesso non completato. Accedi con l'email.";
+"其他设备已登录" = "Accesso eseguito su un altro dispositivo";
+"%@ 已在你的其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "%@ ha eseguito l'accesso su un altro dei tuoi dispositivi. Puoi accedere qui direttamente, senza codice, e le impostazioni di questo dispositivo vengono mantenute.";
+"你的账号已在其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "Il tuo account ha eseguito l'accesso su un altro dei tuoi dispositivi. Puoi accedere qui direttamente, senza codice, e le impostazioni di questo dispositivo vengono mantenute.";
+"直接登录" = "Accedi direttamente";

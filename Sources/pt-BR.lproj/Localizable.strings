@@ -1179,7 +1179,7 @@
 "SafeTrade、CoinGecko、WhatToMine、MiningPoolStats、open.er-api.com 等公开数据源，请求不带地址。" = "Fontes públicas como SafeTrade, CoinGecko, WhatToMine, MiningPoolStats e open.er-api.com. Essas solicitações não levam endereço.";
 "行情与汇率" = "Preços e câmbio";
 "存在你设备上的数据" = "O que fica nos seus dispositivos";
-"钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。" = "O banco de dados da carteira, a agenda de endereços, os ajustes e o cache ficam neste dispositivo, e o banco de dados da carteira não entra nos backups. As credenciais de login ficam nas Chaves deste dispositivo.";
+"钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。登录后还有一张登录票经 iCloud 钥匙串同步（Apple 端到端加密），你的其他设备凭它免验证码登录。" = "O banco de dados da carteira, a agenda de endereços, os ajustes e o cache ficam neste dispositivo, e o banco de dados da carteira não entra nos backups. As credenciais de login ficam nas Chaves deste dispositivo. Depois do login, um tíquete de login também é sincronizado pelas Chaves do iCloud (com criptografia de ponta a ponta da Apple), para que seus outros dispositivos entrem sem código.";
 "本机" = "Este dispositivo";
 "矿池监控、提醒、地址簿、钱包名称、显卡与电费、语言和外观等设置，通过你自己的 iCloud 在你的设备间同步，我们无法访问。助记词从不同步。" = "Ajustes como monitores de pool, alertas, agenda de endereços, nomes das carteiras, GPUs e custo de energia, idioma e aparência são sincronizados entre seus dispositivos pelo seu próprio iCloud, ao qual não temos acesso. A frase de recuperação nunca é sincronizada.";
 "iCloud 同步（高级版）" = "Sincronização com iCloud (Pro)";
@@ -1189,3 +1189,10 @@
 "App（iPhone / iPad / Mac）" = "App (iPhone / iPad / Mac)";
 "网页版前端" = "Frontend web";
 "服务器后台" = "Servidor";
+
+/* 邮箱账号: sign in once, on every device (DeviceTicket) */
+"登录未完成，请用邮箱登录" = "O login não foi concluído. Entre com seu e-mail.";
+"其他设备已登录" = "Conectado em outro dispositivo";
+"%@ 已在你的其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "%@ está conectado em outro dos seus dispositivos. Você pode entrar aqui diretamente, sem código, e os ajustes deste dispositivo são mantidos.";
+"你的账号已在其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "Sua conta está conectada em outro dos seus dispositivos. Você pode entrar aqui diretamente, sem código, e os ajustes deste dispositivo são mantidos.";
+"直接登录" = "Entrar diretamente";

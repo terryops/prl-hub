@@ -114,6 +114,8 @@ struct RootView: View {
             // Seeds only keys the cloud has never seen, then pulls — a value another
             // device saved while this one was closed wins over the stale local copy.
             CloudSync.start()
+            // Signed in on another device: follow it (sign in once, on every device).
+            Task { await account.join(automatic: true) }
             await currency.refreshIfStale()   // daily-cached USD rate table
         }
         // Re-pull from iCloud on every foreground so keys/config saved on another

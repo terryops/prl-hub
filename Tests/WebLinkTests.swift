@@ -276,6 +276,46 @@ struct WebLinkMonitorTests {
         #expect(!merge(out.local.watches, minutes: out.local.minutes, base: out.base, remote: out.config, now: 9_000).upload)
     }
 
+    /// A device signing in for the first time often holds an old iCloud copy of the account's
+    /// monitors (same ids). The account's copy wins: a monitor switched back on elsewhere stays
+    /// on, and one deleted elsewhere goes.
+    @Test func aFirstSyncDoesNotUndoTheAccountsNewerChanges() throws {
+        var paused = PoolWatch(pool: .kryptex, address: addr)
+        paused.enabled = false
+        paused.alias = "Barn"
+        let gone = PoolWatch(pool: .alphaPool, address: addr2)
+        let remote: [String: Any] = ["monitors": [
+            entry(paused.id.uuidString, addr: addr, label: "Shed", updated: 3_000),
+            ["id": gone.id.uuidString, "updated": Int64(4_000), "deleted": true],
+        ]]
+        let out = merge([paused, gone], minutes: [gone.id: 10], remote: remote)
+        // Nothing of the account's monitors is overwritten (only the card order, which it lacks, goes up).
+        let sent = monitors(out.config)
+        #expect(sent.count == 2)
+        #expect(sent[0]["updated"] as? Int64 == 3_000 && sent[0]["paused"] == nil && sent[0]["label"] as? String == "Shed")
+        #expect(sent[1]["deleted"] as? Bool == true && sent[1]["updated"] as? Int64 == 4_000)
+        let w = try #require(out.local.watches.first)
+        #expect(out.local.watches.count == 1)
+        #expect(w.id == paused.id && w.isEnabled && w.enabled == nil && w.alias == "Shed")
+        #expect(out.local.minutes.isEmpty)
+        #expect(out.base.monitors[paused.id.uuidString]?.updated == 3_000)
+        #expect(!merge(out.local.watches, minutes: out.local.minutes, base: out.base, remote: out.config, now: 9_000).upload)
+    }
+
+    /// …but what was set up on this device alone is added to the account's copy.
+    @Test func aFirstSyncAddsAnAliasAndAnAlertOnlyThisDeviceHas() throws {
+        var a = PoolWatch(pool: .kryptex, address: addr)
+        a.alias = "Barn"
+        let remote: [String: Any] = ["monitors": [entry(a.id.uuidString, addr: addr, label: "Kryptex", updated: 3_000)]]
+        let out = merge([a], minutes: [a.id: 30], remote: remote)
+        #expect(out.upload)
+        let sent = monitors(out.config)[0]
+        #expect(sent["label"] as? String == "Barn")
+        #expect(sent["alert"] as? Bool == true && sent["after"] as? Int == 1800)
+        #expect(sent["updated"] as? Int64 == 5_000)
+        #expect(out.local.watches.first?.alias == "Barn" && out.local.minutes == [a.id: 30])
+    }
+
     /// What this build can't read — a pool a later version added, a field it doesn't know —
     /// goes back exactly as it came.
     @Test func whatItCannotReadItLeavesAlone() throws {
@@ -1026,5 +1066,47 @@ struct WebWalletSyncTests {
         defaults.set(Data("[{\"future\":1}]".utf8), forKey: "wallet.list")
         #expect(WebSharedMerge.read(defaults)["wallets"] == nil)
         #expect(!WebSharedMerge.nativeKeys.contains("wallet.list"))   // never swapped per account
+    }
+}
+
+/// Sign in once, on every device: when a signed-in device leaves a fresh ticket in iCloud
+/// Keychain, and which ticket a device that isn't signed in may use.
+struct DeviceTicketTests {
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+    private func ticket(user: String = "u_me", device: String = "phone", age: TimeInterval = 0,
+                        life: TimeInterval = 30 * 86400) -> DeviceTicket {
+        let issued = now.addingTimeInterval(-age)
+        return DeviceTicket(user: user, email: "me@example.com", ticket: String(repeating: "t", count: 43),
+                            device: device, issued: issued, expires: issued.addingTimeInterval(life))
+    }
+
+    @Test func roundTripsThroughTheKeychainText() throws {
+        let t = ticket()
+        let text = try #require(t.encoded)
+        #expect(DeviceTicket.decode(text) == t)
+        #expect(DeviceTicket.decode("not json") == nil)
+    }
+
+    @Test func aSignedInDeviceRenewsItsAccountsTicketWeekly() {
+        #expect(DeviceTicket.needsIssue(nil, user: "u_me", now: now))
+        #expect(!DeviceTicket.needsIssue(ticket(age: 86400), user: "u_me", now: now))
+        // Issued by another device of the same account: renewed all the same once it's a week old.
+        #expect(!DeviceTicket.needsIssue(ticket(device: "mac", age: 6 * 86400), user: "u_me", now: now))
+        #expect(DeviceTicket.needsIssue(ticket(device: "mac", age: 7 * 86400), user: "u_me", now: now))
+        // About to run out.
+        #expect(DeviceTicket.needsIssue(ticket(age: 0, life: 3600), user: "u_me", now: now))
+    }
+
+    @Test func anotherAccountsLiveTicketIsLeftAlone() {
+        #expect(!DeviceTicket.needsIssue(ticket(user: "u_other", age: 20 * 86400), user: "u_me", now: now))
+        #expect(DeviceTicket.needsIssue(ticket(user: "u_other", age: 30 * 86400), user: "u_me", now: now))
+    }
+
+    @Test func onlyAnotherInstallationsTicketInDateIsUsable() {
+        #expect(DeviceTicket.usable(nil, device: "mac", now: now) == nil)
+        #expect(DeviceTicket.usable(ticket(), device: "mac", now: now) == ticket())
+        #expect(DeviceTicket.usable(ticket(), device: nil, now: now) == ticket())   // never signed in here
+        #expect(DeviceTicket.usable(ticket(), device: "phone", now: now) == nil)    // its own
+        #expect(DeviceTicket.usable(ticket(age: 30 * 86400), device: "mac", now: now) == nil)
     }
 }

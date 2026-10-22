@@ -88,6 +88,7 @@ final class WebLinkStore: NSObject, ObservableObject, ASWebAuthenticationPresent
         // purchase is made later): hand it over then.
         jwsSub = ProStore.shared.$jws.dropFirst().removeDuplicates().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.proNeedsRefresh = true; self?.localChanged() }
+        refreshOffer()
     }
 
     // MARK: linking
@@ -99,19 +100,25 @@ final class WebLinkStore: NSObject, ObservableObject, ASWebAuthenticationPresent
         return NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first ?? ASPresentationAnchor()
         #endif
     }
+    /// This installation as the account sees it. The id is created on first use and stays on
+    /// this device (not synced): every device signs in as itself.
+    private func installation() -> (id: String, platform: String, name: String)? {
+        let device = Keychain.get(account: "account.device") ?? UUID().uuidString
+        guard Keychain.set(device, account: "account.device") else { return nil }
+        #if os(iOS)
+        return (device, "ios", UIDevice.current.name)
+        #else
+        return (device, "macos", Host.current().localizedName ?? "Mac")
+        #endif
+    }
+
     func login(importLocal: Bool) async {
         guard !signingIn else { return }
         signingIn = true; defer { signingIn = false; browserSession = nil }
         let at = generation, verifier = AccountPKCE.random(), nonce = AccountPKCE.random()
-        let device = Keychain.get(account: "account.device") ?? UUID().uuidString
-        guard Keychain.set(device, account: "account.device") else { state = .failed(Loc("无法安全保存登录信息")); return }
-        #if os(iOS)
-        let platform = "ios", name = UIDevice.current.name
-        #else
-        let platform = "macos", name = Host.current().localizedName ?? "Mac"
-        #endif
+        guard let me = installation() else { state = .failed(Loc("无法安全保存登录信息")); return }
         var url = URLComponents(string: "https://pearlhub.net/")!
-        url.queryItems = [URLQueryItem(name: "account", value: "connect"), URLQueryItem(name: "redirect_uri", value: "prlhub://account"), URLQueryItem(name: "code_challenge", value: AccountPKCE.challenge(verifier)), URLQueryItem(name: "state", value: nonce), URLQueryItem(name: "device_id", value: device), URLQueryItem(name: "platform", value: platform), URLQueryItem(name: "device_name", value: name), URLQueryItem(name: "reauth", value: "1")]
+        url.queryItems = [URLQueryItem(name: "account", value: "connect"), URLQueryItem(name: "redirect_uri", value: "prlhub://account"), URLQueryItem(name: "code_challenge", value: AccountPKCE.challenge(verifier)), URLQueryItem(name: "state", value: nonce), URLQueryItem(name: "device_id", value: me.id), URLQueryItem(name: "platform", value: me.platform), URLQueryItem(name: "device_name", value: me.name), URLQueryItem(name: "reauth", value: "1")]
         do {
             let callback: URL = try await withCheckedThrowingContinuation { continuation in
                 let session = ASWebAuthenticationSession(url: url.url!, callbackURLScheme: "prlhub") { url, error in
@@ -122,38 +129,105 @@ final class WebLinkStore: NSObject, ObservableObject, ASWebAuthenticationPresent
             }
             guard at == generation, let code = AccountPKCE.code(callback, state: nonce) else { throw Failure.refused }
             let body = try await raw("auth/exchange", method: "POST", body: ["code": code, "code_verifier": verifier, "redirect_uri": "prlhub://account"])
-            var next = try AccountSession(body)
+            let next = try AccountSession(body)
             let info = try await raw("account", token: next.accessToken, user: next.userId)
             guard at == generation else { return }
-            // The server's verdict came with the login: an account that has Pro must not
-            // look as if it lost it until the first sync answers.
-            next.pro = info["pro"] as? Bool
-            let old = credentials?.userId
-            let d = UserDefaults.standard
-            if old != next.userId {
-                NotificationCenter.default.post(name: .accountPreferencesWillChange, object: nil)
-                snapshot(old)
-                if d.dictionary(forKey: "account.prefs." + next.userId) == nil {
-                    let imported = importLocal || info["pro"] as? Bool != true ? d.dictionary(forKey: "account.prefs." + (old ?? "guest")) ?? [:] : [:]
-                    d.set(imported, forKey: "account.prefs." + next.userId)
-                }
-                d.set(next.userId, forKey: "account.pendingPrefs")
-            }
-            guard saveSession(next) else { d.removeObject(forKey: "account.pendingPrefs"); throw Failure.refused }
-            if old != next.userId {
-                AccountPreferences.restore(next.userId)
-                base = WebLinkBase()
-                if let data = d.data(forKey: "account.base." + next.userId), let b = try? JSONDecoder().decode(WebLinkBase.self, from: data) { base = b }
-            }
-            credentials = next; generation += 1; email = info["email"] as? String
-            UserDefaults.standard.set(next.userId, forKey: "account.current")
-            d.removeObject(forKey: "account.pendingPrefs")
-            UserDefaults.standard.set(email, forKey: "account.email." + next.userId)
-            accountPro = next.pro; offered = nil; proNeedsRefresh = true; synced = nil
-            ProStore.shared.useAccount(next.userId, verifiedPro: next.pro == true)
-            NotificationCenter.default.post(name: .cloudSyncDidUpdate, object: nil)
+            try begin(next, info: info, importLocal: importLocal)
+            // Signed in by hand: this is the account the user's other devices should follow.
+            await keepTicket(force: true)
             await sync()
         } catch { if at == generation { state = .failed(Loc("邮箱登录未完成，请重试")) } }
+    }
+
+    /// Make `next` this device's session: the account's preferences become the live ones
+    /// (starting from this device's own when `importLocal`, or when the account has no Pro to
+    /// sync with), and the stores reload.
+    private func begin(_ next: AccountSession, info: [String: Any], importLocal: Bool) throws {
+        var next = next
+        // The server's verdict came with the login: an account that has Pro must not
+        // look as if it lost it until the first sync answers.
+        next.pro = info["pro"] as? Bool
+        let old = credentials?.userId
+        let d = UserDefaults.standard
+        if old != next.userId {
+            NotificationCenter.default.post(name: .accountPreferencesWillChange, object: nil)
+            snapshot(old)
+            if d.dictionary(forKey: "account.prefs." + next.userId) == nil {
+                let imported = importLocal || info["pro"] as? Bool != true ? d.dictionary(forKey: "account.prefs." + (old ?? "guest")) ?? [:] : [:]
+                d.set(imported, forKey: "account.prefs." + next.userId)
+            }
+            d.set(next.userId, forKey: "account.pendingPrefs")
+        }
+        guard saveSession(next) else { d.removeObject(forKey: "account.pendingPrefs"); throw Failure.refused }
+        if old != next.userId {
+            AccountPreferences.restore(next.userId)
+            base = WebLinkBase()
+            if let data = d.data(forKey: "account.base." + next.userId), let b = try? JSONDecoder().decode(WebLinkBase.self, from: data) { base = b }
+        }
+        credentials = next; generation += 1; email = info["email"] as? String
+        d.set(next.userId, forKey: "account.current")
+        d.removeObject(forKey: "account.pendingPrefs")
+        d.set(email, forKey: "account.email." + next.userId)
+        // Signed in (again) on purpose: the user's other devices may follow this one again.
+        d.removeObject(forKey: Self.declinedKey)
+        accountPro = next.pro; offered = nil; proNeedsRefresh = true; synced = nil; offer = nil
+        ProStore.shared.useAccount(next.userId, verifiedPro: next.pro == true)
+        NotificationCenter.default.post(name: .cloudSyncDidUpdate, object: nil)
+    }
+
+    // MARK: sign in once, on every device (DeviceTicket)
+
+    /// The account this device was signed out of (by hand, or removed from the account's
+    /// device list): its ticket is offered, never used by itself.
+    static let declinedKey = "account.ticketDeclined"
+
+    /// Another device's ticket this one could sign in with; nil while signed in.
+    @Published private(set) var offer: DeviceTicket?
+
+    private func refreshOffer() {
+        let next = isLinked ? nil : DeviceTicket.usable(DeviceTicket.read(), device: Keychain.get(account: "account.device"), now: Date())
+        if next != offer { offer = next }
+    }
+
+    /// Sign in with the ticket another of the user's devices left in iCloud Keychain.
+    /// `automatic` (launch, foreground) skips an account this device was signed out of and
+    /// stays quiet on failure; the 用 … 登录 button does neither.
+    func join(automatic: Bool) async {
+        refreshOffer()
+        guard !isLinked, !signingIn, let held = offer else { return }
+        if automatic, UserDefaults.standard.string(forKey: Self.declinedKey) == held.user { return }
+        signingIn = true; defer { signingIn = false }
+        let at = generation
+        do {
+            guard let me = installation() else { throw Failure.refused }
+            let body = try await raw("auth/ticket", method: "POST", body: ["ticket": held.ticket, "device_id": me.id, "platform": me.platform, "device_name": me.name])
+            let next = try AccountSession(body)
+            let info = try await raw("account", token: next.accessToken, user: next.userId)
+            guard at == generation, !isLinked else { return }
+            try begin(next, info: info, importLocal: true)
+            await sync()
+        } catch {
+            guard at == generation else { return }
+            if case Failure.refused = error {
+                // Out of date, or its device signed out: a signed-in device will leave a new one.
+                if DeviceTicket.read()?.ticket == held.ticket { DeviceTicket.delete() }
+                refreshOffer()
+            }
+            if !automatic { state = .failed(Loc("登录未完成，请用邮箱登录")) }
+        }
+    }
+
+    /// Leave a ticket for the user's other devices: a new one when signing in by hand
+    /// (`force`), otherwise only when there is none or it is due (DeviceTicket.needsIssue).
+    private func keepTicket(force: Bool = false) async {
+        guard let me = credentials?.userId, let device = Keychain.get(account: "account.device"),
+              force || DeviceTicket.needsIssue(DeviceTicket.read(), user: me, now: Date()) else { return }
+        // A server without tickets yet answers 404: nothing is left, and nothing is lost.
+        guard let body = try? await call(me, "account/ticket", method: "POST", body: [:]),
+              let ticket = body["ticket"] as? String, let life = (body["expires_in"] as? NSNumber)?.doubleValue,
+              credentials?.userId == me else { return }
+        let now = Date()
+        DeviceTicket(user: me, email: email, ticket: ticket, device: device, issued: now, expires: now.addingTimeInterval(life)).write()
     }
     private func snapshot(_ uid: String?) {
         AccountPreferences.snapshot(uid)
@@ -168,12 +242,22 @@ final class WebLinkStore: NSObject, ObservableObject, ASWebAuthenticationPresent
     }
     private func clearSession() {
         NotificationCenter.default.post(name: .accountPreferencesWillChange, object: nil)
+        if let uid = credentials?.userId {
+            // Signed out here, or removed from the account: this device doesn't sign back in
+            // by itself (the ticket is still offered on the 邮箱账号 page).
+            UserDefaults.standard.set(uid, forKey: Self.declinedKey)
+            // This device's own ticket hangs on the session that just ended.
+            if let held = DeviceTicket.read(), held.user == uid, held.device == Keychain.get(account: "account.device") {
+                DeviceTicket.delete()
+            }
+        }
         snapshot(credentials?.userId); generation += 1; pending?.cancel(); refreshTask?.cancel(); refreshTask = nil
         Keychain.delete(account: Self.account); credentials = nil; email = nil; accountPro = nil; offered = nil; base = WebLinkBase(); synced = nil; state = .idle
         ProStore.shared.useAccount(nil)
         UserDefaults.standard.removeObject(forKey: "account.current")
         AccountPreferences.restore(nil)
         NotificationCenter.default.post(name: .cloudSyncDidUpdate, object: nil)
+        refreshOffer()
     }
 
     // MARK: when to sync
@@ -209,7 +293,8 @@ final class WebLinkStore: NSObject, ObservableObject, ASWebAuthenticationPresent
 
     /// The app came to the front: pick up what changed on the web meanwhile.
     func foreground() {
-        guard isLinked else { return }
+        // Not signed in: another device may have left a ticket since.
+        guard isLinked else { Task { await join(automatic: true) }; return }
         busy.removeAll()
         if case .synced(let at) = state, Date().timeIntervalSince(at) < Self.fresh { return }
         Task { await sync() }
@@ -231,6 +316,7 @@ final class WebLinkStore: NSObject, ObservableObject, ASWebAuthenticationPresent
         do {
             try await syncPro(code, full: full)
             guard credentials?.userId == code else { return }
+            if full { await keepTicket() }
             guard accountPro == true else { state = .idle; return }
             try await syncConfig(code)
             if credentials?.userId == code { state = .synced(Date()) }

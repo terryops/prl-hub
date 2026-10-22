@@ -53,7 +53,7 @@ struct SecurityInfoView: View {
             .pearlListRowSurface()
 
             Section(Loc("存在你设备上的数据")) {
-                PearlInfoRow(Loc("钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。"),
+                PearlInfoRow(Loc("钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。登录后还有一张登录票经 iCloud 钥匙串同步（Apple 端到端加密），你的其他设备凭它免验证码登录。"),
                              title: Loc("本机"), systemImage: "internaldrive")
                 PearlInfoRow(Loc("矿池监控、提醒、地址簿、钱包名称、显卡与电费、语言和外观等设置，通过你自己的 iCloud 在你的设备间同步，我们无法访问。助记词从不同步。"),
                              title: Loc("iCloud 同步（高级版）"), systemImage: "icloud")

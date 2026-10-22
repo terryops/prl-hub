@@ -13,6 +13,7 @@ struct WebLinkView: View {
                 membership
                 management
             } else {
+                if let offer = link.offer { signedInElsewhere(offer) }
                 Section {
                     whatSyncs
                     proOnly
@@ -28,6 +29,23 @@ struct WebLinkView: View {
     }
 
     // MARK: Signed out
+
+    /// Another of the user's devices left a ticket in iCloud Keychain. A device that hasn't
+    /// been signed out uses it by itself; this is for one that has, or was offline then.
+    private func signedInElsewhere(_ offer: DeviceTicket) -> some View {
+        Section {
+            PearlInfoRow(offer.email.map { Loc("%@ 已在你的其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。", $0) }
+                            ?? Loc("你的账号已在其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。"),
+                         title: Loc("其他设备已登录"), systemImage: "laptopcomputer.and.iphone")
+            Button(Loc("直接登录")) { Task { await link.join(automatic: false) } }
+                .buttonStyle(.pearl)
+                .frame(maxWidth: 420)
+                .padding(.vertical, Pearl.Space.xxs)
+                .accessibilityIdentifier("account-join")
+        }
+        .disabled(link.signingIn)
+        .pearlListRowSurface()
+    }
 
     private var signIn: some View {
         Section {

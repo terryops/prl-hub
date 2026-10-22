@@ -1179,7 +1179,7 @@
 "SafeTrade、CoinGecko、WhatToMine、MiningPoolStats、open.er-api.com 等公开数据源，请求不带地址。" = "Öffentliche Quellen wie SafeTrade, CoinGecko, WhatToMine, MiningPoolStats und open.er-api.com. Diese Anfragen enthalten keine Adresse.";
 "行情与汇率" = "Kurse und Wechselkurse";
 "存在你设备上的数据" = "Auf deinen Geräten gespeichert";
-"钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。" = "Wallet-Datenbank, Adressbuch, Einstellungen und Caches bleiben auf diesem Gerät, und die Wallet-Datenbank ist von Backups ausgeschlossen. Anmeldedaten liegen im Schlüsselbund dieses Geräts.";
+"钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。登录后还有一张登录票经 iCloud 钥匙串同步（Apple 端到端加密），你的其他设备凭它免验证码登录。" = "Wallet-Datenbank, Adressbuch, Einstellungen und Caches bleiben auf diesem Gerät, und die Wallet-Datenbank ist von Backups ausgeschlossen. Anmeldedaten liegen im Schlüsselbund dieses Geräts. Nach der Anmeldung wird zusätzlich ein Anmeldeticket über den iCloud-Schlüsselbund synchronisiert (von Apple Ende-zu-Ende-verschlüsselt), damit sich deine anderen Geräte ohne Code anmelden können.";
 "本机" = "Dieses Gerät";
 "矿池监控、提醒、地址簿、钱包名称、显卡与电费、语言和外观等设置，通过你自己的 iCloud 在你的设备间同步，我们无法访问。助记词从不同步。" = "Einstellungen wie Pool-Monitore, Alarme, Adressbuch, Wallet-Namen, GPUs und Stromkosten, Sprache und Darstellung werden über dein eigenes iCloud zwischen deinen Geräten synchronisiert; wir haben keinen Zugriff darauf. Die Wiederherstellungsphrase wird nie synchronisiert.";
 "iCloud 同步（高级版）" = "iCloud-Synchronisierung (Pro)";
@@ -1189,3 +1189,10 @@
 "App（iPhone / iPad / Mac）" = "App (iPhone / iPad / Mac)";
 "网页版前端" = "Web-Frontend";
 "服务器后台" = "Server";
+
+/* 邮箱账号: sign in once, on every device (DeviceTicket) */
+"登录未完成，请用邮箱登录" = "Anmeldung nicht abgeschlossen. Bitte mit E-Mail anmelden.";
+"其他设备已登录" = "Auf einem anderen Gerät angemeldet";
+"%@ 已在你的其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "%@ ist auf einem deiner anderen Geräte angemeldet. Du kannst dich hier direkt anmelden, ohne Code, und die Einstellungen dieses Geräts bleiben erhalten.";
+"你的账号已在其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "Dein Konto ist auf einem deiner anderen Geräte angemeldet. Du kannst dich hier direkt anmelden, ohne Code, und die Einstellungen dieses Geräts bleiben erhalten.";
+"直接登录" = "Direkt anmelden";

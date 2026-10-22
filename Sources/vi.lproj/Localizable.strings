@@ -1179,7 +1179,7 @@
 "SafeTrade、CoinGecko、WhatToMine、MiningPoolStats、open.er-api.com 等公开数据源，请求不带地址。" = "Các nguồn công khai như SafeTrade, CoinGecko, WhatToMine, MiningPoolStats và open.er-api.com. Các yêu cầu không kèm địa chỉ.";
 "行情与汇率" = "Giá và tỷ giá";
 "存在你设备上的数据" = "Dữ liệu lưu trên thiết bị của bạn";
-"钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。" = "Cơ sở dữ liệu ví, sổ địa chỉ, cài đặt và bộ nhớ đệm đều ở trên thiết bị này; cơ sở dữ liệu ví không nằm trong bản sao lưu. Thông tin đăng nhập được lưu trong Keychain của thiết bị này.";
+"钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。登录后还有一张登录票经 iCloud 钥匙串同步（Apple 端到端加密），你的其他设备凭它免验证码登录。" = "Cơ sở dữ liệu ví, sổ địa chỉ, cài đặt và bộ nhớ đệm đều ở trên thiết bị này; cơ sở dữ liệu ví không nằm trong bản sao lưu. Thông tin đăng nhập được lưu trong Keychain của thiết bị này. Sau khi đăng nhập, một vé đăng nhập cũng được đồng bộ qua iCloud Keychain (Apple mã hóa đầu cuối), để các thiết bị khác của bạn đăng nhập mà không cần mã.";
 "本机" = "Thiết bị này";
 "矿池监控、提醒、地址簿、钱包名称、显卡与电费、语言和外观等设置，通过你自己的 iCloud 在你的设备间同步，我们无法访问。助记词从不同步。" = "Các cài đặt như trình theo dõi pool, cảnh báo, sổ địa chỉ, tên ví, GPU và tiền điện, ngôn ngữ và giao diện được đồng bộ giữa các thiết bị của bạn qua iCloud của chính bạn, chúng tôi không thể truy cập. Cụm từ khôi phục không bao giờ được đồng bộ.";
 "iCloud 同步（高级版）" = "Đồng bộ iCloud (Pro)";
@@ -1189,3 +1189,10 @@
 "App（iPhone / iPad / Mac）" = "Ứng dụng (iPhone / iPad / Mac)";
 "网页版前端" = "Giao diện web";
 "服务器后台" = "Máy chủ";
+
+/* 邮箱账号: sign in once, on every device (DeviceTicket) */
+"登录未完成，请用邮箱登录" = "Chưa đăng nhập xong. Vui lòng đăng nhập bằng email.";
+"其他设备已登录" = "Đã đăng nhập trên thiết bị khác";
+"%@ 已在你的其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "%@ đã đăng nhập trên một thiết bị khác của bạn. Bạn có thể đăng nhập trực tiếp tại đây mà không cần mã, và cài đặt của thiết bị này được giữ lại.";
+"你的账号已在其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "Tài khoản của bạn đã đăng nhập trên một thiết bị khác của bạn. Bạn có thể đăng nhập trực tiếp tại đây mà không cần mã, và cài đặt của thiết bị này được giữ lại.";
+"直接登录" = "Đăng nhập trực tiếp";

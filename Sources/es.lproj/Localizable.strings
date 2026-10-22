@@ -1179,7 +1179,7 @@
 "SafeTrade、CoinGecko、WhatToMine、MiningPoolStats、open.er-api.com 等公开数据源，请求不带地址。" = "Fuentes públicas como SafeTrade, CoinGecko, WhatToMine, MiningPoolStats y open.er-api.com. Estas solicitudes no llevan ninguna dirección.";
 "行情与汇率" = "Precios y tipos de cambio";
 "存在你设备上的数据" = "Lo que se guarda en tus dispositivos";
-"钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。" = "La base de datos de la cartera, la libreta de direcciones, los ajustes y la caché se quedan en este dispositivo, y la base de datos de la cartera no entra en las copias de seguridad. Las credenciales de inicio de sesión se guardan en el llavero de este dispositivo.";
+"钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。登录后还有一张登录票经 iCloud 钥匙串同步（Apple 端到端加密），你的其他设备凭它免验证码登录。" = "La base de datos de la cartera, la libreta de direcciones, los ajustes y la caché se quedan en este dispositivo, y la base de datos de la cartera no entra en las copias de seguridad. Las credenciales de inicio de sesión se guardan en el llavero de este dispositivo. Al iniciar sesión, también se sincroniza un ticket de inicio de sesión por el llavero de iCloud (cifrado de extremo a extremo por Apple), para que tus otros dispositivos inicien sesión sin código.";
 "本机" = "Este dispositivo";
 "矿池监控、提醒、地址簿、钱包名称、显卡与电费、语言和外观等设置，通过你自己的 iCloud 在你的设备间同步，我们无法访问。助记词从不同步。" = "Ajustes como monitores de pool, alertas, libreta de direcciones, nombres de carteras, GPU y coste de electricidad, idioma y apariencia se sincronizan entre tus dispositivos a través de tu propio iCloud, al que no tenemos acceso. La frase de recuperación nunca se sincroniza.";
 "iCloud 同步（高级版）" = "Sincronización con iCloud (Pro)";
@@ -1189,3 +1189,10 @@
 "App（iPhone / iPad / Mac）" = "App (iPhone / iPad / Mac)";
 "网页版前端" = "Frontend web";
 "服务器后台" = "Servidor";
+
+/* 邮箱账号: sign in once, on every device (DeviceTicket) */
+"登录未完成，请用邮箱登录" = "No se completó el inicio de sesión. Inicia sesión con tu correo.";
+"其他设备已登录" = "Sesión iniciada en otro dispositivo";
+"%@ 已在你的其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "%@ tiene la sesión iniciada en otro de tus dispositivos. Puedes iniciar sesión aquí directamente, sin código, y se conservan los ajustes de este dispositivo.";
+"你的账号已在其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "Tu cuenta tiene la sesión iniciada en otro de tus dispositivos. Puedes iniciar sesión aquí directamente, sin código, y se conservan los ajustes de este dispositivo.";
+"直接登录" = "Iniciar sesión directamente";

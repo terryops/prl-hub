@@ -1179,7 +1179,7 @@
 "SafeTrade、CoinGecko、WhatToMine、MiningPoolStats、open.er-api.com 等公开数据源，请求不带地址。" = "Public sources such as SafeTrade, CoinGecko, WhatToMine, MiningPoolStats and open.er-api.com. These requests carry no address.";
 "行情与汇率" = "Prices and exchange rates";
 "存在你设备上的数据" = "Stored on your devices";
-"钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。" = "The wallet database, address book, settings and caches stay on this device, and the wallet database is excluded from backups. Sign-in credentials are kept in this device's Keychain.";
+"钱包数据库、地址簿、设置和缓存都存在本机，钱包数据库不进备份；登录凭据存于本机钥匙串。登录后还有一张登录票经 iCloud 钥匙串同步（Apple 端到端加密），你的其他设备凭它免验证码登录。" = "The wallet database, address book, settings and caches stay on this device, and the wallet database is excluded from backups. Sign-in credentials are kept in this device's Keychain. Once you sign in, a sign-in ticket also syncs through iCloud Keychain (end-to-end encrypted by Apple), so your other devices can sign in without a code.";
 "本机" = "This device";
 "矿池监控、提醒、地址簿、钱包名称、显卡与电费、语言和外观等设置，通过你自己的 iCloud 在你的设备间同步，我们无法访问。助记词从不同步。" = "Settings such as pool monitors, alerts, address book, wallet names, GPUs and power costs, language and appearance sync between your devices through your own iCloud, which we cannot access. The recovery phrase is never synced.";
 "iCloud 同步（高级版）" = "iCloud sync (Pro)";
@@ -1189,3 +1189,10 @@
 "App（iPhone / iPad / Mac）" = "App (iPhone / iPad / Mac)";
 "网页版前端" = "Web frontend";
 "服务器后台" = "Server";
+
+/* 邮箱账号: sign in once, on every device (DeviceTicket) */
+"登录未完成，请用邮箱登录" = "Sign-in didn't finish. Please sign in with email.";
+"其他设备已登录" = "Signed in on another device";
+"%@ 已在你的其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "%@ is signed in on another of your devices. You can sign in here directly, with no code, and this device's settings are kept.";
+"你的账号已在其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "Your account is signed in on another of your devices. You can sign in here directly, with no code, and this device's settings are kept.";
+"直接登录" = "Sign in directly";
