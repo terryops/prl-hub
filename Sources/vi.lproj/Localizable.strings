@@ -1254,7 +1254,6 @@
 "其中 %@ 是挖矿收入，要等 100 个区块才能使用。下一笔解锁还要%@。" = "Trong đó %@ là phần thưởng khối, dùng được sau 100 khối. Khoản tiếp theo mở khóa sau %@.";
 "助记词无效" = "Cụm từ khôi phục không hợp lệ";
 "区块高度" = "Chiều cao khối";
-"只能收 NOCK" = "Chỉ nhận NOCK";
 "可用 %@" = "Khả dụng %@";
 "可用余额 %@" = "Số dư khả dụng %@";
 "和 PRL 共用助记词" = "Dùng chung cụm từ khôi phục với PRL";
@@ -1268,7 +1267,6 @@
 "未上链：节点已丢弃这笔交易，金额已退回余额" = "Chưa lên chuỗi: mạng đã bỏ giao dịch này, số tiền đã trở lại số dư";
 "没有可用的 NOCK（挖矿收入要过 100 个区块才能使用）" = "Không có NOCK dùng được (phần thưởng khối mở khóa sau 100 khối)";
 "用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。" = "Dùng chung cụm từ khôi phục: nhập nó vào ví chính thức của Nockchain hoặc Iris, bạn sẽ thấy cùng địa chỉ NOCK này.";
-"矿池的 NOCK 合并挖矿收益也可以填这个地址。挖矿收入要等 100 个区块（约 4 小时）才能使用。" = "Bạn cũng có thể dùng địa chỉ này làm nơi nhận thanh toán NOCK từ pool. Phần thưởng khối dùng được sau 100 khối (khoảng 4 giờ).";
 "确认发送 %@" = "Xác nhận gửi %@";
 "约 %@ 分钟" = "khoảng %@ phút";
 "约 %@ 小时" = "khoảng %@ giờ";
@@ -1279,7 +1277,7 @@
 "请输入金额" = "Nhập số tiền";
 "超过可用余额（手续费另计）" = "Vượt số dư khả dụng (chưa tính phí)";
 "转 NOCK" = "Chuyển NOCK";
-"这个地址只收 NOCK。PRL 请用钱包首页的 PRL 收款地址，发错链会丢失。" = "Địa chỉ này chỉ nhận NOCK. Với PRL, hãy dùng địa chỉ nhận PRL ở trang chính của ví — gửi nhầm chuỗi sẽ mất tiền.";
+"这个地址只收 NOCK，别往这里转 PRL。" = "Địa chỉ này chỉ nhận NOCK, đừng gửi PRL vào đây.";
 "这是你自己的 NOCK 地址" = "Đây là địa chỉ NOCK của chính bạn";
 "这是旧版（v0）NOCK 地址，已不能收款，请向对方要新地址" = "Đây là địa chỉ NOCK cũ (v0), không còn nhận được tiền. Hãy xin người nhận địa chỉ mới.";
 "金额 (NOCK)" = "Số tiền (NOCK)";

@@ -133,6 +133,24 @@ struct NockStoreTests {
         #expect(NockWalletStore.isAlreadyKnown(NockClient.RPCError.status(6, "exists")))
     }
 
+    /// The wallet page shows the NOCK card once the wallet holds NOCK (or fetched its address).
+    @Test func holdingNockCountsAsInUse() {
+        let store = NockWalletStore.shared
+        store._testAdopt(account: NockCore.Account(address: "a", simpleFirstName: "s", coinbaseFirstName: "c"),
+                         notes: [note("p1", 10, kind: "simple", spendable: true)], tip: 1_000)
+        #expect(store.inUse)
+    }
+
+    /// A state saved before `addressShown` existed still loads (as not shown).
+    @Test func olderSavedStateStillLoads() throws {
+        let old = try JSONDecoder().decode(NockWalletStore.State.self, from: Data(#"{"address":"a","history":[]}"#.utf8))
+        #expect(old.address == "a" && !old.addressShown)
+        var shown = NockWalletStore.State()
+        shown.addressShown = true
+        let back = try JSONDecoder().decode(NockWalletStore.State.self, from: try JSONEncoder().encode(shown))
+        #expect(back.addressShown)
+    }
+
     @Test func removingAWalletDropsItsNockState() {
         let key = "nock.state.test-removed"
         UserDefaults.standard.set(Data("{}".utf8), forKey: key)
@@ -147,5 +165,129 @@ struct NockStoreTests {
         }
         #expect(p(100, 10).feeIsHigh)
         #expect(!p(100, 9).feeIsHigh)
+    }
+}
+
+/// Two public nodes: one failing (its gateway's "upstream connect error", the HTTP 503 users
+/// saw) must not fail the wallet while the other answers.
+struct NockFailoverTests {
+    /// By host: down.* = trailers-only UNAVAILABLE (rpc.nockbox.org with its node unreachable),
+    /// yes.* / no.* = TransactionAccepted true / false, ack.* = send acknowledged,
+    /// refuse.* = the node's own "no" to a send.
+    final class NodeStub: URLProtocol, @unchecked Sendable {
+        override class func canInit(with request: URLRequest) -> Bool { request.url?.host?.hasSuffix(".nock.test") == true }
+        override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+        static func frame(_ flag: UInt8, _ payload: [UInt8]) -> Data {
+            var d = Data([flag])
+            var n = UInt32(payload.count).bigEndian
+            d.append(Data(bytes: &n, count: 4))
+            d.append(contentsOf: payload)
+            return d
+        }
+        override func startLoading() {
+            let host = request.url?.host ?? ""
+            var headers = ["content-type": "application/grpc-web+proto"]
+            let ok = Self.frame(0x80, Array("grpc-status:0\r\n".utf8))
+            let body: Data
+            if host.hasPrefix("down.") {
+                headers["grpc-status"] = "14"
+                headers["grpc-message"] = "upstream%20connect%20error"
+                body = Data()
+            } else if host.hasPrefix("yes.") {
+                body = Self.frame(0, [0x08, 0x01]) + ok
+            } else if host.hasPrefix("no.") {
+                body = Self.frame(0, [0x08, 0x00]) + ok
+            } else if host.hasPrefix("ack.") {
+                body = Self.frame(0, [0x0a, 0x00]) + ok
+            } else {   // refuse.*: ErrorStatus { code: 3, message: "fee too low" }
+                let status: [UInt8] = [0x08, 0x03, 0x12, 11] + Array("fee too low".utf8)
+                body = Self.frame(0, [0x12, UInt8(status.count)] + status) + ok
+            }
+            let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: headers)!
+            client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: body)
+            client?.urlProtocolDidFinishLoading(self)
+        }
+        override func stopLoading() {}
+    }
+
+    private let session: URLSession = {
+        let c = URLSessionConfiguration.ephemeral
+        c.protocolClasses = [NodeStub.self]
+        return URLSession(configuration: c)
+    }()
+    private func client(_ hosts: String...) -> NockClient {
+        NockClient(session: session, nodes: hosts.map { URL(string: $0)! })
+    }
+    /// Any valid digest works as a tx id here.
+    private let txId = "BeZ1AGS1UCEnebHrHifcyuU9zGM5grQ77qKgQNTqm4nx9y7Fgnynhgw"
+
+    /// Live: the official node answers from inside the app (so the ATS exception for its
+    /// plain-HTTP address works), and the client as shipped gets an answer even where
+    /// rpc.nockbox.org is failing. Run with TEST_RUNNER_NOCK_LIVE=1.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["NOCK_LIVE"] != nil))
+    func theNodesAnswerLive() async throws {
+        let official = NockClient(nodes: [NockClient.nodes[1]])
+        #expect(try await !official.blockTimes(downTo: .max, maxPages: 1).isEmpty)
+        #expect(try await !NockClient().blockTimes(downTo: .max, maxPages: 1).isEmpty)
+    }
+
+    @Test func theOfficialNodeIsBuiltIn() {
+        #expect(NockClient.nodes.map(\.absoluteString) == ["https://rpc.nockbox.org", "http://216.158.95.10:5556"])
+    }
+
+    @Test func aDownNodeFallsThroughAndIsBenched() async throws {
+        let down = "https://down.a.nock.test", up = "http://ok.a.nock.test:5556"
+        let c = client(down, up)
+        let answeredBy = try await c.withNode { node, _ in
+            _ = try await c.unary("x/y", Data(), node: node)
+            return node.absoluteString
+        }
+        #expect(answeredBy == up)
+        #expect(await BackendHealth.shared.order([down, up]) == [up, down])
+    }
+
+    @Test func aNodesOwnVerdictIsNotRetriedElsewhere() async {
+        var asked: [String] = []
+        await #expect(throws: NockClient.RPCError.self) {
+            try await client("https://first.b.nock.test", "https://second.b.nock.test").withNode { node, _ -> Int in
+                asked.append(node.host ?? "")
+                throw NockClient.RPCError.status(3, "invalid")
+            }
+        }
+        #expect(asked == ["first.b.nock.test"])
+    }
+
+    @Test func everyNodeDownIsAnError() async {
+        await #expect(throws: NockClient.RPCError.self) {
+            _ = try await client("https://down.c.nock.test", "https://down.d.nock.test").accepted(txId: txId)
+        }
+    }
+
+    @Test func acceptedAsksEveryNode() async throws {
+        #expect(try await client("https://down.e.nock.test", "https://yes.e.nock.test").accepted(txId: txId))
+        // One node not having it yet isn't final while the other does.
+        #expect(try await client("https://no.f.nock.test", "https://yes.f.nock.test").accepted(txId: txId))
+        #expect(try await client("https://no.g.nock.test", "https://down.g.nock.test").accepted(txId: txId) == false)
+    }
+
+    @Test func aSendGoesThroughWhileOneNodeIsDown() async throws {
+        try await client("https://down.h.nock.test", "http://ack.h.nock.test:5556").send(body: Data([1]))
+    }
+
+    @Test func aSendIsRefusedOnlyWhenEveryNodeRefuses() async {
+        do {
+            try await client("https://refuse.i.nock.test", "https://refuse.j.nock.test").send(body: Data([1]))
+            Issue.record("expected a refusal")
+        } catch {
+            #expect(NockWalletStore.isRefusal(error))
+        }
+        // One refusal and one node unreachable: the tx may still be out there — not a refusal.
+        do {
+            try await client("https://refuse.k.nock.test", "https://down.k.nock.test").send(body: Data([1]))
+            Issue.record("expected an open outcome")
+        } catch {
+            #expect(!NockWalletStore.isRefusal(error))
+        }
     }
 }

@@ -56,7 +56,8 @@ struct NockPreparedSend: Identifiable {
 }
 
 /// Drives the NOCK side of the open wallet. The account comes from the same seed as the PRL
-/// wallet (read from `WalletStore` while it is unlocked); chain state from rpc.nockbox.org.
+/// wallet (read from `WalletStore` while it is unlocked); chain state from the public nodes in
+/// `NockClient.nodes` (rpc.nockbox.org, then the official CLI's node).
 /// Per-wallet state (address, last balance, history, sends in flight) is kept locally and
 /// never synced — like the seed it belongs to.
 @MainActor
@@ -76,6 +77,18 @@ final class NockWalletStore: ObservableObject {
     private(set) var lastSyncedAt: Date?
 
     var hasBalance: Bool { backendReady || balanceIsCached }
+    /// This wallet uses NOCK: it has fetched its address from the receive page, or holds or
+    /// has held NOCK. The wallet page then shows the NOCK card where it otherwise shows only a
+    /// one-line link at the bottom.
+    var inUse: Bool { state.addressShown || balance.total > 0 || !history.isEmpty }
+
+    /// The receive page is showing the address.
+    func markAddressShown() {
+        guard walletID != nil, address != nil, !state.addressShown else { return }
+        objectWillChange.send()
+        state.addressShown = true
+        persist()
+    }
     var address: String? { account?.address ?? state.address }
     /// The Rust core is linked (checked once — it can't change while running).
     private static let coreAvailable = NockCore.isAvailable
@@ -131,6 +144,8 @@ final class NockWalletStore: ObservableObject {
         var seen: [String: Date] = [:]
         var pending: [PendingSend] = []
         var syncedAt: Date?
+        /// The receive page showed this wallet's NOCK address (the user went to get it).
+        var addressShown = false
 
         init() {}
         // Lenient: a field added later must not make an older saved state unreadable.
@@ -143,6 +158,7 @@ final class NockWalletStore: ObservableObject {
             seen = try c.decodeIfPresent([String: Date].self, forKey: .seen) ?? [:]
             pending = try c.decodeIfPresent([PendingSend].self, forKey: .pending) ?? []
             syncedAt = try c.decodeIfPresent(Date.self, forKey: .syncedAt)
+            addressShown = try c.decodeIfPresent(Bool.self, forKey: .addressShown) ?? false
         }
     }
     nonisolated static let seenRetention: TimeInterval = 3 * 86_400

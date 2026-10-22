@@ -1254,7 +1254,6 @@
 "其中 %@ 是挖矿收入，要等 100 个区块才能使用。下一笔解锁还要%@。" = "Davon sind %@ Blockbelohnungen, verfügbar nach 100 Blöcken. Die nächste wird in %@ frei.";
 "助记词无效" = "Ungültige Wiederherstellungsphrase";
 "区块高度" = "Blockhöhe";
-"只能收 NOCK" = "Nur NOCK";
 "可用 %@" = "Verfügbar %@";
 "可用余额 %@" = "Verfügbares Guthaben %@";
 "和 PRL 共用助记词" = "Dieselbe Wiederherstellungsphrase wie PRL";
@@ -1268,7 +1267,6 @@
 "未上链：节点已丢弃这笔交易，金额已退回余额" = "Nicht on-chain: Das Netzwerk hat diese Transaktion verworfen, der Betrag ist wieder im Guthaben";
 "没有可用的 NOCK（挖矿收入要过 100 个区块才能使用）" = "Keine verfügbaren NOCK (Blockbelohnungen werden nach 100 Blöcken frei)";
 "用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。" = "Es ist dieselbe Wiederherstellungsphrase: Importierst du sie ins offizielle Nockchain-Wallet oder in Iris, siehst du dieselbe NOCK-Adresse.";
-"矿池的 NOCK 合并挖矿收益也可以填这个地址。挖矿收入要等 100 个区块（约 4 小时）才能使用。" = "Du kannst diese Adresse auch einem Pool für NOCK-Auszahlungen angeben. Blockbelohnungen sind nach 100 Blöcken (etwa 4 Stunden) verfügbar.";
 "确认发送 %@" = "Senden von %@ bestätigen";
 "约 %@ 分钟" = "etwa %@ Min.";
 "约 %@ 小时" = "etwa %@ Std.";
@@ -1279,7 +1277,7 @@
 "请输入金额" = "Betrag eingeben";
 "超过可用余额（手续费另计）" = "Mehr als das verfügbare Guthaben (Gebühr kommt hinzu)";
 "转 NOCK" = "NOCK senden";
-"这个地址只收 NOCK。PRL 请用钱包首页的 PRL 收款地址，发错链会丢失。" = "Diese Adresse empfängt nur NOCK. Für PRL nutze die PRL-Empfangsadresse auf der Startseite des Wallets – auf der falschen Chain gesendete Beträge gehen verloren.";
+"这个地址只收 NOCK，别往这里转 PRL。" = "Diese Adresse empfängt nur NOCK – sende kein PRL hierher.";
 "这是你自己的 NOCK 地址" = "Das ist deine eigene NOCK-Adresse";
 "这是旧版（v0）NOCK 地址，已不能收款，请向对方要新地址" = "Das ist eine alte (v0) NOCK-Adresse, die nichts mehr empfangen kann. Bitte den Empfänger um eine neue Adresse.";
 "金额 (NOCK)" = "Betrag (NOCK)";

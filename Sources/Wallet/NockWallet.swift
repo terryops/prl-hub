@@ -1,7 +1,8 @@
 import SwiftUI
 
 // The NOCK (Nockchain) side of a wallet: same seed as PRL, its own address, balance,
-// history and sends. Reached from the NOCK card on the wallet dashboard.
+// history and sends. Reached from the wallet page: a one-line link at the bottom, or a small
+// strip under the recent transactions once the wallet uses NOCK.
 
 private func nockPrice(_ usd: Double) -> String {
     let digits = usd < 1 ? 4 : 2
@@ -12,60 +13,124 @@ private func nockText(_ nicks: UInt64, decimals: Int = 6) -> String {
     NockCore.format(nicks: nicks, decimals: decimals) + " NOCK"
 }
 
-// MARK: - Dashboard card
+// MARK: - Wallet page entries
 
-/// One line on the PRL dashboard: the NOCK balance of the same seed, opening the NOCK page.
+/// Where NOCK shows on the wallet page. A wallet that uses NOCK (`inUse`) gets the small strip
+/// under the recent transactions; any other gets only the quiet `link` at the very bottom.
+struct NockWalletEntry: View {
+    enum Slot { case card, link }
+    let slot: Slot
+    var surface: Color? = nil
+    var secondary: Color = .secondary
+    @ObservedObject private var nock = NockWalletStore.shared
+
+    var body: some View {
+        switch slot {
+        case .card:
+            if nock.inUse { NockAssetCard(nock: nock, surface: surface, secondary: secondary) }
+        case .link:
+            if !nock.inUse { NockInlineLink() }
+        }
+    }
+}
+
+/// The last line on the wallet page, styled like 价格提醒 / 桌面小组件 above it: NOCK is a
+/// side feature, so until it's used its entry stays out of the way (no card, no balance).
+struct NockInlineLink: View {
+    /// The NOCK badge, shrunk to the line's text size.
+    @ScaledMetric(relativeTo: .caption) private var badge: CGFloat = 17
+
+    var body: some View {
+        NavigationLink {
+            NockWalletView(nock: .shared)
+        } label: {
+            HStack(spacing: 5) {
+                NockBadge(size: badge)
+                Text(Loc("NOCK 钱包")).foregroundStyle(Pearl.accent)
+                Text(verbatim: "·").foregroundStyle(.tertiary)
+                Text(Loc("和 PRL 共用助记词")).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
+                Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+            }
+            .font(.caption)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// The NOCK strip under the wallet page's recent transactions, once the wallet uses NOCK
+/// (`inUse`): one quiet line — muted badge, secondary colours, no frosted card — with the
+/// same seed's NOCK balance, opening the NOCK page. PRL stays the page's subject.
 struct NockAssetCard: View {
     @ObservedObject var nock: NockWalletStore
     @ObservedObject private var price = NockPriceManager.shared
     @EnvironmentObject private var currency: CurrencyManager
+    @Environment(\.scenePhase) private var scenePhase
     var surface: Color? = nil
     var secondary: Color = .secondary
+    @ScaledMetric(relativeTo: .subheadline) private var badge: CGFloat = 20
 
     var body: some View {
         NavigationLink { NockWalletView(nock: nock) } label: {
-            HStack(spacing: Pearl.Space.md) {
-                NockBadge(size: 38)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(verbatim: "NOCK").font(.headline)
-                    Text(price.usd.map(nockPrice) ?? "Nockchain")
-                        .font(.caption).foregroundStyle(secondary).monospacedDigit()
-                }
+            HStack(spacing: Pearl.Space.sm) {
+                NockBadge(size: badge, muted: true)
+                Text(verbatim: "NOCK").font(.subheadline.weight(.medium)).foregroundStyle(secondary)
                 Spacer(minLength: Pearl.Space.sm)
-                VStack(alignment: .trailing, spacing: 2) {
+                Group {
                     if nock.hasBalance {
-                        Text(NockCore.format(nicks: nock.balance.total, decimals: 4))
-                            .font(.headline.monospacedDigit())
+                        Text(NockCore.format(nicks: nock.balance.total, decimals: 2))
+                            .font(.subheadline.monospacedDigit()).foregroundStyle(secondary)
                             .opacity(nock.balanceIsCached ? 0.6 : 1)
                             .contentTransition(.numericText())
                         if let usd = price.value(ofNicks: nock.balance.total) {
-                            Text(verbatim: "≈ " + currency.dual(usd))
-                                .font(.caption.monospacedDigit()).foregroundStyle(secondary)
+                            Text(verbatim: "≈ " + currency.primaryString(usd))
+                                .font(.caption.monospacedDigit()).foregroundStyle(.tertiary)
                         }
                     } else if nock.syncError != nil {
-                        Image(systemName: "exclamationmark.icloud").foregroundStyle(.orange)
+                        Image(systemName: "exclamationmark.icloud").font(.caption).foregroundStyle(.tertiary)
                     } else {
-                        ProgressView().controlSize(.small)
+                        ProgressView().controlSize(.mini)
                     }
                 }
-                .lineLimit(1).minimumScaleFactor(0.6)
+                .lineLimit(1).minimumScaleFactor(0.7)
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                    .font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
             }
+            .padding(.vertical, Pearl.Space.sm)
+            .padding(.horizontal, Pearl.Space.md)
             .contentShape(Rectangle())
-            .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md, frosted: true, surface: surface)
+            .pearlCard(padding: 0, radius: Pearl.Radius.sm, surface: surface)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(nock.hasBalance ? Loc("NOCK 余额 %@", nockText(nock.balance.total)) : Loc("NOCK 钱包"))
         .animation(.snappy, value: nock.balance)
+        // Kept fresh only while the strip is on screen (the PRL wallet's own polling cadence).
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            await nock.refreshIfStale()
+            await price.refreshIfStale()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: nock.pollInterval)
+                if Task.isCancelled { break }
+                await nock.refreshIfStale()
+            }
+        }
     }
 }
+
+// MARK: - Badge
 
 /// The NOCK mark: a hexagon glyph on the badge, so it never passes for the PRL pearl.
 struct NockBadge: View {
     var size: CGFloat = 38
+    /// Toned down, for places where NOCK sits beside PRL and mustn't outshine it.
+    var muted = false
     var body: some View {
         PearlIconBadge(systemImage: "hexagon.fill", gradient: Pearl.sunrise, size: size)
+            .saturation(muted ? 0.35 : 1)
+            .opacity(muted ? 0.8 : 1)
     }
 }
 
@@ -356,12 +421,8 @@ struct NockReceiveView: View {
                     }
                     .buttonStyle(.pearl)
 
-                    PearlInfoRow(Loc("这个地址只收 NOCK。PRL 请用钱包首页的 PRL 收款地址，发错链会丢失。"),
-                                 title: Loc("只能收 NOCK"), systemImage: "exclamationmark.shield")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    PearlInfoRow(Loc("矿池的 NOCK 合并挖矿收益也可以填这个地址。挖矿收入要等 100 个区块（约 4 小时）才能使用。"),
-                                 systemImage: "cube")
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(Loc("这个地址只收 NOCK，别往这里转 PRL。"))
+                        .pearlExplanation().multilineTextAlignment(.center)
                 } else {
                     ProgressView(Loc("派生地址…")).frame(maxHeight: 240)
                 }
@@ -370,6 +431,9 @@ struct NockReceiveView: View {
         }
         .pearlScreenBackground()
         .navigationTitle(Loc("收 NOCK"))
+        // Getting the address counts as starting to use NOCK: the wallet page shows its card.
+        .onAppear { nock.markAddressShown() }
+        .onChange(of: nock.address) { _, _ in nock.markAddressShown() }
     }
 }
 

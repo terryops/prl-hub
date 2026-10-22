@@ -1254,7 +1254,6 @@
 "其中 %@ 是挖矿收入，要等 100 个区块才能使用。下一笔解锁还要%@。" = "Sebanyak %@ di antaranya hadiah blok, bisa dipakai setelah 100 blok. Berikutnya terbuka dalam %@.";
 "助记词无效" = "Frasa pemulihan tidak valid";
 "区块高度" = "Tinggi blok";
-"只能收 NOCK" = "Hanya NOCK";
 "可用 %@" = "Tersedia %@";
 "可用余额 %@" = "Saldo Tersedia %@";
 "和 PRL 共用助记词" = "Frasa pemulihan yang sama dengan PRL";
@@ -1268,7 +1267,6 @@
 "未上链：节点已丢弃这笔交易，金额已退回余额" = "Tidak masuk blockchain: jaringan membuang transaksi ini dan jumlahnya kembali ke saldo";
 "没有可用的 NOCK（挖矿收入要过 100 个区块才能使用）" = "Tidak ada NOCK yang bisa dipakai (hadiah blok terbuka setelah 100 blok)";
 "用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。" = "Memakai frasa pemulihan yang sama: impor ke dompet resmi Nockchain atau Iris dan Anda akan melihat alamat NOCK yang sama.";
-"矿池的 NOCK 合并挖矿收益也可以填这个地址。挖矿收入要等 100 个区块（约 4 小时）才能使用。" = "Alamat ini juga bisa diberikan ke pool untuk pembayaran NOCK. Hadiah blok bisa dipakai setelah 100 blok (sekitar 4 jam).";
 "确认发送 %@" = "Konfirmasi Kirim %@";
 "约 %@ 分钟" = "sekitar %@ menit";
 "约 %@ 小时" = "sekitar %@ jam";
@@ -1279,7 +1277,7 @@
 "请输入金额" = "Masukkan jumlah";
 "超过可用余额（手续费另计）" = "Melebihi saldo tersedia (biaya terpisah)";
 "转 NOCK" = "Kirim NOCK";
-"这个地址只收 NOCK。PRL 请用钱包首页的 PRL 收款地址，发错链会丢失。" = "Alamat ini hanya menerima NOCK. Untuk PRL gunakan alamat penerimaan PRL di beranda dompet — dana yang dikirim lewat chain yang salah akan hilang.";
+"这个地址只收 NOCK，别往这里转 PRL。" = "Alamat ini hanya menerima NOCK — jangan kirim PRL ke sini.";
 "这是你自己的 NOCK 地址" = "Ini alamat NOCK Anda sendiri";
 "这是旧版（v0）NOCK 地址，已不能收款，请向对方要新地址" = "Ini alamat NOCK lama (v0) yang tidak bisa menerima lagi. Minta alamat baru ke penerima.";
 "金额 (NOCK)" = "Jumlah (NOCK)";

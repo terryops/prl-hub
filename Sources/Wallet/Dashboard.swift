@@ -5,8 +5,6 @@ import SwiftUI
 struct DashboardView: View {
     @ObservedObject var store: WalletStore
     @StateObject private var price = PRLPriceManager.shared
-    // Not observed: the NOCK card observes it; the dashboard only kicks its refreshes.
-    private let nock = NockWalletStore.shared
     @EnvironmentObject private var currency: CurrencyManager
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
@@ -242,9 +240,6 @@ struct DashboardView: View {
                     action(Loc("记录"), "clock.arrow.circlepath") { ActivityView(store: store) }
                 }
 
-                // The same seed's NOCK (Nockchain) account — its own page, address and history.
-                NockAssetCard(nock: nock, surface: cardSurface, secondary: cardSecondary)
-
                 // 最近交易：金额为 0 的交易不显示。卡片始终保留 3 个等高行槽——同步时为骨架
                 // 占位，加载后填入真实交易、空槽留白——所以高度恒定（居中布局不跳动），且
                 // 满 3 笔时没有多余空白。
@@ -286,8 +281,14 @@ struct DashboardView: View {
                 .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md, frosted: true, surface: cardSurface)
                 .animation(.snappy, value: store.backendReady)
 
+                // The same seed's NOCK side, after everything PRL: a small muted strip once the
+                // wallet uses NOCK…
+                NockWalletEntry(slot: .card, surface: cardSurface, secondary: cardSecondary)
+
                 PriceAlertInlineLink()
                 WidgetInlineLink()
+                // …otherwise only this line, deliberately the quietest entry on the page.
+                NockWalletEntry(slot: .link)
             }
             .padding(Pearl.Space.screen)
             .frame(maxWidth: 560)
@@ -339,13 +340,17 @@ struct DashboardView: View {
         .onAppear { dashboardVisible = true; promptDonationIfDue() }
         .onDisappear { dashboardVisible = false }
         .navigationDestination(isPresented: $managingWallets) { ManageWalletsView(store: store) }
-        .navigationDestination(isPresented: $shotNock) { NockWalletView(nock: nock) }
+        .navigationDestination(isPresented: $shotNock) { NockWalletView(nock: .shared) }
         .task { await store.refreshIfStale(); await price.refreshIfStale() }
-        .task { await nock.refreshIfStale(); await NockPriceManager.shared.refreshIfStale() }
         .refreshable {
-            async let nockLoad: Void = nock.load()
-            await store.loadChain(); await price.refresh()
-            await nockLoad
+            let nock = NockWalletStore.shared
+            if nock.inUse {
+                async let nockLoad: Void = nock.load()
+                await store.loadChain(); await price.refresh()
+                await nockLoad
+            } else {
+                await store.loadChain(); await price.refresh()
+            }
         }
         // 自适应自动轮询：App 在前台时按 store.pollInterval 周期重拉链上数据——有未确认
         // 交易时快轮询（~15s，让「待确认」尽快翻成已确认），全部确认后退回 60s keep-warm。
@@ -362,7 +367,6 @@ struct DashboardView: View {
                 try? await Task.sleep(for: store.pollInterval)
                 if Task.isCancelled { break }
                 await store.loadChain()
-                await nock.refreshIfStale()
             }
         }
         // Transient success toast (e.g. after a send returns here from 转账).

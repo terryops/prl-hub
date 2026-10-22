@@ -4,16 +4,34 @@ import Foundation
 /// Messages are encoded and decoded by the Rust core; this type frames them and reads the
 /// gRPC status the server puts in the trailer frame.
 ///
-/// One public endpoint: rpc.nockbox.org (Iris Wallet's node). The CLI's default node is
-/// plain HTTP, which ATS blocks and a wallet shouldn't use anyway.
+/// Two public nodes, both straight from the app (no Pearl Hub server in between):
+/// - rpc.nockbox.org — Iris Wallet's node, HTTPS. First choice.
+/// - 216.158.95.10:5556 — the node the official `nockchain-wallet` CLI uses by default
+///   (crates/nockchain-wallet/src/connection.rs). Plain HTTP on a bare IP, allowed for this one
+///   address in AccountInfo.plist (ATS covers IP addresses since iOS 17). Everything sent there
+///   is public chain data or an already-signed tx, so a tampered reply can't redirect funds.
+/// A node that fails (unreachable, 5xx, its gateway's "upstream connect error") moves to the
+/// back of the line for a while — the same `BackendHealth` the PRL indexers use. Measured
+/// 2026-10-21: rpc.nockbox.org's "upstream connect error" follows the client's IP (one exit
+/// always got it while another never did), so a failed node sits out longer than a minute.
 struct NockClient {
-    static let endpoint = URL(string: "https://rpc.nockbox.org")!
+    static let nodes: [URL] = [
+        URL(string: "https://rpc.nockbox.org")!,
+        URL(string: "http://216.158.95.10:5556")!,
+    ]
     /// Block explorer for "view on explorer" links.
     static func explorerURL(tx txId: String) -> URL? { URL(string: "https://nockscan.net/tx/\(txId)") }
     static func explorerURL(address: String) -> URL? { URL(string: "https://nockscan.net/address/\(address)") }
 
+    /// How long a node that failed sits at the back of the line.
+    static let bench: TimeInterval = 5 * 60
+
     let session: URLSession
-    init(session: URLSession = .shared) { self.session = session }
+    let nodes: [URL]
+    init(session: URLSession = .shared, nodes: [URL] = NockClient.nodes) {
+        self.session = session
+        self.nodes = nodes
+    }
 
     enum RPCError: LocalizedError {
         case http(Int)
@@ -34,9 +52,9 @@ struct NockClient {
 
     // MARK: Transport
 
-    /// POST one unary gRPC-web call; returns the response message bytes.
-    func unary(_ method: String, _ message: Data, timeout: TimeInterval = 20) async throws -> Data {
-        var req = URLRequest(url: Self.endpoint.appendingPathComponent(method))
+    /// POST one unary gRPC-web call to `node`; returns the response message bytes.
+    func unary(_ method: String, _ message: Data, node: URL, timeout: TimeInterval = 20) async throws -> Data {
+        var req = URLRequest(url: node.appendingPathComponent(method))
         req.httpMethod = "POST"
         req.timeoutInterval = timeout
         req.setValue("application/grpc-web+proto", forHTTPHeaderField: "Content-Type")
@@ -72,16 +90,30 @@ struct NockClient {
         }
     }
 
-    /// A read (idempotent) call, retried twice on a transient failure.
-    private func read(_ method: String, _ message: Data) async throws -> Data {
-        var attempt = 0
-        while true {
-            do { return try await unary(method, message) }
-            catch where Self.isTransient(error) && attempt < 2 && !Task.isCancelled {
-                attempt += 1
-                try await Task.sleep(for: .milliseconds(attempt == 1 ? 1_000 : 2_500))
+    /// Runs `body` against one node at a time, healthiest first, until one gets through. A
+    /// transient failure benches that node and moves on to the next; any other error is that
+    /// node's answer and ends it. When every node failed, one more round after a short pause.
+    /// `body` gets the per-request timeout: shorter while another node is still left to try.
+    func withNode<T>(_ body: (URL, TimeInterval) async throws -> T) async throws -> T {
+        var lastError: Error = RPCError.malformed
+        for round in 0..<2 {
+            if round > 0 {
+                try await Task.sleep(for: .milliseconds(1_500))
+            }
+            let order = await BackendHealth.shared.order(nodes.map(\.absoluteString)).compactMap(URL.init(string:))
+            for (i, node) in order.enumerated() {
+                try Task.checkCancellation()
+                do {
+                    return try await body(node, i < order.count - 1 ? 12 : 20)
+                } catch {
+                    if error is CancellationError || (error as? URLError)?.code == .cancelled { throw error }
+                    guard Self.isTransient(error) else { throw error }
+                    await BackendHealth.shared.failed(node.absoluteString, for: Self.bench)
+                    lastError = error
+                }
             }
         }
+        throw lastError
     }
 
     /// gRPC-web body: frames of [flag:1][length:4 BE][payload]; flag 0x80 = trailers.
@@ -122,15 +154,23 @@ struct NockClient {
         return s.removingPercentEncoding ?? s
     }
 
-    /// Encode with the core, call, decode with the core.
+    /// Encode with the core, call `node`, decode with the core.
     private func rpc(_ method: String, encode: String, _ params: [String: Any], decode: String,
-                     extra: [String: Any] = [:]) async throws -> [String: Any] {
+                     extra: [String: Any] = [:], node: URL, timeout: TimeInterval) async throws -> [String: Any] {
         let req = try NockCore.call(encode, params)
         guard let body = (req["body"] as? String).flatMap({ Data(base64Encoded: $0) }) else { throw RPCError.malformed }
-        let reply = try await read(method, body)
+        let reply = try await unary(method, body, node: node, timeout: timeout)
         var p = extra
         p["data"] = reply.base64EncodedString()
         return try NockCore.call(decode, p)
+    }
+
+    /// `rpc` on whichever node answers.
+    private func rpc(_ method: String, encode: String, _ params: [String: Any], decode: String,
+                     extra: [String: Any] = [:]) async throws -> [String: Any] {
+        try await withNode { node, timeout in
+            try await rpc(method, encode: encode, params, decode: decode, extra: extra, node: node, timeout: timeout)
+        }
     }
 
     // MARK: Balance
@@ -141,46 +181,100 @@ struct NockClient {
         let notes: [NockNote]
     }
 
-    /// Every note under one first-name (all pages), from one chain snapshot: if the tip moves
-    /// between pages the read restarts, so a balance never mixes two heights.
+    /// Every note under one first-name (all pages), from one chain snapshot of one node: if the
+    /// tip moves between pages the read restarts, so a balance never mixes two heights (page
+    /// tokens are that node's own, so a switch to another node starts over too).
     func notes(firstName: String, owner: String) async throws -> NotesPage {
         for _ in 0..<3 {
-            var token = ""
-            var notes: [NockNote] = []
-            var height: UInt64?
-            var blockId: String?
-            var moved = false
-            for _ in 0..<200 {   // 200 pages is far beyond any wallet; a loop guard, not a limit
-                let page = try await rpc("nockchain.public.v2.NockchainService/WalletGetBalance",
-                                         encode: "balanceRequest", ["firstName": firstName, "pageToken": token],
-                                         decode: "decodeBalance", extra: ["address": owner])
-                let h = (page["height"] as? NSNumber)?.uint64Value
-                let b = page["blockId"] as? String
-                if height == nil { height = h; blockId = b } else if h != height || b != blockId { moved = true; break }
-                notes += (page["notes"] as? [[String: Any]] ?? []).compactMap(NockNote.init(json:))
-                token = page["nextPageToken"] as? String ?? ""
-                if token.isEmpty { break }
+            let page: NotesPage? = try await withNode { node, timeout in
+                var token = ""
+                var notes: [NockNote] = []
+                var height: UInt64?
+                var blockId: String?
+                for _ in 0..<200 {   // 200 pages is far beyond any wallet; a loop guard, not a limit
+                    let page = try await rpc("nockchain.public.v2.NockchainService/WalletGetBalance",
+                                             encode: "balanceRequest", ["firstName": firstName, "pageToken": token],
+                                             decode: "decodeBalance", extra: ["address": owner], node: node, timeout: timeout)
+                    let h = (page["height"] as? NSNumber)?.uint64Value
+                    let b = page["blockId"] as? String
+                    if height == nil { height = h; blockId = b } else if h != height || b != blockId { return nil }
+                    notes += (page["notes"] as? [[String: Any]] ?? []).compactMap(NockNote.init(json:))
+                    token = page["nextPageToken"] as? String ?? ""
+                    if token.isEmpty { break }
+                }
+                guard let height else { throw RPCError.malformed }
+                return NotesPage(height: height, blockId: blockId, notes: notes)
             }
-            if moved { continue }
-            guard let height else { throw RPCError.malformed }
-            return NotesPage(height: height, blockId: blockId, notes: notes)
+            if let page { return page }
         }
         throw RPCError.transport(Loc("链上数据在变化，请稍后重试"))
     }
 
     // MARK: Send
 
-    /// Hands a signed tx to the node. Returns normally only when the node acknowledged it.
+    /// Hands a signed tx to every node at once (the same tx twice is harmless — one copy is
+    /// "already known"). Returns normally when any node acknowledged it. Otherwise it throws an
+    /// "already known" if a node had it, a refusal only when every node refused (`isRefusal`),
+    /// and else the first error that leaves the outcome open.
     func send(body: Data) async throws {
-        let reply = try await unary("nockchain.public.v2.NockchainService/WalletSendTransaction", body, timeout: 30)
-        _ = try NockCore.call("decodeSend", ["data": reply.base64EncodedString()])
+        let errors: [Error?] = await withTaskGroup(of: Error?.self) { group in
+            for node in nodes {
+                group.addTask {
+                    do {
+                        let reply = try await unary("nockchain.public.v2.NockchainService/WalletSendTransaction",
+                                                    body, node: node, timeout: 30)
+                        _ = try NockCore.call("decodeSend", ["data": reply.base64EncodedString()])
+                        return nil
+                    } catch {
+                        return error
+                    }
+                }
+            }
+            var out: [Error?] = []
+            for await e in group {
+                // One acknowledgement settles it; the other node keeps its copy either way.
+                if e == nil { group.cancelAll(); return [nil] }
+                out.append(e)
+            }
+            return out
+        }
+        let failures = errors.compactMap { $0 }
+        guard failures.count == errors.count, let first = failures.first else { return }
+        if let known = failures.first(where: NockWalletStore.isAlreadyKnown) { throw known }
+        if failures.allSatisfy(NockWalletStore.isRefusal) { throw first }
+        throw failures.first { !NockWalletStore.isRefusal($0) } ?? first
     }
 
-    /// Whether the node holds the tx (mempool or chain).
+    /// Whether any node holds the tx (mempool or chain): all are asked, a "no" from one isn't
+    /// final while another may have it. Throws only when no node answered.
     func accepted(txId: String) async throws -> Bool {
-        let r = try await rpc("nockchain.public.v2.NockchainService/TransactionAccepted",
-                              encode: "acceptedRequest", ["txId": txId], decode: "decodeAccepted")
-        return r["accepted"] as? Bool ?? false
+        let answers: [Result<Bool, Error>] = await withTaskGroup(of: Result<Bool, Error>.self) { group in
+            for node in nodes {
+                group.addTask {
+                    do {
+                        let r = try await rpc("nockchain.public.v2.NockchainService/TransactionAccepted",
+                                              encode: "acceptedRequest", ["txId": txId], decode: "decodeAccepted",
+                                              node: node, timeout: 20)
+                        return .success(r["accepted"] as? Bool ?? false)
+                    } catch {
+                        return .failure(error)
+                    }
+                }
+            }
+            var out: [Result<Bool, Error>] = []
+            for await a in group {
+                if case .success(true) = a { group.cancelAll(); return [a] }
+                out.append(a)
+            }
+            return out
+        }
+        var answered = false
+        for a in answers {
+            if case .success(let yes) = a { if yes { return true }; answered = true }
+        }
+        if answered { return false }
+        if case .failure(let e) = answers.first { throw e }
+        throw RPCError.malformed
     }
 
     // MARK: Explorer
@@ -194,12 +288,34 @@ struct NockClient {
         let outputs: [(name: String, amount: UInt64?, lock: String)]
     }
 
-    /// nil when the node doesn't know the tx at all.
+    /// The tx as the nodes know it; nil only when every node answered "not found" (one that is
+    /// behind mustn't turn a mined send into a lost one). Throws when no node had it and at
+    /// least one couldn't be asked.
     func txDetails(txId: String) async throws -> TxDetails? {
+        var failure: Error?
+        var pending: TxDetails?
+        for node in await BackendHealth.shared.order(nodes.map(\.absoluteString)).compactMap(URL.init(string:)) {
+            do {
+                guard let d = try await txDetails(txId: txId, node: node) else { continue }
+                if !d.pending { return d }
+                pending = d
+            } catch {
+                if error is CancellationError || (error as? URLError)?.code == .cancelled { throw error }
+                if Self.isTransient(error) { await BackendHealth.shared.failed(node.absoluteString, for: Self.bench) }
+                failure = failure ?? error
+            }
+        }
+        if let pending { return pending }
+        if let failure { throw failure }
+        return nil
+    }
+
+    private func txDetails(txId: String, node: URL) async throws -> TxDetails? {
         let r: [String: Any]
         do {
             r = try await rpc("nockchain.public.v2.NockchainBlockService/GetTransactionDetails",
-                              encode: "txDetailsRequest", ["txId": txId], decode: "decodeTxDetails")
+                              encode: "txDetailsRequest", ["txId": txId], decode: "decodeTxDetails",
+                              node: node, timeout: 20)
         } catch let f as NockCore.Failure where f.code == "server" && f.message.lowercased().contains("not found") {
             return nil
         } catch RPCError.status(5, _) {   // NOT_FOUND
@@ -222,21 +338,25 @@ struct NockClient {
     /// Block timestamps from the tip down to `minHeight`, a page (500 blocks, ~21 h) per round
     /// trip, at most `maxPages` pages — heights older than that are left out.
     func blockTimes(downTo minHeight: UInt64, maxPages: Int = 4) async throws -> [UInt64: Date] {
-        var out: [UInt64: Date] = [:]
-        var token = ""
-        for _ in 0..<maxPages {
-            let r = try await rpc("nockchain.public.v2.NockchainBlockService/GetBlocks",
-                                  encode: "blocksRequest", ["limit": 500, "pageToken": token], decode: "decodeBlocks")
-            var lowest = UInt64.max
-            for b in r["blocks"] as? [[String: Any]] ?? [] {
-                guard let h = (b["height"] as? NSNumber)?.uint64Value, let t = (b["time"] as? NSNumber)?.doubleValue else { continue }
-                out[h] = Date(timeIntervalSince1970: t)
-                lowest = min(lowest, h)
+        // One node for all pages: page tokens are that node's own.
+        try await withNode { node, timeout in
+            var out: [UInt64: Date] = [:]
+            var token = ""
+            for _ in 0..<maxPages {
+                let r = try await rpc("nockchain.public.v2.NockchainBlockService/GetBlocks",
+                                      encode: "blocksRequest", ["limit": 500, "pageToken": token], decode: "decodeBlocks",
+                                      node: node, timeout: timeout)
+                var lowest = UInt64.max
+                for b in r["blocks"] as? [[String: Any]] ?? [] {
+                    guard let h = (b["height"] as? NSNumber)?.uint64Value, let t = (b["time"] as? NSNumber)?.doubleValue else { continue }
+                    out[h] = Date(timeIntervalSince1970: t)
+                    lowest = min(lowest, h)
+                }
+                token = r["nextPageToken"] as? String ?? ""
+                if lowest <= minHeight || token.isEmpty { break }
             }
-            token = r["nextPageToken"] as? String ?? ""
-            if lowest <= minHeight || token.isEmpty { break }
+            return out
         }
-        return out
     }
 
     /// When block `height` was mined.

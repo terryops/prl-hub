@@ -57,5 +57,16 @@ and the 12-word `abandon … about` → `3zxKWhhd…a1H4jRy`.
 
 ## Network
 
-Public node `https://rpc.nockbox.org` (Iris Wallet's), gRPC-web (`application/grpc-web+proto`),
-so plain URLSession POSTs work. Prices: CoinGecko `nockchain`. Explorer links: nockscan.net.
+Two public nodes, both speaking gRPC-web (`application/grpc-web+proto`), so plain URLSession
+POSTs work, and both reached straight from the app:
+
+- `https://rpc.nockbox.org` (Iris Wallet's) — first choice. Its gateway answers "upstream
+  connect error" (gRPC UNAVAILABLE, shown as HTTP 503) whenever its node is unreachable.
+- `http://216.158.95.10:5556` — the node `nockchain-wallet` uses by default
+  (`DEFAULT_PUBLIC_GRPC_SERVER_ADDR` in crates/nockchain-wallet/src/connection.rs). Plain HTTP
+  on a bare IP: `AccountInfo.plist` has an ATS exception for that one address. If the CLI's
+  default moves, update `NockClient.nodes` and the exception together.
+
+Reads go to the first healthy node and fall through on a transient failure (the failed one sits
+out a minute, `BackendHealth`); paged reads stay on one node. A send goes to both at once.
+Prices: CoinGecko `nockchain`. Explorer links: nockscan.net.
