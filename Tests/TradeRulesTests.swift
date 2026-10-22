@@ -3,12 +3,25 @@ import Testing
 @testable import Pearl
 
 struct SafeTradeMarketRulesTests {
-    private let rules = SafeTradeMarketRules.prlusdt
+    private let rules = SafeTradeMarketRules.pearlusdt
 
     @Test func decodesLiveMarketInfo() throws {
-        let json = #"{"id":"prlusdt","amount_precision":4,"price_precision":2,"min_price":"0.01","max_price":"100000","min_amount":"2","state":"enabled"}"#
+        let json = #"{"id":"pearlusdt","amount_precision":4,"price_precision":2,"min_price":"0.01","max_price":"100000","min_amount":"2","state":"enabled"}"#
         let r = try JSONDecoder().decode(SafeTradeMarketRules.self, from: Data(json.utf8))
-        #expect(r == .prlusdt)
+        #expect(r == .pearlusdt)
+    }
+
+    /// SafeTrade renamed the coin PRL → PEARL on 2026-10-18 (`prlusdt` now 404s, the
+    /// `prl` currency is disabled). Live `GET /trade/public/markets/pearlusdt`, 2026-10-19.
+    @Test func tradesThePearlMarket() throws {
+        let json = #"{"id":"pearlusdt","symbol":"pearlusdt","name":"PEARL/USDT","base_unit":"pearl","quote_unit":"usdt","amount_precision":4,"price_precision":2,"total_precision":4,"min_price":"0.01","max_price":"100000","min_amount":"2","position":5,"state":"enabled"}"#
+        let live = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+        #expect(SafeTradeMarket.defaultValue == live?["id"] as? String)
+        #expect(SafeTradeMarket.base == live?["base_unit"] as? String)
+        #expect(SafeTradeMarket.pairName == live?["name"] as? String)
+        #expect(SafeTradeMarket.baseTicker.lowercased() == SafeTradeMarket.base)
+        #expect(SafeTradeMarket.normalized(nil) == "pearlusdt")
+        #expect(try JSONDecoder().decode(SafeTradeMarketRules.self, from: Data(json.utf8)) == rules)
     }
 
     @Test func checksPrecisionAndMinimums() {
@@ -31,7 +44,7 @@ struct SafeTradeMarketRulesTests {
 }
 
 struct SafeTradeBookTests {
-    // Live prlusdt book shape (2026-09-27): asks ascending, bids descending.
+    // Live pearlusdt (then prlusdt) book shape (2026-09-27): asks ascending, bids descending.
     private let depthJSON = #"{"asks":[["1.48","5591.0758"],["1.49","20676.3443"],["1.5","53247.9385"]],"bids":[["1.47","735.0569"],["1.46","7007.2493"]],"sequence":3430251}"#
 
     @Test func decodesDepth() throws {

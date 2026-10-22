@@ -31,7 +31,7 @@ struct MarketSection: View {
         let down = (chg ?? "").hasPrefix("-")
         VStack(alignment: .leading, spacing: Pearl.Space.md) {
             HStack {
-                Text("PRL/USDT").font(.caption).foregroundStyle(.secondary)
+                Text(SafeTradeMarket.pairName).font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 if PriceLiveActivity.supported { liveButton }
             }
@@ -167,7 +167,7 @@ struct CandleFullScreen: View {
         let chg = store.periodChange
         VStack(alignment: .leading, spacing: Pearl.Space.sm) {
             HStack(alignment: .firstTextBaseline, spacing: Pearl.Space.xs) {
-                Text("PRL/USDT").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                Text(SafeTradeMarket.pairName).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                 Text(store.ticker?.last ?? "—")
                     .font(.system(.title3, design: .rounded).weight(.bold)).monospacedDigit()
                     .lineLimit(1)
@@ -745,7 +745,7 @@ struct CandleChart: View {
     private func volumeCaption(_ c: STCandle) -> some View {
         HStack(spacing: 4) {
             Text(Loc("成交量")).foregroundStyle(axisColor)
-            Text(Self.compactVolume(c.volume) + " PRL").foregroundStyle(axisColor).monospacedDigit()
+            Text(Self.compactVolume(c.volume) + " " + SafeTradeMarket.baseTicker).foregroundStyle(axisColor).monospacedDigit()
         }
         .font(.caption2)
         .lineLimit(1)
@@ -787,7 +787,7 @@ struct CandleChart: View {
                     ohlc(Loc("收盘价"), pf(c.close), Self.directionColor(up: c.up, scheme: scheme))
                 }
                 GridRow {
-                    ohlc(Loc("成交量"), vf(c.volume) + " PRL", .primary).gridCellColumns(2)
+                    ohlc(Loc("成交量"), vf(c.volume) + " " + SafeTradeMarket.baseTicker, .primary).gridCellColumns(2)
                 }
             }
         }

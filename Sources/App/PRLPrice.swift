@@ -5,7 +5,7 @@ import Combine
 // $PRL spot price (USD)
 // ------------------------------------------------------------
 // "如果有 SafeTrade 就用它，否则用其他公开 API。"
-// Primary source is SafeTrade's PUBLIC PRL/USDT ticker — no API
+// Primary source is SafeTrade's PUBLIC PEARL/USDT ticker — no API
 // keys required, it's the real market price. When SafeTrade can't
 // be reached we fall back to WhatToMine's PRL exchange_rate × the
 // live BTC/USD price (CoinGecko) — the same derivation the mining

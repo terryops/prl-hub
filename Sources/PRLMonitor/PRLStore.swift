@@ -39,10 +39,10 @@ func fetchBTC() async -> Double? {
     return num(b["usd"])
 }
 
-/// Live PRL price (USD) straight from SafeTrade's PRL/USDT ticker — the real
+/// Live PRL price (USD) straight from SafeTrade's PEARL/USDT ticker — the real
 /// market price, preferred over the WhatToMine exchange_rate×BTC derivation.
 func fetchPRLUsdSafeTrade() async -> Double? {
-    guard let url = URL(string: "https://safetrade.com/api/v2/peatio/public/markets/prlusdt/tickers") else { return nil }
+    guard let url = URL(string: "https://safetrade.com/api/v2/peatio/public/markets/pearlusdt/tickers") else { return nil }
     var req = URLRequest(url: url); req.timeoutInterval = 10
     req.setValue("application/json", forHTTPHeaderField: "Accept")
     guard let (data, resp) = try? await URLSession.shared.data(for: req),
@@ -226,7 +226,7 @@ final class PRLStore: ObservableObject {
     private var savedRentFX: Double?
 
     // MARK: 币价历史（行情趋势图）
-    /// Daily PRL/USDT candles for the 行情 price-trend chart. Reuses SafeTrade's
+    /// Daily PEARL/USDT candles for the 行情 price-trend chart. Reuses SafeTrade's
     /// PUBLIC k-line endpoint, so no API keys are required.
     @Published var priceHistory: [STCandle] = []
     private let stClient = SafeTradeClient()
@@ -728,12 +728,12 @@ final class PRLStore: ObservableObject {
         return cfg.perUnit * netPearl / (netPearl + myHashPearl)
     }
 
-    /// Pull daily PRL/USDT candles for the price-trend chart. Public k-line, no
+    /// Pull daily PEARL/USDT candles for the price-trend chart. Public k-line, no
     /// keys needed. Daily candles barely move intraday, so skip refetching within
     /// 5 min unless forced (the 60s auto-timer would otherwise hammer it).
     func loadPriceHistory(force: Bool = false) {
         if !force, !priceHistory.isEmpty, let t = lastPriceFetch, Date().timeIntervalSince(t) < 300 { return }
-        let market = SafeTradeMarket.defaultValue   // the market setting is gone; always PRL/USDT
+        let market = SafeTradeMarket.defaultValue   // the market setting is gone; always PEARL/USDT
         Task { [weak self] in
             guard let self else { return }
             if let cs = try? await self.stClient.kline(market: market, period: 1440, limit: 90), !cs.isEmpty {

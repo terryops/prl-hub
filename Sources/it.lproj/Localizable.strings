@@ -41,7 +41,7 @@
 "90天净" = "Netto 90g";
 "API 密钥存于 iCloud 钥匙串（端到端加密，仅你可见），在各设备间同步；助记词不同步，仅存于本机钥匙串。" = "Le chiavi API sono salvate nel Portachiavi iCloud (crittografia end-to-end, visibili solo a te) e si sincronizzano tra i tuoi dispositivi; la frase di recupero non viene sincronizzata e resta solo nel portachiavi di questo dispositivo.";
 "选择矿池后，填入你的 Pearl 收款地址即可查询。" = "Scegli un pool, poi inserisci il tuo indirizzo di ricezione Pearl per consultarlo.";
-"PRL 余额不足" = "Saldo PRL insufficiente";
+"PEARL 余额不足" = "Saldo PEARL insufficiente";
 "PRL 币价" = "Prezzo PRL";
 "PRL 币价 $" = "Prezzo PRL $";
 "PRL 挖矿监控" = "Statistiche pool PRL";
@@ -68,7 +68,7 @@
 "主题" = "Tema";
 "买" = "Compra";
 "买入" = "Compra";
-"买入 PRL" = "Compra PRL";
+"买入 PEARL" = "Compra PEARL";
 "交易" = "Trading";
 "交易 · SafeTrade" = "Trading · SafeTrade";
 "交易在本机签名（私钥不离开设备），经 Blockbook 广播。" = "Le transazioni sono firmate sul dispositivo (la chiave privata non lo lascia mai) e trasmesse tramite Blockbook.";
@@ -129,7 +129,7 @@
 "单位日产 PRL" = "Resa giorn./unità PRL";
 "卖" = "Vendi";
 "卖出" = "Vendi";
-"卖出 PRL" = "Vendi PRL";
+"卖出 PEARL" = "Vendi PEARL";
 "占全网" = "Quota di rete";
 "参数" = "Parametri";
 "发出" = "Inviato";
@@ -205,7 +205,7 @@
 "撤单" = "Annulla";
 "撤销订单" = "Annulla ordine";
 "确认撤单" = "Conferma annullamento";
-"确认撤销此订单？%@ %@ PRL @ %@" = "Annullare questo ordine? %@ %@ PRL @ %@";
+"确认撤销此订单？%@ %@ PEARL @ %@" = "Annullare questo ordine? %@ %@ PEARL @ %@";
 "我的设备" = "Dispositivi";
 "手动" = "Manuale";
 "扣抽水" = "Netto commissione pool";
@@ -235,7 +235,7 @@
 "收款地址格式不正确" = "Formato dell’indirizzo di ricezione non valido";
 "改别名" = "Modifica alias";
 "数据中心" = "Data center";
-"数量 (PRL)" = "Quantità (PRL)";
+"数量 (PEARL)" = "Quantità (PEARL)";
 "新增联系人" = "Aggiungi contatto";
 "新设备" = "Nuovo dispositivo";
 "方向" = "Direzione";
@@ -841,7 +841,7 @@
 "数量最多 %d 位小数" = "Decimali massimi per la quantità: %d";
 "暂时无法确认下单结果，请到 SafeTrade 网站核对，或稍后点「重新核对」。" = "Al momento non è possibile confermare l’esito dell’ordine: controlla sul sito SafeTrade oppure tocca “Verifica di nuovo” più tardi.";
 "暂时无法确认提现结果，请到 SafeTrade 网站核对提现记录，或稍后点「重新核对」。" = "Al momento non è possibile confermare l’esito del prelievo: controlla la cronologia prelievi sul sito SafeTrade oppure tocca “Verifica di nuovo” più tardi.";
-"最少下单 %@ PRL" = "Ordine minimo %@ PRL";
+"最少下单 %@ PEARL" = "Ordine minimo %@ PEARL";
 "正在查询…" = "Ricerca…";
 "正在核对…" = "Verifica…";
 "盘口深度不够，市价单成交不了这么多，请减少数量或改用限价单" = "L’order book non ha abbastanza profondità per eseguire questa quantità a mercato: riduci la quantità o usa un ordine limite";

@@ -68,7 +68,8 @@ enum SafeTradeAuthProblem: Equatable {
 }
 
 /// A market's order rules (`GET /trade/public/markets/{id}`). Checked live for
-/// prlusdt 2026-09-27: price 2 dp, amount 4 dp, min amount 2 PRL, price 0.01–100000.
+/// pearlusdt 2026-10-19 (same as prlusdt 2026-09-27): price 2 dp, amount 4 dp,
+/// min amount 2 PEARL, price 0.01–100000.
 struct SafeTradeMarketRules: Decodable, Equatable {
     var amountPrecision: Int
     var pricePrecision: Int
@@ -77,8 +78,8 @@ struct SafeTradeMarketRules: Decodable, Equatable {
     var maxPrice: Decimal
 
     /// Used until the live rules load (and if they never do).
-    static let prlusdt = SafeTradeMarketRules(amountPrecision: 4, pricePrecision: 2,
-                                              minAmount: 2, minPrice: Decimal(string: "0.01")!, maxPrice: 100000)
+    static let pearlusdt = SafeTradeMarketRules(amountPrecision: 4, pricePrecision: 2,
+                                                minAmount: 2, minPrice: Decimal(string: "0.01")!, maxPrice: 100000)
 
     init(amountPrecision: Int, pricePrecision: Int, minAmount: Decimal, minPrice: Decimal, maxPrice: Decimal) {
         self.amountPrecision = amountPrecision
@@ -94,7 +95,7 @@ struct SafeTradeMarketRules: Decodable, Equatable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        let fallback = Self.prlusdt
+        let fallback = Self.pearlusdt
         func dec(_ k: CodingKeys) -> Decimal? {
             (try? c.decodeIfPresent(STNumberText.self, forKey: k)).flatMap { Decimal(string: $0.text) }
         }
@@ -115,7 +116,7 @@ struct SafeTradeMarketRules: Decodable, Equatable {
             switch self {
             case .priceDecimals(let n): return Loc("价格最多 %d 位小数", n)
             case .amountDecimals(let n): return Loc("数量最多 %d 位小数", n)
-            case .belowMinAmount(let m): return Loc("最少下单 %@ PRL", SafeTradeMarketRules.plain(m))
+            case .belowMinAmount(let m): return Loc("最少下单 %@ PEARL", SafeTradeMarketRules.plain(m))
             case .priceOutOfRange(let lo, let hi):
                 return Loc("价格需在 %@ – %@ USDT 之间", SafeTradeMarketRules.plain(lo), SafeTradeMarketRules.plain(hi))
             }

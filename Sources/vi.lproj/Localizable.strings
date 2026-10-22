@@ -41,7 +41,7 @@
 "90天净" = "Ròng 90 ngày";
 "API 密钥存于 iCloud 钥匙串（端到端加密，仅你可见），在各设备间同步；助记词不同步，仅存于本机钥匙串。" = "Khóa API được lưu trong iCloud Keychain (mã hóa đầu cuối, chỉ bạn thấy) và đồng bộ giữa các thiết bị; cụm từ khôi phục không đồng bộ, chỉ lưu trong Keychain trên máy này.";
 "选择矿池后，填入你的 Pearl 收款地址即可查询。" = "Chọn pool rồi nhập địa chỉ nhận Pearl của bạn để tra cứu.";
-"PRL 余额不足" = "Số dư PRL không đủ";
+"PEARL 余额不足" = "Số dư PEARL không đủ";
 "PRL 币价" = "Giá PRL";
 "PRL 币价 $" = "Giá PRL $";
 "PRL 挖矿监控" = "Pool PRL";
@@ -68,7 +68,7 @@
 "主题" = "Giao diện";
 "买" = "Mua";
 "买入" = "Mua vào";
-"买入 PRL" = "Mua PRL";
+"买入 PEARL" = "Mua PEARL";
 "交易" = "Giao dịch";
 "交易 · SafeTrade" = "Giao dịch · SafeTrade";
 "交易在本机签名（私钥不离开设备），经 Blockbook 广播。" = "Giao dịch được ký ngay trên máy (khóa riêng không rời thiết bị) và phát qua Blockbook.";
@@ -129,7 +129,7 @@
 "单位日产 PRL" = "Sản lượng PRL/ngày";
 "卖" = "Bán";
 "卖出" = "Bán ra";
-"卖出 PRL" = "Bán PRL";
+"卖出 PEARL" = "Bán PEARL";
 "占全网" = "Tỷ trọng mạng";
 "参数" = "Tham số";
 "发出" = "Gửi đi";
@@ -205,7 +205,7 @@
 "撤单" = "Hủy lệnh";
 "撤销订单" = "Hủy lệnh";
 "确认撤单" = "Xác nhận hủy";
-"确认撤销此订单？%@ %@ PRL @ %@" = "Hủy lệnh này? %@ %@ PRL @ %@";
+"确认撤销此订单？%@ %@ PEARL @ %@" = "Hủy lệnh này? %@ %@ PEARL @ %@";
 "我的设备" = "Thiết bị";
 "手动" = "Thủ công";
 "扣抽水" = "Đã trừ phí pool";
@@ -235,7 +235,7 @@
 "收款地址格式不正确" = "Định dạng địa chỉ nhận không đúng";
 "改别名" = "Đổi biệt danh";
 "数据中心" = "Trung tâm dữ liệu";
-"数量 (PRL)" = "Số lượng (PRL)";
+"数量 (PEARL)" = "Số lượng (PEARL)";
 "新增联系人" = "Thêm liên hệ";
 "新设备" = "Thiết bị mới";
 "方向" = "Hướng";
@@ -841,7 +841,7 @@
 "数量最多 %d 位小数" = "Số lượng tối đa %d chữ số thập phân";
 "暂时无法确认下单结果，请到 SafeTrade 网站核对，或稍后点「重新核对」。" = "Chưa thể xác nhận kết quả lệnh — hãy kiểm tra trên web SafeTrade, hoặc lát nữa nhấn Kiểm tra lại.";
 "暂时无法确认提现结果，请到 SafeTrade 网站核对提现记录，或稍后点「重新核对」。" = "Chưa thể xác nhận kết quả rút — hãy kiểm tra lịch sử rút trên web SafeTrade, hoặc lát nữa nhấn Kiểm tra lại.";
-"最少下单 %@ PRL" = "Lệnh tối thiểu %@ PRL";
+"最少下单 %@ PEARL" = "Lệnh tối thiểu %@ PEARL";
 "正在查询…" = "Đang tra cứu…";
 "正在核对…" = "Đang kiểm tra…";
 "盘口深度不够，市价单成交不了这么多，请减少数量或改用限价单" = "Sổ lệnh quá mỏng để khớp chừng này bằng lệnh thị trường — giảm số lượng hoặc dùng lệnh giới hạn";

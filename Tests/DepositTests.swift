@@ -48,7 +48,7 @@ struct DepositTests {
 
         // Still being generated: an empty address.
         let pending = try JSONDecoder().decode(STDepositAddress.self, from: data(
-            #"{"address":"","network":"pearl-tokens","currencies":["prl"]}"#))
+            #"{"address":"","network":"pearl-tokens","currencies":["pearl"]}"#))
         #expect(!pending.isReady)
     }
 
@@ -64,7 +64,7 @@ struct DepositTests {
         #expect(STDepositAddress.pick(list, currency: "usdt", network: "arbitrum-tokens") == nil)  // not generated
         #expect(STDepositAddress.pick(list, currency: "usdt", network: "spl-key") == nil)
         // A balance without the field still decodes.
-        let bare = try JSONDecoder().decode(STBalance.self, from: data(#"{"currency":"prl","balance":"2","locked":"0"}"#))
+        let bare = try JSONDecoder().decode(STBalance.self, from: data(#"{"currency":"pearl","balance":"2","locked":"0"}"#))
         #expect(bare.deposit_addresses == nil)
     }
 
@@ -76,8 +76,8 @@ struct DepositTests {
           "created_at":1790000000},
          {"id":1,"currency":"usdt","amount":"5","credited":"0","state":"rejected"},
          {"id":"not-a-number"},
-         {"id":4,"currency":"prl","amount":"1","credited":"0","state":"submitted"},
-         {"id":5,"currency":"prl","amount":"1","state":"collected"}]
+         {"id":4,"currency":"pearl","amount":"1","credited":"0","state":"submitted"},
+         {"id":5,"currency":"pearl","amount":"1","state":"collected"}]
         """
         let rows = try #require(decodeRows(STDeposit.self, from: data(json)))
         #expect(rows.map(\.id) == [3, 2, 1, 4, 5])                   // the odd row is skipped

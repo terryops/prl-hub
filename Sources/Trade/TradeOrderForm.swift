@@ -15,7 +15,7 @@ struct OrderFormView: View {
     private enum Field { case price, volume }
 
     private var usdt: STBalance? { store.balance("usdt") }
-    private var prl: STBalance? { store.balance("prl") }
+    private var pearl: STBalance? { store.balance(SafeTradeMarket.base) }
     private var rules: SafeTradeMarketRules { store.rules }
 
     /// Typed number → Double (a ru/vi decimalPad types a comma; PRLAmount.parse takes both).
@@ -39,7 +39,7 @@ struct OrderFormView: View {
     /// until a price is typed); market buy → what the USDT buys walking the asks,
     /// with a tick + fee margin.
     private var maxAmount: Double {
-        if side == "sell" { return prl?.balanceValue ?? 0 }
+        if side == "sell" { return pearl?.balanceValue ?? 0 }
         let quote = usdt?.balanceValue ?? 0
         if ordType == "market" {
             guard let d = store.depth else { return 0 }
@@ -59,7 +59,7 @@ struct OrderFormView: View {
         rules.problem(amountText: volume, priceText: ordType == "limit" ? price : nil)
     }
     private var insufficient: Bool {
-        if side == "sell" { return volNum > (prl?.balanceValue ?? 0) }
+        if side == "sell" { return volNum > (pearl?.balanceValue ?? 0) }
         let cost = ordType == "limit" ? total : marketEstimate
         return cost > (usdt?.balanceValue ?? 0)
     }
@@ -72,7 +72,7 @@ struct OrderFormView: View {
             && (ordType == "limit" || marketAvg != nil)
     }
     private var confirmMessage: String {
-        let head = (side == "buy" ? Loc("买入") : Loc("卖出")) + Loc(" %@ PRL", volume)
+        let head = (side == "buy" ? Loc("买入") : Loc("卖出")) + Loc(" %@ PEARL", volume)
         if ordType == "limit" { return head + Loc(" @ %@ USDT（约 %@ USDT）", price, amt(total)) }
         return head + Loc("（市价，约 %@ USDT）", amt(marketEstimate))
     }
@@ -83,12 +83,12 @@ struct OrderFormView: View {
             HStack {
                 Text(Loc("下单")).font(.headline)
                 Spacer()
-                Text("PRL/USDT").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                Text(SafeTradeMarket.pairName).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             }
             // Full-width, label-less segments: the pickers' own titles ("方向" /
             // "类型") crowded the row on the Mac and said nothing the segments don't.
             Picker(Loc("方向"), selection: $side) {
-                Text(Loc("买入 PRL")).tag("buy"); Text(Loc("卖出 PRL")).tag("sell")
+                Text(Loc("买入 PEARL")).tag("buy"); Text(Loc("卖出 PEARL")).tag("sell")
             }.pickerStyle(.segmented).labelsHidden()
 
             Picker(Loc("类型"), selection: $ordType) {
@@ -116,7 +116,7 @@ struct OrderFormView: View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(Loc("数量 (PRL)")).font(.subheadline).foregroundStyle(.secondary)
+                    Text(Loc("数量 (PEARL)")).font(.subheadline).foregroundStyle(.secondary)
                     Spacer()
                     if maxAmount > 0 {
                         Button(Loc("MAX %@", maxText)) { volume = maxText }
@@ -191,7 +191,7 @@ struct OrderFormView: View {
             if let p = ruleProblem {
                 Text(p.message).foregroundStyle(.red)
             } else if insufficient {
-                Text(side == "sell" ? Loc("PRL 余额不足") : Loc("USDT 余额不足")).foregroundStyle(.red)
+                Text(side == "sell" ? Loc("PEARL 余额不足") : Loc("USDT 余额不足")).foregroundStyle(.red)
             } else if ordType == "market" && store.depth == nil {
                 Text(Loc("等待盘口数据后才能下市价单")).foregroundStyle(.orange)
             } else if ordType == "market" && marketAvg == nil {

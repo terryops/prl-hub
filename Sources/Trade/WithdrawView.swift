@@ -30,14 +30,14 @@ struct WithdrawView: View {
         _store = StateObject(wrappedValue: WithdrawStore(currency: currency, trade: trade))
     }
 
-    private var isPRL: Bool { store.currency == "prl" }
+    private var isPearl: Bool { store.currency == SafeTradeMarket.base }
     private var unit: String { store.currency.uppercased() }
     private var available: Decimal {
         Decimal(string: trade.balance(store.currency)?.balance ?? "") ?? 0
     }
     private var trimmedAddress: String { address.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var addressValid: Bool {
-        if isPRL { return PRLAddress.isValid(trimmedAddress, network: .mainnet) }
+        if isPearl { return PRLAddress.isValid(trimmedAddress, network: .mainnet) }
         return store.network?.isValidAddress(trimmedAddress) ?? false
     }
     /// Typed amount, rejected if it has more decimals than the exchange accepts.
@@ -80,7 +80,7 @@ struct WithdrawView: View {
 
     /// Mainnet receive address of every wallet on this device (index 0).
     private var myWallets: [(name: String, address: String)] {
-        guard isPRL else { return [] }
+        guard isPearl else { return [] }
         return wallet.wallets.compactMap { w in w.addresses[WalletNetwork.mainnet.rawValue].map { (w.name, $0) } }
     }
 
@@ -114,7 +114,7 @@ struct WithdrawView: View {
             }
             .processingOverlay(store.submitting)
             .task {
-                if isPRL, address.isEmpty, let a = activeWalletAddress { address = a }
+                if isPearl, address.isEmpty, let a = activeWalletAddress { address = a }
                 await store.load()
             }
             .refreshable { await store.load() }
@@ -131,12 +131,12 @@ struct WithdrawView: View {
                 emailCode = ""; phoneCode = ""
                 store.invalidateCodes()
             }
-            .alert(isPRL ? Loc("加入通讯录") : Loc("保存为常用地址"), isPresented: $naming) {
+            .alert(isPearl ? Loc("加入通讯录") : Loc("保存为常用地址"), isPresented: $naming) {
                 TextField(Loc("名称"), text: $presetName)
                 Button(Loc("保存")) { savePreset() }
                 Button(Loc("取消"), role: .cancel) {}
             } message: {
-                Text(isPRL ? shortAddr(trimmedAddress)
+                Text(isPearl ? shortAddr(trimmedAddress)
                            : "\(store.network?.name ?? "") · \(shortAddr(trimmedAddress))")
             }
             .sheet(isPresented: $managingPresets) { PresetAddressesView(currency: store.currency, store: store) }
@@ -189,7 +189,7 @@ struct WithdrawView: View {
     private var savedName: String? {
         guard addressValid else { return nil }
         if let b = beneficiary { return Loc("SafeTrade 地址簿「%@」· 免邮箱验证码", b.title) }
-        if isPRL {
+        if isPearl {
             if let w = myWallets.first(where: { $0.address == trimmedAddress }) { return Loc("钱包「%@」", w.name) }
             return contacts.name(for: trimmedAddress).map { Loc("通讯录「%@」", $0) }
         }
@@ -205,10 +205,10 @@ struct WithdrawView: View {
             || store.beneficiaries.contains { $0.destination == trimmedAddress && bookKey($0) == chain }
     }
 
-    private var canSavePreset: Bool { addressValid && savedName == nil && (isPRL || store.networkKey != nil) }
+    private var canSavePreset: Bool { addressValid && savedName == nil && (isPearl || store.networkKey != nil) }
 
     private func savePreset() {
-        if isPRL {
+        if isPearl {
             contacts.add(name: presetName, address: trimmedAddress)
         } else if let key = store.networkKey {
             book.add(currency: store.currency, blockchainKey: key, address: trimmedAddress, name: presetName)
@@ -240,19 +240,19 @@ struct WithdrawView: View {
 
     @ViewBuilder private var presetsMenu: some View {
         let hasAny = !bookEntries.isEmpty
-            || (isPRL ? (!myWallets.isEmpty || !contacts.contacts.isEmpty) : !usdtPresets.isEmpty)
+            || (isPearl ? (!myWallets.isEmpty || !contacts.contacts.isEmpty) : !usdtPresets.isEmpty)
         if hasAny {
             Menu {
                 if !bookEntries.isEmpty {
                     Section(Loc("SafeTrade 地址簿（免邮箱验证码）")) {
                         ForEach(bookEntries) { b in
                             let n = store.network(forKey: bookKey(b))
-                            Button(isPRL ? b.title : "\(b.title) · \(n?.name ?? "")") { apply(b) }
+                            Button(isPearl ? b.title : "\(b.title) · \(n?.name ?? "")") { apply(b) }
                                 .disabled(!b.isActive || n?.canWithdraw != true)
                         }
                     }
                 }
-                if isPRL {
+                if isPearl {
                     if !myWallets.isEmpty {
                         Section(Loc("我的钱包")) {
                             ForEach(myWallets, id: \.address) { w in Button(w.name) { address = w.address } }
@@ -284,7 +284,7 @@ struct WithdrawView: View {
     // MARK: pieces
 
     private var addressPlaceholder: String {
-        if isPRL { return "prl1…" }
+        if isPearl { return "prl1…" }
         guard let key = store.network?.blockchain_key.lowercased() else { return Loc("先选择网络") }
         if key.hasPrefix("tron") { return "T…" }
         if key.hasPrefix("spl") || key.hasPrefix("sol") { return "Solana" }
@@ -358,7 +358,7 @@ struct WithdrawView: View {
                 }
             }
 
-            if !isPRL { networkPicker }
+            if !isPearl { networkPicker }
 
             if let n = store.network, !n.canWithdraw {
                 Label(Loc("SafeTrade 暂停了这条链的提现"), systemImage: "pause.circle")
@@ -382,13 +382,13 @@ struct WithdrawView: View {
                     #if os(iOS)
                     .textInputAutocapitalization(.never)
                     #endif
-                if !trimmedAddress.isEmpty && !addressValid && (isPRL || store.network != nil) {
-                    Text(isPRL ? Loc("不是有效的 PRL 主网地址") : Loc("不是有效的 %@ 地址", store.network?.name ?? ""))
+                if !trimmedAddress.isEmpty && !addressValid && (isPearl || store.network != nil) {
+                    Text(isPearl ? Loc("不是有效的 PRL 主网地址") : Loc("不是有效的 %@ 地址", store.network?.name ?? ""))
                         .font(.caption).foregroundStyle(.red)
                 } else if let name = savedName {
                     Text(name).font(.caption).foregroundStyle(.secondary)
                 } else if canSavePreset {
-                    Button(isPRL ? Loc("加入通讯录") : Loc("保存为常用地址")) { presetName = ""; naming = true }
+                    Button(isPearl ? Loc("加入通讯录") : Loc("保存为常用地址")) { presetName = ""; naming = true }
                         .buttonStyle(.borderless).font(.caption.weight(.medium)).tint(Pearl.accent)
                 }
                 if let note = store.bookNote {
@@ -422,7 +422,7 @@ struct WithdrawView: View {
                 VStack(spacing: 3) {
                     row(Loc("手续费"), "\(fmt(fee)) \(unit)")
                     row(Loc("预计到账"), "\(fmt(received)) \(unit)")
-                    if isPRL { row(Loc("最少提现"), "\(fmt(n.minAmount)) \(unit)") }   // USDT: shown on the chain tiles
+                    if isPearl { row(Loc("最少提现"), "\(fmt(n.minAmount)) \(unit)") }   // USDT: shown on the chain tiles
                 }
                 .font(.subheadline)
             }
@@ -512,7 +512,7 @@ struct WithdrawView: View {
     private func historyRow(_ w: STWithdraw) -> some View {
         HStack(alignment: .top, spacing: Pearl.Space.sm) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(w.amountText ?? "—") \(unit)" + (isPRL ? "" : store.network(forKey: w.blockchain_key).map { " · \($0.name)" } ?? ""))
+                Text("\(w.amountText ?? "—") \(unit)" + (isPearl ? "" : store.network(forKey: w.blockchain_key).map { " · \($0.name)" } ?? ""))
                     .font(.callout.monospacedDigit())
                 if let d = w.destination {
                     Text(shortAddr(d)).font(.caption.monospaced()).foregroundStyle(.secondary)

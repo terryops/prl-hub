@@ -11,7 +11,7 @@ import Combine
 /// (`deposit_addresses`), so those show without another request.
 @MainActor
 final class DepositStore: ObservableObject {
-    let currency: String                     // "prl" | "usdt"
+    let currency: String                     // "pearl" | "usdt"
     private let trade: SafeTradeStore
     /// The chains open for deposits.
     @Published var networks: [STCurrencyNetwork] = []
@@ -128,7 +128,7 @@ final class DepositStore: ObservableObject {
 
     private static func demoHistory(currency: String) -> [STDeposit] {
         let now = Date().timeIntervalSince1970
-        let chain = currency == "prl" ? "pearl-tokens" : "bsc-tokens"
+        let chain = currency == SafeTradeMarket.base ? "pearl-tokens" : "bsc-tokens"
         let json = """
         [{"id":2,"currency":"\(currency)","blockchain_key":"\(chain)","amount":"120.5","fee":"0","credited":false,
           "txid":"9f2c4e6a8b0d1f3e5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a3c5e7b9d1f","state":"processing",

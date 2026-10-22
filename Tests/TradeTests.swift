@@ -97,7 +97,7 @@ struct SafeTradeErrorTests {
 @MainActor
 struct SafeTradeOrderTrackingTests {
     private func order(_ id: Int, _ side: String, _ state: String) -> STOrder {
-        STOrder(id: id, market: "prlusdt", side: side, type: "limit", price: "1.5", state: state,
+        STOrder(id: id, market: "pearlusdt", side: side, type: "limit", price: "1.5", state: state,
                 origin_amount: "10", avg_price: nil, created_at: nil, updated_at: nil)
     }
 

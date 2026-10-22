@@ -54,7 +54,7 @@ final class SafeTradeStore: ObservableObject {
     @Published private(set) var depthStale = false
     private var depthFetchedAt: Date?
     /// The market's order rules (precisions, minimum); the built-in values until they load.
-    @Published private(set) var rules = SafeTradeMarketRules.prlusdt
+    @Published private(set) var rules = SafeTradeMarketRules.pearlusdt
     private var rulesLoaded = false
     /// Some refresh is in flight (toolbar spinner). The blocking overlay only covers a
     /// first load that has nothing on screen yet.
@@ -467,7 +467,12 @@ final class SafeTradeStore: ObservableObject {
             guard let c = r["currency"], let b = r["balance"], let l = r["locked"] else { return nil }
             return STBalance(currency: c, balance: b, locked: l)
         }
-        return list.isEmpty ? nil : list
+        // Saved before SafeTrade renamed PRL → PEARL (2026-10-18): the coin's row is
+        // still under "prl" — show it as PEARL until the first refresh replaces it.
+        let renamed = list.contains { $0.currency == SafeTradeMarket.base } ? list : list.map {
+            $0.currency == "prl" ? STBalance(currency: SafeTradeMarket.base, balance: $0.balance, locked: $0.locked) : $0
+        }
+        return renamed.isEmpty ? nil : renamed
     }
 
     private static func rememberBalances(_ list: [STBalance]) {
@@ -569,14 +574,14 @@ final class SafeTradeStore: ObservableObject {
     /// Believable demo account for SHOT_TRADE_DEMO App Store captures (DEBUG only).
     private func seedDemo() {
         balances = [
-            STBalance(currency: "prl",  balance: "1284.50000000", locked: "200.00000000"),
+            STBalance(currency: "pearl", balance: "1284.50000000", locked: "200.00000000"),
             STBalance(currency: "usdt", balance: "642.18000000",  locked: "55.00000000"),
         ]
         orders = [
-            STOrder(id: 90412, market: "prlusdt", side: "sell", type: "limit",
+            STOrder(id: 90412, market: "pearlusdt", side: "sell", type: "limit",
                     price: "0.5800", state: "wait", origin_amount: "200.0", avg_price: nil,
                     created_at: STTimestamp(Date().addingTimeInterval(-2 * 3600)), updated_at: nil),
-            STOrder(id: 90398, market: "prlusdt", side: "buy",  type: "limit",
+            STOrder(id: 90398, market: "pearlusdt", side: "buy",  type: "limit",
                     price: "0.4850", state: "wait", origin_amount: "500.0", avg_price: nil,
                     created_at: STTimestamp(Date().addingTimeInterval(-26 * 3600)), updated_at: nil),
         ]

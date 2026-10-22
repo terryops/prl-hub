@@ -5,7 +5,7 @@ import Foundation
 /// One book level with everything resting between it and the best price on its side.
 struct DepthPoint: Identifiable, Equatable {
     let price: Double
-    /// PRL at this level and every better one on its side.
+    /// PEARL at this level and every better one on its side.
     let cumulative: Double
     /// USDT value of `cumulative` (Σ price × amount).
     let cumulativeValue: Double
@@ -29,7 +29,7 @@ struct DepthCurve: Equatable {
     let lo: Double
     let hi: Double
 
-    /// Default reach either side of the mid: ±10 % (≈ 15 levels at today's PRL tick).
+    /// Default reach either side of the mid: ±10 % (≈ 15 levels at today's PEARL tick).
     /// Wider, the big walls further out set the scale and flatten the levels a trade
     /// actually meets into the baseline.
     static let baseHalfWidth = 0.10
@@ -39,7 +39,7 @@ struct DepthCurve: Equatable {
     var spread: Double? { bestBid.flatMap { b in bestAsk.map { $0 - b } } }
     /// Spread as a % of the mid.
     var spreadPercent: Double? { spread.map { $0 / mid * 100 } }
-    /// PRL on each side inside the window.
+    /// PEARL on each side inside the window.
     var bidTotal: Double { bids.last?.cumulative ?? 0 }
     var askTotal: Double { asks.last?.cumulative ?? 0 }
     /// Bid share of the in-window book, 0…1 (nil when both sides are empty).

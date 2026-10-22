@@ -16,11 +16,11 @@ struct DepositView: View {
         _store = StateObject(wrappedValue: DepositStore(currency: currency, trade: trade))
     }
 
-    private var isPRL: Bool { store.currency == "prl" }
+    private var isPearl: Bool { store.currency == SafeTradeMarket.base }
     private var unit: String { store.currency.uppercased() }
     /// The in-app wallet can pay the deposit itself: PRL, a mainnet wallet, unlocked.
     private var canSendFromWallet: Bool {
-        isPRL && wallet.phase == .unlocked && wallet.network == .mainnet
+        isPearl && wallet.phase == .unlocked && wallet.network == .mainnet
     }
 
     var body: some View {
@@ -149,7 +149,7 @@ struct DepositView: View {
                 }
                 facts
                 warning
-                if isPRL { fromWallet(a.plainAddress) }
+                if isPearl { fromWallet(a.plainAddress) }
             } else if store.loadingAddress {
                 HStack(spacing: Pearl.Space.xs) {
                     ProgressView().controlSize(.small)
@@ -230,7 +230,7 @@ struct DepositView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.pearl)
-        } else if isPRL, wallet.phase == .locked {
+        } else if isPearl, wallet.phase == .locked {
             Text(Loc("解锁钱包后，可以从钱包直接转入。"))
                 .pearlExplanation()
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -259,7 +259,7 @@ struct DepositView: View {
         let chain = store.networks.first { $0.blockchain_key == d.blockchain_key }
         return HStack(alignment: .top, spacing: Pearl.Space.sm) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(d.amountText ?? "—") \(unit)" + (isPRL ? "" : chain.map { " · \($0.name)" } ?? ""))
+                Text("\(d.amountText ?? "—") \(unit)" + (isPearl ? "" : chain.map { " · \($0.name)" } ?? ""))
                     .font(.callout.monospacedDigit())
                 if let at = d.created_at?.date {
                     Text(at, format: .dateTime.month(.defaultDigits).day().hour().minute())

@@ -41,7 +41,7 @@
 "90天净" = "90d Net";
 "API 密钥存于 iCloud 钥匙串（端到端加密，仅你可见），在各设备间同步；助记词不同步，仅存于本机钥匙串。" = "API keys are stored in the iCloud Keychain (end-to-end encrypted, visible only to you) and sync across your devices; the recovery phrase does not sync and stays only in this device's Keychain.";
 "选择矿池后，填入你的 Pearl 收款地址即可查询。" = "Pick a pool, then enter your Pearl receiving address to look it up.";
-"PRL 余额不足" = "Insufficient PRL balance";
+"PEARL 余额不足" = "Insufficient PEARL balance";
 "PRL 币价" = "PRL Price";
 "PRL 币价 $" = "PRL Price $";
 "PRL 挖矿监控" = "PRL Pool Stats";
@@ -68,7 +68,7 @@
 "主题" = "Theme";
 "买" = "Buy";
 "买入" = "Buy";
-"买入 PRL" = "Buy PRL";
+"买入 PEARL" = "Buy PEARL";
 "交易" = "Trade";
 "交易 · SafeTrade" = "Trade · SafeTrade";
 "交易在本机签名（私钥不离开设备），经 Blockbook 广播。" = "Transactions are signed on-device (your private key never leaves) and broadcast via Blockbook.";
@@ -129,7 +129,7 @@
 "单位日产 PRL" = "Daily Yield/Unit PRL";
 "卖" = "Sell";
 "卖出" = "Sell";
-"卖出 PRL" = "Sell PRL";
+"卖出 PEARL" = "Sell PEARL";
 "占全网" = "Network Share";
 "参数" = "Parameters";
 "发出" = "Sent";
@@ -205,7 +205,7 @@
 "撤单" = "Cancel";
 "撤销订单" = "Cancel Order";
 "确认撤单" = "Confirm Cancel";
-"确认撤销此订单？%@ %@ PRL @ %@" = "Cancel this order? %@ %@ PRL @ %@";
+"确认撤销此订单？%@ %@ PEARL @ %@" = "Cancel this order? %@ %@ PEARL @ %@";
 "我的设备" = "Devices";
 "手动" = "Manual";
 "扣抽水" = "Pool Fee Deducted";
@@ -235,7 +235,7 @@
 "收款地址格式不正确" = "Invalid receiving address format";
 "改别名" = "Edit Alias";
 "数据中心" = "Data Center";
-"数量 (PRL)" = "Amount (PRL)";
+"数量 (PEARL)" = "Amount (PEARL)";
 "新增联系人" = "Add Contact";
 "新设备" = "New Device";
 "方向" = "Direction";
@@ -841,7 +841,7 @@
 "数量最多 %d 位小数" = "Amount takes at most %d decimals";
 "暂时无法确认下单结果，请到 SafeTrade 网站核对，或稍后点「重新核对」。" = "Can't confirm the order's outcome right now — check on the SafeTrade website, or tap Check again later.";
 "暂时无法确认提现结果，请到 SafeTrade 网站核对提现记录，或稍后点「重新核对」。" = "Can't confirm the withdrawal's outcome right now — check the withdrawal history on the SafeTrade website, or tap Check again later.";
-"最少下单 %@ PRL" = "Minimum order %@ PRL";
+"最少下单 %@ PEARL" = "Minimum order %@ PEARL";
 "正在查询…" = "Looking up…";
 "正在核对…" = "Checking…";
 "盘口深度不够，市价单成交不了这么多，请减少数量或改用限价单" = "The order book is too thin to fill this much at market — lower the amount or use a limit order";

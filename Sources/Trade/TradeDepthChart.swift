@@ -150,7 +150,7 @@ private struct DepthSummary: View {
 
     private func amount(_ v: Double) -> String {
         v.formatted(.number.notation(.compactName).precision(.significantDigits(1...3))
-            .locale(LocBundleHolder.shared.locale)) + " PRL"
+            .locale(LocBundleHolder.shared.locale)) + " " + SafeTradeMarket.baseTicker
     }
 }
 
@@ -291,7 +291,7 @@ struct DepthChart: View {
         .frame(height: Self.height)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Loc("买卖深度"))
-        .accessibilityValue(Loc("买盘 %@", "\(Int(curve.bidTotal)) PRL") + ", " + Loc("卖盘 %@", "\(Int(curve.askTotal)) PRL"))
+        .accessibilityValue(Loc("买盘 %@", "\(Int(curve.bidTotal)) \(SafeTradeMarket.baseTicker)") + ", " + Loc("卖盘 %@", "\(Int(curve.askTotal)) \(SafeTradeMarket.baseTicker)"))
     }
 
     private func fill(_ c: Color) -> LinearGradient {
@@ -318,7 +318,7 @@ struct DepthChart: View {
                 .font(.caption.weight(.semibold)).foregroundStyle(color)
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 3) {
                 row(Loc("价格"), num(s.point.price, digits: 2...6) + " USDT")
-                row(Loc("累计数量"), num(s.point.cumulative, digits: 0...2) + " PRL")
+                row(Loc("累计数量"), num(s.point.cumulative, digits: 0...2) + " " + SafeTradeMarket.baseTicker)
                 row(Loc("累计金额"), num(s.point.cumulativeValue, digits: 0...2) + " USDT")
             }
         }

@@ -41,7 +41,7 @@
 "90天净" = "90g Net";
 "API 密钥存于 iCloud 钥匙串（端到端加密，仅你可见），在各设备间同步；助记词不同步，仅存于本机钥匙串。" = "API anahtarları iCloud Anahtar Zinciri'nde saklanır (uçtan uca şifrelidir, yalnızca siz görebilirsiniz) ve cihazlarınız arasında eşitlenir; kurtarma ifadesi eşitlenmez, yalnızca bu cihazın Anahtar Zinciri'nde kalır.";
 "选择矿池后，填入你的 Pearl 收款地址即可查询。" = "Bir havuz seçin, ardından sorgulamak için Pearl alma adresinizi girin.";
-"PRL 余额不足" = "PRL bakiyesi yetersiz";
+"PEARL 余额不足" = "PEARL bakiyesi yetersiz";
 "PRL 币价" = "PRL Fiyatı";
 "PRL 币价 $" = "PRL Fiyatı $";
 "PRL 挖矿监控" = "PRL Havuz İstatistiği";
@@ -68,7 +68,7 @@
 "主题" = "Tema";
 "买" = "Alış";
 "买入" = "Al";
-"买入 PRL" = "PRL Al";
+"买入 PEARL" = "PEARL Al";
 "交易" = "Al-Sat";
 "交易 · SafeTrade" = "Al-Sat · SafeTrade";
 "交易在本机签名（私钥不离开设备），经 Blockbook 广播。" = "İşlemler cihazda imzalanır (özel anahtarınız cihazdan asla çıkmaz) ve Blockbook üzerinden yayınlanır.";
@@ -129,7 +129,7 @@
 "单位日产 PRL" = "Günlük Birim Üretim PRL";
 "卖" = "Satış";
 "卖出" = "Sat";
-"卖出 PRL" = "PRL Sat";
+"卖出 PEARL" = "PEARL Sat";
 "占全网" = "Ağ Payı";
 "参数" = "Parametreler";
 "发出" = "Gönderildi";
@@ -205,7 +205,7 @@
 "撤单" = "İptal Et";
 "撤销订单" = "Emri İptal Et";
 "确认撤单" = "İptali Onayla";
-"确认撤销此订单？%@ %@ PRL @ %@" = "Bu emir iptal edilsin mi? %@ %@ PRL @ %@";
+"确认撤销此订单？%@ %@ PEARL @ %@" = "Bu emir iptal edilsin mi? %@ %@ PEARL @ %@";
 "我的设备" = "Cihazlar";
 "手动" = "Manuel";
 "扣抽水" = "Havuz Ücreti Sonrası";
@@ -235,7 +235,7 @@
 "收款地址格式不正确" = "Alıcı adresi biçimi geçersiz";
 "改别名" = "Takma Adı Düzenle";
 "数据中心" = "Veri Merkezi";
-"数量 (PRL)" = "Miktar (PRL)";
+"数量 (PEARL)" = "Miktar (PEARL)";
 "新增联系人" = "Kişi Ekle";
 "新设备" = "Yeni Cihaz";
 "方向" = "Yön";
@@ -841,7 +841,7 @@
 "数量最多 %d 位小数" = "Miktar en fazla %d ondalık basamak içerebilir";
 "暂时无法确认下单结果，请到 SafeTrade 网站核对，或稍后点「重新核对」。" = "Emrin sonucu şu anda doğrulanamıyor; SafeTrade web sitesinden kontrol edin veya daha sonra “Yeniden Kontrol Et”e dokunun.";
 "暂时无法确认提现结果，请到 SafeTrade 网站核对提现记录，或稍后点「重新核对」。" = "Çekimin sonucu şu anda doğrulanamıyor; SafeTrade web sitesindeki çekim geçmişini kontrol edin veya daha sonra “Yeniden Kontrol Et”e dokunun.";
-"最少下单 %@ PRL" = "Minimum emir %@ PRL";
+"最少下单 %@ PEARL" = "Minimum emir %@ PEARL";
 "正在查询…" = "Sorgulanıyor…";
 "正在核对…" = "Kontrol ediliyor…";
 "盘口深度不够，市价单成交不了这么多，请减少数量或改用限价单" = "Emir defteri bu kadarını piyasa emriyle karşılayacak derinlikte değil; miktarı azaltın veya limit emri kullanın";

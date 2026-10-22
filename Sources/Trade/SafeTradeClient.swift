@@ -471,9 +471,16 @@ enum SafeTradeCredentialCheck {
 }
 
 enum SafeTradeMarket {
-    /// The one market the app trades — the whole app is PRL-centric (price, alerts,
-    /// balances), so the old free-form market setting is gone.
-    static let defaultValue = "prlusdt"
+    /// The one market the app trades — the whole app is Pearl-centric (price, alerts,
+    /// balances), so the old free-form market setting is gone. SafeTrade renamed the
+    /// coin PRL → PEARL on 2026-10-18: `prlusdt` is gone (404) and the old `prl`
+    /// currency is disabled with no networks.
+    static let defaultValue = "pearlusdt"
+    /// SafeTrade's currency id for Pearl (balances, deposits, withdrawals).
+    static let base = "pearl"
+    /// How SafeTrade names the coin and the market on screen.
+    static let baseTicker = "PEARL"
+    static let pairName = "PEARL/USDT"
     private static let allowedScalars = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789")
 
     static func cleaned(_ raw: String?) -> String {

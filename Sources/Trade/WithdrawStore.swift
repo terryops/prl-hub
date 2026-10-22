@@ -27,12 +27,12 @@ struct PendingWithdrawCheck: Equatable {
 ///   beneficiary_id, otp_code, phone_code} — no address, no e-mail code.
 @MainActor
 final class WithdrawStore: ObservableObject {
-    let currency: String                     // "prl" | "usdt"
+    let currency: String                     // "pearl" | "usdt"
     /// Holds the per-currency unverified-withdrawal lock (outlives this sheet).
     private let trade: SafeTradeStore
     /// Every chain the exchange lists for this currency (open or not).
     @Published var networks: [STCurrencyNetwork] = []
-    /// Decimal places the exchange accepts for this currency (PRL 8, USDT 6).
+    /// Decimal places the exchange accepts for this currency (PEARL 8, USDT 6).
     @Published var precision = 8
     /// The chosen chain. PRL has one and it is picked automatically; USDT has
     /// several and the user must pick — a wrong chain can lose the funds.

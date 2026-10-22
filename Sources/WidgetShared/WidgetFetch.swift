@@ -75,7 +75,7 @@ enum WidgetFetch {
            let quote = WidgetMarketQuote.worker(obj), quote.isFresh() {
             return quote
         }
-        guard let obj = await json("https://safetrade.com/api/v2/peatio/public/markets/prlusdt/tickers") as? [String: Any]
+        guard let obj = await json("https://safetrade.com/api/v2/peatio/public/markets/pearlusdt/tickers") as? [String: Any]
         else { return nil }
         return WidgetMarketQuote.safeTrade(obj)
     }

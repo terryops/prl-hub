@@ -18,22 +18,22 @@ struct TradeView: View {
     /// Which balance the withdraw / deposit sheet is for (`.sheet(item:)` needs Identifiable).
     struct WithdrawCurrency: Identifiable { let id: String }
 
-    /// DEBUG-only: SHOT_WITHDRAW=prl|usdt opens that withdraw sheet on launch (with
+    /// DEBUG-only: SHOT_WITHDRAW=pearl|usdt opens that withdraw sheet on launch (with
     /// SHOT_TAB=1) so a verification run can reach it without API keys.
     private static var shotWithdraw: WithdrawCurrency? {
         #if DEBUG
-        if let c = ProcessInfo.processInfo.environment["SHOT_WITHDRAW"], ["prl", "usdt"].contains(c) {
+        if let c = ProcessInfo.processInfo.environment["SHOT_WITHDRAW"], [SafeTradeMarket.base, "usdt"].contains(c) {
             return WithdrawCurrency(id: c)
         }
         #endif
         return nil
     }
 
-    /// DEBUG-only: SHOT_DEPOSIT=prl|usdt opens that deposit sheet on launch (with
+    /// DEBUG-only: SHOT_DEPOSIT=pearl|usdt opens that deposit sheet on launch (with
     /// SHOT_TAB=1). With SHOT_TRADE_DEMO it shows a demo address.
     private static var shotDeposit: WithdrawCurrency? {
         #if DEBUG
-        if let c = ProcessInfo.processInfo.environment["SHOT_DEPOSIT"], ["prl", "usdt"].contains(c) {
+        if let c = ProcessInfo.processInfo.environment["SHOT_DEPOSIT"], [SafeTradeMarket.base, "usdt"].contains(c) {
             return WithdrawCurrency(id: c)
         }
         #endif
@@ -71,7 +71,7 @@ struct TradeView: View {
     }
 
     private var usdt: STBalance? { store.balance("usdt") }
-    private var prl: STBalance? { store.balance("prl") }
+    private var pearl: STBalance? { store.balance(SafeTradeMarket.base) }
     private var wide: Bool { hsc != .compact }
 
     /// A refresh the user asked for (pull-to-refresh or the toolbar button). Only these
@@ -161,7 +161,7 @@ struct TradeView: View {
                 }
                 Button(Loc("取消"), role: .cancel) { orderToCancel = nil }
             } message: { o in
-                Text(Loc("确认撤销此订单？%@ %@ PRL @ %@",
+                Text(Loc("确认撤销此订单？%@ %@ PEARL @ %@",
                          o.side == "buy" ? Loc("买入") : Loc("卖出"),
                          o.origin_amount ?? "", o.displayPrice ?? "—"))
             }
@@ -238,7 +238,7 @@ struct TradeView: View {
     private var balancesRow: some View {
         let canMoveFunds = (store.hasCredentials && !SafeTradeStore.shotDemo) || Self.shotFundsButtons
         // Both columns reserve the locked line or neither, so they line up.
-        let footer = (usdt?.lockedValue ?? 0) > 0 || (prl?.lockedValue ?? 0) > 0
+        let footer = (usdt?.lockedValue ?? 0) > 0 || (pearl?.lockedValue ?? 0) > 0
         // "余额" once, as the card's title; each column is then just the coin.
         return VStack(alignment: .leading, spacing: Pearl.Space.sm) {
             HStack {
@@ -251,9 +251,9 @@ struct TradeView: View {
                 }
             }
             HStack(alignment: .top, spacing: 0) {
-                balanceColumn("USDT", usdt, funds: canMoveFunds, footer: footer)
+                balanceColumn("USDT", id: "usdt", usdt, funds: canMoveFunds, footer: footer)
                 Divider().padding(.horizontal, Pearl.Space.lg)
-                balanceColumn("PRL", prl, funds: canMoveFunds, footer: footer)
+                balanceColumn(SafeTradeMarket.baseTicker, id: SafeTradeMarket.base, pearl, funds: canMoveFunds, footer: footer)
             }
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -330,7 +330,7 @@ struct TradeView: View {
     /// neighbouring rows alternate between one and two lines and read as a mess).
     @ViewBuilder private func orderSummary(_ o: STOrder) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(Loc("%@ PRL @ %@", o.origin_amount ?? "", o.displayPrice ?? "—"))
+            Text(Loc("%@ PEARL @ %@", o.origin_amount ?? "", o.displayPrice ?? "—"))
                 .font(.callout.monospacedDigit())
             if let at = o.placedAt {
                 // Text(date, format:) follows the app's chosen language (environment
@@ -373,9 +373,8 @@ struct TradeView: View {
 
     /// One balance. With keys set, the whole column is a menu: tap it for 充值 / 提现
     /// (the card stays a quiet ledger line instead of carrying four buttons).
-    @ViewBuilder private func balanceColumn(_ name: String, _ b: STBalance?, funds: Bool, footer: Bool) -> some View {
+    @ViewBuilder private func balanceColumn(_ name: String, id: String, _ b: STBalance?, funds: Bool, footer: Bool) -> some View {
         if funds {
-            let id = name.lowercased()
             Menu {
                 Button { depositing = WithdrawCurrency(id: id) } label: {
                     Label(Loc("充值"), systemImage: "arrow.down.circle")

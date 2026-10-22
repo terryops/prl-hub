@@ -94,7 +94,7 @@ final class ScreenshotUITests: XCTestCase {
             capture("04-monitor")
         }
 
-        // 5) Trade — SafeTrade market: live PRL/USDT price + candlestick K-line, demo
+        // 5) Trade — SafeTrade market: live PEARL/USDT price + candlestick K-line, demo
         //    balances + open orders (seeded via SHOT_TRADE_DEMO). The Trade tab only
         //    exists in TRADE_ENABLED builds, which the screenshot build is.
         tapTab(app, "Trade")

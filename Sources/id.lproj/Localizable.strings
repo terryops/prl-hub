@@ -41,7 +41,7 @@
 "90天净" = "Bersih 90h";
 "API 密钥存于 iCloud 钥匙串（端到端加密，仅你可见），在各设备间同步；助记词不同步，仅存于本机钥匙串。" = "Kunci API disimpan di Keychain iCloud (terenkripsi ujung-ke-ujung, hanya Anda yang dapat melihat) dan tersinkron di seluruh perangkat Anda; frasa pemulihan tidak ikut tersinkron dan hanya tersimpan di Keychain perangkat ini.";
 "选择矿池后，填入你的 Pearl 收款地址即可查询。" = "Pilih pool, lalu masukkan alamat penerima Pearl Anda untuk mencarinya.";
-"PRL 余额不足" = "Saldo PRL tidak cukup";
+"PEARL 余额不足" = "Saldo PEARL tidak cukup";
 "PRL 币价" = "Harga PRL";
 "PRL 币价 $" = "Harga PRL $";
 "PRL 挖矿监控" = "Pool PRL";
@@ -68,7 +68,7 @@
 "主题" = "Tema";
 "买" = "Beli";
 "买入" = "Beli";
-"买入 PRL" = "Beli PRL";
+"买入 PEARL" = "Beli PEARL";
 "交易" = "Trading";
 "交易 · SafeTrade" = "Trading · SafeTrade";
 "交易在本机签名（私钥不离开设备），经 Blockbook 广播。" = "Transaksi ditandatangani di perangkat (kunci privat Anda tidak pernah keluar) dan disiarkan via Blockbook.";
@@ -129,7 +129,7 @@
 "单位日产 PRL" = "Hasil Harian/Unit PRL";
 "卖" = "Jual";
 "卖出" = "Jual";
-"卖出 PRL" = "Jual PRL";
+"卖出 PEARL" = "Jual PEARL";
 "占全网" = "Pangsa Jaringan";
 "参数" = "Parameter";
 "发出" = "Terkirim";
@@ -205,7 +205,7 @@
 "撤单" = "Batalkan";
 "撤销订单" = "Batalkan Order";
 "确认撤单" = "Konfirmasi Pembatalan";
-"确认撤销此订单？%@ %@ PRL @ %@" = "Batalkan order ini? %@ %@ PRL @ %@";
+"确认撤销此订单？%@ %@ PEARL @ %@" = "Batalkan order ini? %@ %@ PEARL @ %@";
 "我的设备" = "Perangkat";
 "手动" = "Manual";
 "扣抽水" = "Biaya Pool Dipotong";
@@ -235,7 +235,7 @@
 "收款地址格式不正确" = "Format alamat penerima tidak valid";
 "改别名" = "Ubah Alias";
 "数据中心" = "Pusat Data";
-"数量 (PRL)" = "Jumlah (PRL)";
+"数量 (PEARL)" = "Jumlah (PEARL)";
 "新增联系人" = "Tambah Kontak";
 "新设备" = "Perangkat Baru";
 "方向" = "Arah";
@@ -841,7 +841,7 @@
 "数量最多 %d 位小数" = "Jumlah maksimal %d desimal";
 "暂时无法确认下单结果，请到 SafeTrade 网站核对，或稍后点「重新核对」。" = "Belum bisa memastikan hasil order — cek di situs SafeTrade, atau nanti ketuk Cek lagi.";
 "暂时无法确认提现结果，请到 SafeTrade 网站核对提现记录，或稍后点「重新核对」。" = "Belum bisa memastikan hasil penarikan — cek riwayat penarikan di situs SafeTrade, atau nanti ketuk Cek lagi.";
-"最少下单 %@ PRL" = "Order minimum %@ PRL";
+"最少下单 %@ PEARL" = "Order minimum %@ PEARL";
 "正在查询…" = "Mencari…";
 "正在核对…" = "Mengecek…";
 "盘口深度不够，市价单成交不了这么多，请减少数量或改用限价单" = "Buku order terlalu tipis untuk mengisi sebanyak ini secara market — kurangi jumlah atau pakai order limit";
