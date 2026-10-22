@@ -5,6 +5,8 @@ import SwiftUI
 struct DashboardView: View {
     @ObservedObject var store: WalletStore
     @StateObject private var price = PRLPriceManager.shared
+    // Not observed: the NOCK card observes it; the dashboard only kicks its refreshes.
+    private let nock = NockWalletStore.shared
     @EnvironmentObject private var currency: CurrencyManager
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
@@ -14,6 +16,14 @@ struct DashboardView: View {
     @State private var donationPromptPending = false
     /// False while a pushed screen (收款 / 转账 / 记录) or another tab covers the dashboard.
     @State private var dashboardVisible = false
+    /// DEBUG: SHOT_NOCK=1 opens the NOCK page on launch (screenshot / verification runs).
+    @State private var shotNock: Bool = {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["SHOT_NOCK"] != nil
+        #else
+        return false
+        #endif
+    }()
 
     // 币价 chip text. macOS text styles run ~4pt smaller than iOS (body is 13pt there),
     // so the Mac gets the next sizes up to read at the same weight beside the balance.
@@ -232,6 +242,9 @@ struct DashboardView: View {
                     action(Loc("记录"), "clock.arrow.circlepath") { ActivityView(store: store) }
                 }
 
+                // The same seed's NOCK (Nockchain) account — its own page, address and history.
+                NockAssetCard(nock: nock, surface: cardSurface, secondary: cardSecondary)
+
                 // 最近交易：金额为 0 的交易不显示。卡片始终保留 3 个等高行槽——同步时为骨架
                 // 占位，加载后填入真实交易、空槽留白——所以高度恒定（居中布局不跳动），且
                 // 满 3 笔时没有多余空白。
@@ -326,8 +339,14 @@ struct DashboardView: View {
         .onAppear { dashboardVisible = true; promptDonationIfDue() }
         .onDisappear { dashboardVisible = false }
         .navigationDestination(isPresented: $managingWallets) { ManageWalletsView(store: store) }
+        .navigationDestination(isPresented: $shotNock) { NockWalletView(nock: nock) }
         .task { await store.refreshIfStale(); await price.refreshIfStale() }
-        .refreshable { await store.loadChain(); await price.refresh() }
+        .task { await nock.refreshIfStale(); await NockPriceManager.shared.refreshIfStale() }
+        .refreshable {
+            async let nockLoad: Void = nock.load()
+            await store.loadChain(); await price.refresh()
+            await nockLoad
+        }
         // 自适应自动轮询：App 在前台时按 store.pollInterval 周期重拉链上数据——有未确认
         // 交易时快轮询（~15s，让「待确认」尽快翻成已确认），全部确认后退回 60s keep-warm。
         // scenePhase 作 task id：切后台即取消（省电/省流量），回前台自动重启。loadChain
@@ -343,6 +362,7 @@ struct DashboardView: View {
                 try? await Task.sleep(for: store.pollInterval)
                 if Task.isCancelled { break }
                 await store.loadChain()
+                await nock.refreshIfStale()
             }
         }
         // Transient success toast (e.g. after a send returns here from 转账).

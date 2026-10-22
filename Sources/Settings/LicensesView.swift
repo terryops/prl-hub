@@ -26,6 +26,19 @@ struct LicensesView: View {
                   license: "BSD-3-Clause",
                   holder: "© The Go Authors",
                   url: "https://go.dev"),
+        // NOCK wallet core (NockMobile.xcframework, built from tools/nock-mobile).
+        Component(name: "Iris Wallet SDK (iris-rs) — NOCK wallet core",
+                  license: "MIT",
+                  holder: "© 2025 NockBox inc.",
+                  url: "https://github.com/nockbox/iris-rs"),
+        Component(name: "Nockchain protocol definitions",
+                  license: "MIT",
+                  holder: "© Zorp Corp",
+                  url: "https://github.com/zorp-corp/nockchain"),
+        Component(name: "Rust standard library & crates (prost, bip39, serde_json…)",
+                  license: "MIT OR Apache-2.0",
+                  holder: "© The Rust Project Developers and crate authors",
+                  url: "https://www.rust-lang.org"),
     ]
 
     /// The upstream Pearl monorepo's per-module licenses (from its LICENSE file).

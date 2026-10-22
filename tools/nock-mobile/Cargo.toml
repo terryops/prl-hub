@@ -1,0 +1,35 @@
+[package]
+name = "nock-mobile"
+version = "0.1.0"
+edition = "2021"
+description = "Nockchain (NOCK) wallet core for Pearl Hub: key derivation, note decoding, tx build + sign"
+license = "GPL-3.0-only"
+publish = false
+
+[lib]
+name = "nock_mobile"
+crate-type = ["staticlib", "rlib"]
+
+# The Nockchain crypto + tx engine come from Iris Wallet's Rust SDK (MIT, nockbox/iris-rs),
+# pinned to one commit so every build signs the same way. Bump the rev deliberately, then
+# re-run `cargo test` (the address vectors and the live-note round trip) before shipping.
+[dependencies]
+iris-crypto = { git = "https://github.com/nockbox/iris-rs", rev = "a0a213790cfbd154c11570f2ea6fba540234b0cc" }
+iris-ztd = { git = "https://github.com/nockbox/iris-rs", rev = "a0a213790cfbd154c11570f2ea6fba540234b0cc" }
+iris-nockchain-types = { git = "https://github.com/nockbox/iris-rs", rev = "a0a213790cfbd154c11570f2ea6fba540234b0cc" }
+iris-grpc-proto = { git = "https://github.com/nockbox/iris-rs", rev = "a0a213790cfbd154c11570f2ea6fba540234b0cc" }
+bip39 = { version = "2.0", default-features = false, features = ["alloc", "std"] }
+prost = "0.13"
+serde_json = "1"
+base64 = "0.22"
+bs58 = "0.5"
+ibig = { version = "0.3", default-features = false, features = ["std"] }
+
+[build-dependencies]
+prost-build = "0.13"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+debug = false

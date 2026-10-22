@@ -67,6 +67,9 @@ targets:
       - framework: vendor/OysterMobile.xcframework
         embed: true
         codeSign: true
+      # Nockchain (NOCK) wallet core — a static library (Rust, tools/nock-mobile), linked in.
+      - framework: vendor/NockMobile.xcframework
+        embed: false
       # Home-screen widget extension, embedded into the app's PlugIns.
       - target: PRLHubWidgets
         embed: true
@@ -117,6 +120,9 @@ targets:
       - framework: vendor/OysterMobile.xcframework
         embed: true
         codeSign: true
+      # Nockchain (NOCK) wallet core — a static library (Rust, tools/nock-mobile), linked in.
+      - framework: vendor/NockMobile.xcframework
+        embed: false
       # Desktop widget extension, embedded into the Mac app's PlugIns.
       - target: PRLHubWidgetsMac
         embed: true

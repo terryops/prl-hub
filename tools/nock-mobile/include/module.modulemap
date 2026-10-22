@@ -1,0 +1,4 @@
+module NockMobile {
+    header "NockMobile.h"
+    export *
+}

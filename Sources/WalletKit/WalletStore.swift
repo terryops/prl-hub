@@ -981,6 +981,7 @@ final class WalletStore: ObservableObject {
             UserDefaults.standard.removeObject(forKey: balanceCacheKey(for: id, network: net))
         }
         for n in WalletNetwork.allCases { parkedOverlays[overlayKey(id, n)] = nil }
+        NockWalletStore.shared.forgetWallet(id)   // the same seed's NOCK side
         if id == Self.legacyWalletID { UserDefaults.standard.removeObject(forKey: nameKey) }
         wallets.removeAll { $0.id == id }
         lastError = nil
