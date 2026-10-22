@@ -1198,3 +1198,9 @@
 "%@ 已在你的其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "%@ tiene la sesión iniciada en otro de tus dispositivos. Puedes iniciar sesión aquí directamente, sin código, y se conservan los ajustes de este dispositivo.";
 "你的账号已在其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "Tu cuenta tiene la sesión iniciada en otro de tus dispositivos. Puedes iniciar sesión aquí directamente, sin código, y se conservan los ajustes de este dispositivo.";
 "直接登录" = "Iniciar sesión directamente";
+
+/* 我的监控 → 一览 */
+"显示方式" = "Vista";
+"卡片视图" = "Vista de tarjetas";
+"一览视图" = "Vista compacta";
+"不含 %@" = "Sin %@";

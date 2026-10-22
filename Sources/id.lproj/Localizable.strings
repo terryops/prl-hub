@@ -1198,3 +1198,9 @@
 "%@ 已在你的其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "%@ sudah masuk di perangkat Anda yang lain. Anda bisa langsung masuk di sini tanpa kode, dan pengaturan perangkat ini tetap dipertahankan.";
 "你的账号已在其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "Akun Anda sudah masuk di perangkat Anda yang lain. Anda bisa langsung masuk di sini tanpa kode, dan pengaturan perangkat ini tetap dipertahankan.";
 "直接登录" = "Langsung masuk";
+
+/* 我的监控 → 一览 */
+"显示方式" = "Tampilan";
+"卡片视图" = "Tampilan kartu";
+"一览视图" = "Tampilan ringkas";
+"不含 %@" = "Tanpa %@";

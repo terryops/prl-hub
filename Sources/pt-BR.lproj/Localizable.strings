@@ -1198,3 +1198,9 @@
 "%@ 已在你的其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "%@ está conectado em outro dos seus dispositivos. Você pode entrar aqui diretamente, sem código, e os ajustes deste dispositivo são mantidos.";
 "你的账号已在其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "Sua conta está conectada em outro dos seus dispositivos. Você pode entrar aqui diretamente, sem código, e os ajustes deste dispositivo são mantidos.";
 "直接登录" = "Entrar diretamente";
+
+/* 我的监控 → 一览 */
+"显示方式" = "Exibição";
+"卡片视图" = "Cartões";
+"一览视图" = "Compacta";
+"不含 %@" = "Sem %@";

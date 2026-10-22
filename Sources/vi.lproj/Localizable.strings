@@ -1198,3 +1198,9 @@
 "%@ 已在你的其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "%@ đã đăng nhập trên một thiết bị khác của bạn. Bạn có thể đăng nhập trực tiếp tại đây mà không cần mã, và cài đặt của thiết bị này được giữ lại.";
 "你的账号已在其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。" = "Tài khoản của bạn đã đăng nhập trên một thiết bị khác của bạn. Bạn có thể đăng nhập trực tiếp tại đây mà không cần mã, và cài đặt của thiết bị này được giữ lại.";
 "直接登录" = "Đăng nhập trực tiếp";
+
+/* 我的监控 → 一览 */
+"显示方式" = "Kiểu hiển thị";
+"卡片视图" = "Dạng thẻ";
+"一览视图" = "Dạng gọn";
+"不含 %@" = "Không gồm %@";

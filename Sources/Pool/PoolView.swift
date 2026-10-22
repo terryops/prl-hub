@@ -16,6 +16,10 @@ struct PoolView: View {
     /// The 掉线提醒 pointer above the cards was opened or closed: it never comes back.
     @AppStorage("pool.alertHintDismissed") private var alertHintDismissed = false
     @State private var showingOfflineAlerts = false
+    /// 卡片 (a full card per monitor) or 一览 (a row per monitor under a summary).
+    @AppStorage(MonitorLayout.key) private var layout: MonitorLayout = .cards
+    /// The monitor opened from 一览, shown as its full card; nil = none.
+    @State private var openWatch: UUID?
 
     /// Point at 掉线提醒 while the user has monitors and hasn't found it yet — until the
     /// card is opened or closed, or an alert is switched on (here or on another device).
@@ -36,6 +40,7 @@ struct PoolView: View {
                         Button { draft = WatchDraft() } label: {
                             Label(Loc("添加"), systemImage: "plus")
                         }.font(.callout)
+                        if !store.watches.isEmpty { MonitorLayoutPicker(layout: $layout) }
                     }
 
                     if store.watches.isEmpty {
@@ -65,9 +70,14 @@ struct PoolView: View {
                         // (maxHeight:.infinity) fills it and pins its footer to the
                         // bottom. ViewThatFits picks the 2-up form (each card ≥440pt, so
                         // two need ≥902pt) and falls back to 1-up when too narrow (iPhone).
-                        ViewThatFits(in: .horizontal) {
-                            cardColumns(2)
-                            cardColumns(1)
+                        if layout == .compact {
+                            WatchCompactList(store: store, dragging: $draggingWatch,
+                                             onOpen: { openWatch = $0.id }, onEdit: beginEdit)
+                        } else {
+                            ViewThatFits(in: .horizontal) {
+                                cardColumns(2)
+                                cardColumns(1)
+                            }
                         }
                     }
 
@@ -75,6 +85,7 @@ struct PoolView: View {
                 .animation(.snappy, value: store.watches)
                 .animation(.snappy, value: store.loading)
                 .animation(.snappy, value: showsAlertHint)
+                .animation(.snappy, value: layout)
                 .padding(Pearl.Space.screen).frame(maxWidth: 1200).frame(maxWidth: .infinity)
             }
             // A drop anywhere in the scroll area — not just onto a card (that's the card's own
@@ -89,30 +100,7 @@ struct PoolView: View {
             }
             .pearlScreenBackground()
             .navigationTitle(Loc("我的监控"))
-            .toolbar {
-                Button { Task { await store.refresh(force: true) } } label: {
-                    // .small so the in-toolbar spinner stays icon-sized — a default
-                    // ProgressView fills the macOS toolbar button's glass background
-                    // and reads as a big white badge.
-                    if store.loading { ProgressView().controlSize(.small) }
-                    else { Image(systemName: "arrow.clockwise") }
-                }
-                .disabled(store.loading)
-                .accessibilityLabel(Loc("刷新矿池数据"))
-            }
-            // Auto-refresh while the tab is on screen: load immediately, then every 60s.
-            // SwiftUI cancels this .task when the view disappears (another tab), which both
-            // ends the loop and cancels an in-flight fetch (fetchWatchData returns nil on
-            // cancellation, so cards keep their last state). Keyed on the background state so
-            // the loop also stops while the app is backgrounded / the Mac window minimized,
-            // and restarts — with a fresh load — when it comes back.
-            .task(id: scenePhase == .background) {
-                guard scenePhase != .background else { return }
-                while !Task.isCancelled {
-                    await store.refresh()
-                    try? await Task.sleep(for: .seconds(60))
-                }
-            }
+            .toolbar { PoolRefreshButton(store: store) }
             .refreshable { await store.refresh(force: true) }
             // The good moment for the 评分提醒: the user's own rigs just reported in, so the
             // app has visibly done its job. Every other gate (launches, days installed, once
@@ -120,12 +108,38 @@ struct PoolView: View {
             .reviewPrompt(whenSucceeded: store.watches.contains {
                 store.watchData[$0.id]?.found == true
             })
-            .onReceive(NotificationCenter.default.publisher(for: .cloudSyncDidUpdate)) { _ in
-                store.reloadWatches()   // a watch was added/removed on another device
-            }
-            .sheet(item: $draft) { WatchSheet(store: store, draft: $0, walletAddress: wallet.address) }
             .navigationDestination(isPresented: $showingOfflineAlerts) { OfflineAlertsView() }
+            .navigationDestination(item: $openWatch) { id in
+                WatchDetailView(store: store, id: id, onEdit: beginEdit,
+                                onDelete: { openWatch = nil; store.removeWatch($0.id) })
+            }
         }
+        // The modifiers below sit on the stack, not on the list: a monitor opened from 一览
+        // is pushed over the list, and the list's own modifiers stop with it (its .task is
+        // cancelled on disappear) — the opened card would stop refreshing, and 编辑监控 in
+        // its menu would have no sheet to open.
+        //
+        // Auto-refresh while the tab is on screen: load immediately, then every 60s.
+        // SwiftUI cancels this .task when the view disappears (another tab), which both
+        // ends the loop and cancels an in-flight fetch (fetchWatchData returns nil on
+        // cancellation, so cards keep their last state). Keyed on the background state so
+        // the loop also stops while the app is backgrounded / the Mac window minimized,
+        // and restarts — with a fresh load — when it comes back.
+        .task(id: scenePhase == .background) {
+            guard scenePhase != .background else { return }
+            while !Task.isCancelled {
+                await store.refresh()
+                try? await Task.sleep(for: .seconds(60))
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cloudSyncDidUpdate)) { _ in
+            store.reloadWatches()   // a watch was added/removed on another device
+        }
+        // The opened monitor was deleted (here, or on another device): back to the list.
+        .onChange(of: store.watches) { _, watches in
+            if let id = openWatch, !watches.contains(where: { $0.id == id }) { openWatch = nil }
+        }
+        .sheet(item: $draft) { WatchSheet(store: store, draft: $0, walletAddress: wallet.address) }
     }
 
     /// Lay the monitor cards out in `cols` equal-width columns. Each row is a
@@ -375,7 +389,7 @@ private struct CardRow: View {
 
 /// Live-reorders `store.watches` as a dragged card hovers over another card, then
 /// persists the new order when the drop lands. Drives drag-to-reorder in “我的监控”.
-private struct WatchDropDelegate: DropDelegate {
+struct WatchDropDelegate: DropDelegate {
     let item: PoolWatch
     let store: PoolStore
     @Binding var dragging: PoolWatch?
@@ -409,7 +423,7 @@ fileprivate func fiatLabel(_ prl: Double, prlUsd: Double?, currency: CurrencyMan
     return "≈ " + currency.dual(prl * prlUsd)
 }
 
-private struct WatchCard: View {
+struct WatchCard: View {
     let watch: PoolWatch
     let data: WatchData?
     /// This watch's payout address's on-chain income (shared by every watch on that address).
