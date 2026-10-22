@@ -99,6 +99,28 @@ struct NockCoreTests {
         params["amount"] = String(85 * nock)
         #expect(throws: NockCore.Failure.self) { try NockCore.call("buildSend", params) }
     }
+
+    /// MAX before the recipient is filled in: the quote is built to a stand-in address, never the
+    /// wallet's own (the core refuses a sweep to the sending address), and quotes the same as a real one.
+    @Test func maxQuoteRecipient() throws {
+        let fx = try JSONSerialization.jsonObject(with: try Fixture.data("nock_notes.json")) as? [String: Any] ?? [:]
+        let own = try #require(fx["address"] as? String)
+        let other = "AyzPiJoqcqmdZdjxZ9aGLnVsbYcCphidHERKBWVXyKhNqTirshTmicG"
+        #expect(NockWalletStore.quoteRecipient(for: "", own: own) == NockWalletStore.quoteAddress)
+        #expect(NockWalletStore.quoteRecipient(for: "nope", own: own) == NockWalletStore.quoteAddress)
+        #expect(NockWalletStore.quoteRecipient(for: own, own: own) == NockWalletStore.quoteAddress)
+        #expect(NockWalletStore.quoteRecipient(for: " \(other)\n", own: own) == other)
+        #expect(NockCore.isValidAddress(NockWalletStore.quoteAddress) && NockWalletStore.quoteAddress != own)
+        func sweep(_ to: String) throws -> [String: Any] {
+            try NockCore.call("buildSend", ["mnemonic": fx["mnemonic"] as Any, "notes": fx["notes"] as Any,
+                                            "recipient": to, "height": fx["height"] as Any, "sweep": true])
+        }
+        // What MAX used to quote against when the field was empty: "unbalanced transaction".
+        #expect(throws: NockCore.Failure.self) { try sweep(own) }
+        let quote = try sweep(NockWalletStore.quoteAddress), real = try sweep(other)
+        #expect(quote["fee"] as? String == real["fee"] as? String)
+        #expect(quote["amount"] as? String == real["amount"] as? String)
+    }
 }
 
 @MainActor

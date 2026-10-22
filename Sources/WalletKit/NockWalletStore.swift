@@ -545,10 +545,20 @@ final class NockWalletStore: ObservableObject {
 
     /// Everything spendable minus the fee for sending it all, in nicks.
     func maxSendQuote(to recipient: String) async throws -> (amount: UInt64, fee: UInt64) {
-        // The recipient only shapes the output; any valid address quotes the same fee.
-        let to = NockCore.isValidAddress(recipient) ? recipient : (account?.address ?? recipient)
-        let p = try await prepareSend(to: to, amount: 0, sweep: true)
+        let p = try await prepareSend(to: Self.quoteRecipient(for: recipient, own: address), amount: 0, sweep: true)
         return (p.amount, p.fee)
+    }
+
+    /// A public test key's address (the official wallet's `clutch inmate …` vector): MAX's quote is
+    /// built to it while the recipient isn't filled in yet. The quote is never broadcast.
+    nonisolated static let quoteAddress = "3b3eG8WgWHfXTeAMJzNDWxM3b6WFadxQiiJRQrY6zPJ4J2F5QtHjZRQ"
+
+    /// Where MAX's quote is built to. The recipient only shapes the output, so any valid address
+    /// quotes the same fee, but not the wallet's own: sending everything to itself, the builder
+    /// spends only some of the notes and the core refuses the sweep ("unbalanced transaction").
+    nonisolated static func quoteRecipient(for recipient: String, own: String?) -> String {
+        let to = recipient.trimmingCharacters(in: .whitespacesAndNewlines)
+        return NockCore.isValidAddress(to) && to != own ? to : quoteAddress
     }
 
     func broadcast(_ p: NockPreparedSend) async -> SendOutcome {
