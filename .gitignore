@@ -8,3 +8,5 @@ DerivedData/
 *.log
 # Prebuilt signing framework — download from GitHub Releases (see README)
 vendor/*.xcframework/
+# NockMobile (Rust) build output
+tools/nock-mobile/target/
