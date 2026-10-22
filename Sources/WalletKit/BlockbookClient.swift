@@ -391,25 +391,29 @@ struct BlockbookClient {
         await FeeRateCache.shared.rate(for: base) { [self] in
             async let fast = nodeFeeEstimate(blocks: 2)
             async let slow = nodeFeeEstimate(blocks: 6)
-            async let medians = recentBlockMedianFees()
-            let (f, sl, m) = await (fast, slow, medians)
-            return (Self.chooseFeePerKB(fast: f, slow: sl, recentMedians: m), Self.feeDataComplete(fast: f, slow: sl, recentMedians: m))
+            async let lows = recentBlockLowFees()
+            let (f, sl, l) = await (fast, slow, lows)
+            return (Self.chooseFeePerKB(fast: f, slow: sl, recentLows: l), Self.feeDataComplete(fast: f, slow: sl, recentLows: l))
         }
     }
 
     /// Whether a rate rests on everything `chooseFeePerKB` weighs: the 2-block estimate and
     /// something to cap it with. Anything less is used once but not cached.
-    static func feeDataComplete(fast: Int64?, slow: Int64?, recentMedians: [Int64]) -> Bool {
-        fast != nil && (slow != nil || !recentMedians.isEmpty)
+    static func feeDataComplete(fast: Int64?, slow: Int64?, recentLows: [Int64]) -> Bool {
+        fast != nil && (slow != nil || !recentLows.isEmpty)
     }
 
     /// The node's 2-block estimate is the default, but it can sit far above what blocks
     /// actually take: on 2026-10-20 the official node asked ~1 955 sat/vB while every recent
     /// block was including 1 sat/vB txs (its estimator was skewed by a mempool still holding
-    /// txs mined hours earlier). So it's capped at the higher of the 6-block estimate and the
-    /// median fee of recent blocks — real congestion raises both, a skewed estimator doesn't.
-    static func chooseFeePerKB(fast: Int64?, slow: Int64?, recentMedians: [Int64]) -> Int64 {
-        let cap = max(slow ?? 0, recentMedians.max() ?? 0)
+    /// txs mined hours earlier). So it's capped at the higher of the 6-block estimate and what
+    /// the cheaper txs in recent blocks paid — the middle (upper) value of each block's 10th
+    /// percentile. Full blocks raise both; a skewed estimator doesn't.
+    /// Not each block's median: many wallets pay one fixed rate (81 sat/vB that day, in
+    /// blocks with room to spare), which says nothing about what it takes to get in.
+    static func chooseFeePerKB(fast: Int64?, slow: Int64?, recentLows: [Int64]) -> Int64 {
+        let sorted = recentLows.sorted()
+        let cap = max(slow ?? 0, sorted.isEmpty ? 0 : sorted[sorted.count / 2])
         let rate: Int64
         if let fast { rate = cap > 0 ? min(fast, cap) : fast }
         else { rate = cap > 0 ? cap : fallbackFeePerKB }
@@ -427,10 +431,11 @@ struct BlockbookClient {
         return sat.int64Value
     }
 
-    /// Median fee rate of the txs in each of the last `count` blocks that had any besides the
-    /// coinbase (`/feestats/` is ~150 bytes a block; the blocks themselves run to 600 kB).
-    /// Empty when the tip or every block's stats couldn't be fetched.
-    func recentBlockMedianFees(count: Int = 6) async -> [Int64] {
+    /// The 10th-percentile fee rate of the txs in each of the last `count` blocks that had any
+    /// besides the coinbase: what the cheaper txs that got in paid. Twelve blocks because half
+    /// of them are often empty. (`/feestats/` is ~150 bytes a block; the blocks themselves run
+    /// to 600 kB.) Empty when the tip or every block's stats couldn't be fetched.
+    func recentBlockLowFees(count: Int = 12) async -> [Int64] {
         struct Status: Decodable { struct BB: Decodable { let bestHeight: Int }; let blockbook: BB }
         struct FeeStats: Decodable { let txCount: Int; let decilesFeePerKb: [Int64] }
         guard let tip = (try? await get("/api/v2/", as: Status.self, timeout: 10))?.blockbook.bestHeight,
@@ -440,12 +445,12 @@ struct BlockbookClient {
                 group.addTask {
                     guard let s = try? await get("/api/v2/feestats/\(h)", as: FeeStats.self, timeout: 10),
                           s.txCount > 0, s.decilesFeePerKb.count == 11 else { return nil }
-                    let median = s.decilesFeePerKb[5]
-                    return median > 0 ? median : nil
+                    let low = s.decilesFeePerKb[1]
+                    return low > 0 ? low : nil
                 }
             }
             var out: [Int64] = []
-            for await m in group { if let m { out.append(m) } }
+            for await l in group { if let l { out.append(l) } }
             return out
         }
     }

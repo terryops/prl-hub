@@ -94,32 +94,46 @@ struct WalletTxTests {
 /// estimate was ~1 955 sat/vB while recent blocks were including 1–81 sat/vB txs).
 struct WalletFeeTests {
     @Test func skewedFastEstimateIsCappedByRecentBlocks() {
-        // The real numbers from 2026-10-20: fast 1 954 566, slow 1 708, block medians up to 81 441.
+        // The official node on 2026-10-20: fast 1 954 566, slow 1 708; recent blocks' 10th
+        // percentiles 1–10 sat/vB.
         let rate = BlockbookClient.chooseFeePerKB(fast: 1_954_566, slow: 1_708,
-                                                  recentMedians: [1_004, 10_047, 81_441, 1_007])
-        #expect(rate == 81_441)
+                                                  recentLows: [1_000, 1_004, 10_047, 1_000])
+        #expect(rate == 1_708)
     }
 
-    @Test func realCongestionKeepsTheFastEstimate() {
+    @Test func aRateManyWalletsPayIsNotWhatItTakes() {
+        // Our node the same evening: its 2-block estimate and half the txs in some blocks sat at
+        // 81 sat/vB, but every block had room and took 1 sat/vB txs.
+        let rate = BlockbookClient.chooseFeePerKB(fast: 81_441, slow: 1_000,
+                                                  recentLows: [1_000, 81_441, 1_000, 2_013, 1_000, 10_047, 1_000])
+        #expect(rate == 1_000)
+        // One block whose cheap end was high doesn't decide it either (middle value, rounded up).
+        #expect(BlockbookClient.chooseFeePerKB(fast: 81_441, slow: 1_000, recentLows: [1_000, 81_441]) == 81_441)
+        #expect(BlockbookClient.chooseFeePerKB(fast: 81_441, slow: 1_000, recentLows: [1_000, 1_000, 81_441]) == 1_000)
+    }
+
+    @Test func realCongestionRaisesTheRate() {
+        // Full blocks: even their cheaper txs pay more, so the cap rises with them.
+        #expect(BlockbookClient.chooseFeePerKB(fast: 300_000, slow: 120_000, recentLows: [180_000, 200_000, 190_000]) == 190_000)
         // Blocks themselves are paying more than the 2-block estimate → it isn't skewed.
-        #expect(BlockbookClient.chooseFeePerKB(fast: 200_000, slow: 150_000, recentMedians: [250_000]) == 200_000)
-        #expect(BlockbookClient.chooseFeePerKB(fast: 200_000, slow: 300_000, recentMedians: []) == 200_000)
+        #expect(BlockbookClient.chooseFeePerKB(fast: 200_000, slow: 150_000, recentLows: [250_000]) == 200_000)
+        #expect(BlockbookClient.chooseFeePerKB(fast: 200_000, slow: 300_000, recentLows: []) == 200_000)
     }
 
     @Test func quietNetworkStaysAtTheFloor() {
-        #expect(BlockbookClient.chooseFeePerKB(fast: 1_000, slow: 1_000, recentMedians: [1_000, 1_002]) == 1_000)
-        #expect(BlockbookClient.chooseFeePerKB(fast: 500, slow: nil, recentMedians: []) == BlockbookClient.minFeePerKB)
+        #expect(BlockbookClient.chooseFeePerKB(fast: 1_000, slow: 1_000, recentLows: [1_000, 1_002]) == 1_000)
+        #expect(BlockbookClient.chooseFeePerKB(fast: 500, slow: nil, recentLows: []) == BlockbookClient.minFeePerKB)
     }
 
     @Test func missingDataFallsBackStepByStep() {
         // No block stats or slow estimate → the fast estimate as before.
-        #expect(BlockbookClient.chooseFeePerKB(fast: 1_954_566, slow: nil, recentMedians: []) == 1_954_566)
+        #expect(BlockbookClient.chooseFeePerKB(fast: 1_954_566, slow: nil, recentLows: []) == 1_954_566)
         // No fast estimate → the cap alone.
-        #expect(BlockbookClient.chooseFeePerKB(fast: nil, slow: 3_000, recentMedians: [2_000]) == 3_000)
+        #expect(BlockbookClient.chooseFeePerKB(fast: nil, slow: 3_000, recentLows: [2_000]) == 3_000)
         // Nothing at all → the old 50 sat/vB default.
-        #expect(BlockbookClient.chooseFeePerKB(fast: nil, slow: nil, recentMedians: []) == BlockbookClient.fallbackFeePerKB)
+        #expect(BlockbookClient.chooseFeePerKB(fast: nil, slow: nil, recentLows: []) == BlockbookClient.fallbackFeePerKB)
         // An absurd backend value stays bounded.
-        #expect(BlockbookClient.chooseFeePerKB(fast: .max, slow: nil, recentMedians: []) == BlockbookClient.maxFeePerKB)
+        #expect(BlockbookClient.chooseFeePerKB(fast: .max, slow: nil, recentLows: []) == BlockbookClient.maxFeePerKB)
     }
 
     @Test func shortfallFeeIsReadFromOysterError() {
@@ -242,9 +256,9 @@ struct WalletBackendTests {
         // The fallback rate (nothing learned) is used but not kept.
         #expect(await cache.rate(for: "f") { (BlockbookClient.fallbackFeePerKB, false) } == BlockbookClient.fallbackFeePerKB)
         #expect(await cache.rate(for: "f") { (2_000, true) } == 2_000)
-        #expect(BlockbookClient.feeDataComplete(fast: 1, slow: nil, recentMedians: [5]))
-        #expect(!BlockbookClient.feeDataComplete(fast: 1, slow: nil, recentMedians: []))
-        #expect(!BlockbookClient.feeDataComplete(fast: nil, slow: 1, recentMedians: [5]))
+        #expect(BlockbookClient.feeDataComplete(fast: 1, slow: nil, recentLows: [5]))
+        #expect(!BlockbookClient.feeDataComplete(fast: 1, slow: nil, recentLows: []))
+        #expect(!BlockbookClient.feeDataComplete(fast: nil, slow: 1, recentLows: [5]))
     }
 }
 
