@@ -247,7 +247,7 @@ struct WatchCompactList: View {
                 PoolIcon(pool: m.watch.pool, size: 26)
                 Spacer(minLength: 0)
                 // Rigs online: quiet when all are up, gold when some are down, rose when none are.
-                if !m.loading { RigsBadge(text: m.badgeText, tone: m.tone, font: .caption.weight(.semibold)) }
+                if !m.loading { RigsBadge(text: m.badgeText, tone: m.tone) }
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(m.watch.displayName).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
@@ -301,15 +301,15 @@ struct WatchCompactList: View {
     }
 }
 
-/// Rigs online as a tinted pill, coloured by its `PillTone`.
+/// Rigs online as a tinted pill, coloured by its `PillTone`. Caption-sized on the total
+/// card as on the tiles: a larger face swells the pill past the label beside it.
 private struct RigsBadge: View {
     let text: String
     let tone: PillTone
-    var font: Font = .subheadline.weight(.semibold)
 
     var body: some View {
         Text(text)
-            .font(font.monospacedDigit())
+            .font(.caption.weight(.semibold).monospacedDigit())
             .lineLimit(1)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .frame(minWidth: 44)
