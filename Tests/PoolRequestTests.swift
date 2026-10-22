@@ -99,6 +99,22 @@ struct PoolRequestTests {
         #expect(try await PearlHashSource.miner(alphaAddr, scope: .full) == nil)
     }
 
+    /// Jetski: the address goes in the path; the widget reads it by the stored kind name.
+    @Test func jetskiRequestAndWidget() async throws {
+        StubURLProtocol.stub("pearl.jetskipool.ai/api/stats/\(alphaAddr)",
+                             [.init(status: 200, body: try Fixture.data("jetski_miner.json"))])
+        let s = try #require(try await JetskiSource.miner(alphaAddr, scope: .full))
+        #expect(s.workers.count == 4)
+        let live = try #require(await WidgetFetch.poolLive(kind: "Jetski", address: alphaAddr))
+        #expect(live.total == 4)
+        #expect(close(live.hashrateRaw, 658_561_652_053_333.4))
+
+        StubURLProtocol.stub("pearl.jetskipool.ai/api/stats/\(alphaAddr)", [.init(status: 400, body: Data())])
+        await #expect(throws: PoolHTTPError.status(400)) {
+            _ = try await JetskiSource.miner(alphaAddr, scope: .full)
+        }
+    }
+
     /// The widget's scope reads the rig endpoint alone: Kryptex balance / payouts untouched.
     @Test func liveScopeSkipsMoneyEndpoints() async throws {
         let k = "prl1p5ga7tw6vy5rjr59wewzq3u4sp064muwssdglatxdj3wrz0yzqamshydnnk"

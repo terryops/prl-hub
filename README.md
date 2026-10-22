@@ -7,7 +7,7 @@ A self-custody **Pearl ($PRL)** wallet and mining monitor for iPhone, iPad and M
 ## Features
 
 - **Self-custody wallet**: create or restore wallets (12 or 24 words), keep several on one device and switch between them, receive, and send. The recovery phrase is encrypted in the Keychain, and viewing it or confirming a transfer requires Face ID / Touch ID. Transactions are signed on the device.
-- **Mining monitor**: network hashrate and difficulty, a pools overview, and per-address monitors for AlphaPool, F2Pool, HeroMiners, Kryptex, Lucky Pool, Pearl Fortune and PearlHash.
+- **Mining monitor**: network hashrate and difficulty, a pools overview, and per-address monitors for AlphaPool, F2Pool, HeroMiners, Kryptex, Lucky Pool, Pearl Fortune, PearlHash and Jetski.
 - **Widgets**: an iOS home-screen widget and a macOS desktop widget.
 - **Price alerts (Pearl Hub Pro)**: push notifications when PRL reaches a target price or moves sharply within 5 minutes, 1 hour or 24 hours, even while the app is closed. Unlocked by a one-time in-app purchase.
 - **Offline alerts (Pearl Hub Pro)**: a push when a worker on one of your pool monitors has been offline for 10, 15, 30 or 60 minutes, and another when it is back online.

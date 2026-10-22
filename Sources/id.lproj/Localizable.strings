@@ -391,6 +391,7 @@
 "载入中…" = "Memuat…";
 "近 1 小时" = "1j terakhir";
 "近 3 小时" = "3 jam terakhir";
+"近 6 小时" = "6 jam terakhir";
 "近 24h" = "24j terakhir";
 "近 7 天" = "7 hari terakhir";
 "近7天 %@ · 24h %@" = "7h %1$@ · 24j %2$@";
@@ -565,6 +566,7 @@
 // Pool overview (miningpoolstats) + hashrate windows
 "1h" = "1j";
 "3h" = "3j";
+"6h" = "6j";
 "24h" = "24j";
 "近 15 分钟" = "15 menit terakhir";
 "近 30 分钟" = "30 menit terakhir";
@@ -575,13 +577,13 @@
 "其他小池" = "Pool kecil lainnya";
 "独立/未知" = "Solo / tidak diketahui";
 "全部 Pearl 矿池对比：费率 · 出块 · 每 PH 收益 · 算力（无需地址）" = "Semua pool Pearl dibandingkan: biaya · blok · PRL per PH · hashrate (tanpa alamat)";
-"收益/PH·天 = 该池实际挖到的块 × 单块奖励 ÷ 算力（PRL，未扣手续费）；绿色 = 最高。" = "PRL/PH·hari = blok yang benar-benar ditemukan pool × hadiah ÷ hashrate-nya (sebelum biaya); hijau = tertinggi.";
-"预估收益 = 当前理论收益 × 该池近 7 天出块运气（实际出块 ÷ 按其算力应出的块，每 5 分钟采样）；PRL/PH·天，未扣手续费；绿色 = 最高。" = "Estimasi hasil = hasil teoretis saat ini × keberuntungan blok pool selama 7 hari terakhir (blok yang ditemukan ÷ blok yang seharusnya ditemukan hashrate-nya, diukur setiap 5 menit); PRL/PH·hari sebelum biaya; hijau = tertinggi.";
+"收益/PH·天 = 该池实际挖到的块 × 单块奖励 ÷ 算力 ×（1 − 手续费），即到手 PRL；绿色 = 最高。" = "PRL/PH·hari = blok yang benar-benar ditemukan pool × hadiah ÷ hashrate-nya × (1 − biaya), yaitu yang Anda terima; hijau = tertinggi.";
+"预估收益 = 当前理论收益 × 该池近 7 天出块运气（实际出块 ÷ 按其算力应出的块，每 5 分钟采样）×（1 − 手续费）；PRL/PH·天，为到手值；绿色 = 最高。" = "Estimasi hasil = hasil teoretis saat ini × keberuntungan blok pool selama 7 hari terakhir (blok yang ditemukan ÷ blok yang seharusnya ditemukan hashrate-nya, diukur setiap 5 menit) × (1 − biaya); PRL/PH·hari yang Anda terima; hijau = tertinggi.";
 "未标「7 天」的矿池不足 7 天样本，按实际挖到的块 × 单块奖励 ÷ 算力计算。" = "Pool tanpa label “7 hari” belum punya data seminggu: blok yang ditemukan × hadiah blok ÷ hashrate.";
 "出块与收益按最近 1000 个区块（≈%@ 天）实测，比 24h 更抗运气波动。" = "Blok dan pendapatan diukur atas 1000 blok jaringan terakhir (≈%@ hari) — lebih stabil dari 24 jam.";
 "「~」= 样本区块太少（<20），该数字运气成分大，仅供参考。" = "“~” = kurang dari 20 blok dalam sampel — sebagian besar keberuntungan, hanya indikatif.";
 "SOLO 池为「彩票式」收益，不参与最高收益的比较。" = "Pool SOLO membayar seperti lotre, jadi tidak ikut perbandingan “tertinggi”.";
-"PPS 池按份额固定结算，收益/PH·天 取全网期望值（与该池运气无关），不参与最高收益的比较。" = "Pool PPS membayar tarif tetap per share, jadi PRL/PH·hari memakai hasil harapan jaringan (keberuntungan pool tidak sampai ke Anda) dan tidak ikut lomba “tertinggi”.";
+"PPS 池按份额固定结算，收益/PH·天 = 全网期望值（与该池运气无关）×（1 − 真实费用；尚未测出时用手续费），不参与最高收益的比较。" = "Pool PPS membayar tarif tetap per share, jadi PRL/PH·hari memakai hasil harapan jaringan (keberuntungan pool tidak sampai ke Anda) × (1 − biaya nyata, atau biaya pool selama belum terukur) dan tidak ikut lomba “tertinggi”.";
 "数据来源：miningpoolstats.stream" = "Sumber: miningpoolstats.stream";
 "出块为最近 24 小时链上实测（按 coinbase 归属统计），算力取自各矿池自身 API。" = "Blok dihitung on-chain selama 24 jam terakhir (lewat atribusi coinbase); hashrate diambil dari API tiap pool.";
 "HeroMiners 的算力数据源未收录，改取矿池自身 API。" = "Sumber tidak memuat hashrate HeroMiners, jadi diambil dari API pool itu sendiri.";

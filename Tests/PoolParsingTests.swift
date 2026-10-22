@@ -133,6 +133,42 @@ struct PoolParsingTests {
         #expect(KryptexSource.stats(KryptexMiner(workers: workers, balance: nil, payouts: nil)) == nil)
     }
 
+    /// Jetski: the pool's calculated 5m / 1h / 6h (never the miner-reported `hashrate`, null on
+    /// P3630), grains → PRL, and a worker stale 10 min after its last share like the pool's page.
+    @Test func jetski() throws {
+        let s = try #require(try JetskiSource.parse(try Fixture.data("jetski_miner.json"), now: 1_792_283_530))
+        #expect(s.windows == [.live, .hour, .h6])
+        #expect(close(s.pending, 4.19832521))
+        #expect(close(s.paid, 348.29822081))
+        #expect(s.pendingKind == .pending)
+        #expect(s.workers.map(\.name) == ["AP201", "C4000F", "NZXTH3", "P3630"])
+        #expect(s.workers.map(\.online) == [true, true, true, false])
+        #expect(close(s.value(.live), 658_561_652_053_333.4))
+        #expect(close(s.value(.hour), 634_700_722_631_111.1))
+        #expect(close(s.value(.h6), 659_754_698_524_444.5))
+        // 6h is the smoothest it publishes, so it's what the efficiency comparison uses.
+        #expect(close(s.hr24hRaw, 659_754_698_524_444.5))
+        #expect(s.workers[3].rate(.live) == 0)
+        #expect(close(s.workers[3].rate(.h6), 75_957_291_994_074.08))
+    }
+
+    /// 200 with zeros and no workers for an address the pool has never seen.
+    @Test func jetskiStrangerIsNotFound() throws {
+        #expect(try JetskiSource.parse(try Fixture.data("jetski_miner_empty.json"), now: 1_792_283_590) == nil)
+        // Known by its payouts alone: found, with no workers.
+        let paidOnly = Data(#"{"hashrate_5m":0,"total_paid_grains":250000000,"last_share_time":null,"workers":[]}"#.utf8)
+        let s = try #require(try JetskiSource.parse(paidOnly, now: 0))
+        #expect(close(s.paid, 2.5) && s.workers.isEmpty)
+    }
+
+    @Test func jetskiWorkerNames() {
+        #expect(JetskiSource.workerName("prl1pabc.rig-1") == "rig-1")
+        #expect(JetskiSource.workerName("prl1pabc.rig.gpu0") == "rig.gpu0")
+        #expect(JetskiSource.workerName("prl1pabc") == "prl1pabc")
+        #expect(JetskiSource.workerName("prl1pabc.") == "default")
+        #expect(JetskiSource.workerName(nil) == "default")
+    }
+
     /// Per-worker TH/s vs account raw H/s, and a `status` that arrives as a string on one row —
     /// which used to throw typeMismatch and blank the whole card.
     @Test func f2poolUnitsAndMixedTypes() throws {

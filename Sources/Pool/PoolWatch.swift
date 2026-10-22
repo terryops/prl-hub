@@ -56,6 +56,7 @@ extension SpeedWindow {
         case .m30:  return Loc("30分")
         case .hour: return Loc("1h")
         case .h3:   return Loc("3h")
+        case .h6:   return Loc("6h")
         case .day:  return Loc("24h")
         }
     }
@@ -68,6 +69,7 @@ extension SpeedWindow {
         case .m30:  return Loc("近 30 分钟")
         case .hour: return Loc("近 1 小时")
         case .h3:   return Loc("近 3 小时")
+        case .h6:   return Loc("近 6 小时")
         case .day:  return Loc("平均")
         }
     }

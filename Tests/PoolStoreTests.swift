@@ -445,3 +445,112 @@ struct PoolsOverviewTests {
         #expect(real.poolHashrate == 3.45e18)
     }
 }
+
+/// 预估收益 is what a miner keeps: PPS at the network figure less its Real Cost (the tariff until
+/// one is measured), shared-reward payouts less the fee. The same rules as Web's `payoutCost`,
+/// `netPerPH`, `netYield` and `bestYield` in prl-hub-web/web/src/pool-comparison.ts.
+@MainActor
+struct TakeHomeYieldTests {
+    private func measured(_ realCost: Double, scheme: String = "PPS") -> PPSFeeMeasurement {
+        PPSFeeMeasurement(pool: "P", scheme: scheme, netPRL: 100 - realCost, expectedPRL: 100,
+                          start: 100, end: 200, measuredAt: 300, estimated: true, sampleCount: 5,
+                          theoryBasis: "hashrate_chain")
+    }
+
+    private func payout(_ scheme: String, fee: Double?, gross: Double?, realCost: Double? = nil,
+                        solo: Bool = false) -> PoolPayoutComparison {
+        PoolPayoutComparison(scheme: scheme, feePercent: fee, grossPerPH: gross, theoreticalPerPH: gross,
+                             estimated: true, solo: solo, measurement: realCost.map { measured($0, scheme: scheme) })
+    }
+
+    @Test func ppsPaysTheNetworkFigureLessRealCostSoPoolsQuotedAlikeComeApart() throws {
+        // 2026-10-18 live figures: Kryptex, Pearl Fortune and F2Pool were all quoted at 18.37.
+        let kryptex = payout("PPS+", fee: 3, gross: 18.36908537496546, realCost: 5.947648650779502)
+        let fortune = payout("PPS", fee: 5, gross: 18.391774526036183, realCost: 5.003957146717564)
+        let f2pool = payout("PPS", fee: 1, gross: 18.36908537496546, realCost: 3.594200702636696)
+        #expect(close(try #require(kryptex.netPerPH), 18.36908537496546 * (1 - 0.05947648650779502), 1e-9))
+        #expect(close(try #require(fortune.netPerPH), 18.391774526036183 * (1 - 0.05003957146717564), 1e-9))
+        #expect(close(try #require(f2pool.netPerPH), 18.36908537496546 * (1 - 0.03594200702636696), 1e-9))
+        let kept = try [kryptex, fortune, f2pool].map { try #require($0.netPerPH) }
+        #expect(kept == kept.sorted() && Set(kept).count == 3)
+        // A measured zero is kept, and so is a pool that paid above the network figure.
+        #expect(close(try #require(payout("FPPS", fee: 2, gross: 100, realCost: 0).netPerPH), 100))
+        #expect(close(try #require(payout("PPS", fee: 2, gross: 100, realCost: -1).netPerPH), 101))
+        // Until Real Cost is measured, the tariff stands in.
+        #expect(close(try #require(payout("PPS", fee: 4, gross: 100).netPerPH), 96))
+        #expect(close(try #require(payout("PPS", fee: 4, gross: 100, realCost: 6).costPercent), 6))
+    }
+
+    @Test func sharedRewardPayoutsLoseOnlyTheFee() throws {
+        // A shared-reward measurement never applies: its luck is already in the gross figure.
+        #expect(close(try #require(payout("PPLNS", fee: 2, gross: 80, realCost: 21.6).netPerPH), 78.4))
+        #expect(close(try #require(payout("PROP", fee: 0, gross: 120).netPerPH), 120))
+        #expect(payout("PPLNS", fee: 1, gross: 0).netPerPH == 0)
+        // Unknown stays unknown: no fee, no gross figure, SOLO.
+        for unknown in [payout("PPLNS", fee: nil, gross: 80), payout("PPS", fee: nil, gross: 100),
+                        payout("PPLNS", fee: 1, gross: nil), payout("SOLO", fee: 1, gross: 100, solo: true),
+                        payout("PPLNS", fee: .infinity, gross: 80), payout("PPLNS", fee: 1, gross: .nan)] {
+            #expect(unknown.netPerPH == nil)
+        }
+    }
+
+    /// A shared payout without a scheme follows its row: on a PPS row it is the PPS contract.
+    @Test func aSchemelessPayoutFollowsTheRowsPPSFlag() throws {
+        func row(scheme: String) throws -> PoolOverview {
+            var document = try #require(try JSONSerialization.jsonObject(with: Fixture.data("shared_overview.json")) as? [String: Any])
+            var value = try #require(document["snapshot"] as? [String: Any])
+            var rows = try #require(value["rows"] as? [[String: Any]])
+            let index = try #require(rows.firstIndex { $0["name"] as? String == "Pearl Fortune" })
+            rows[index]["scheme"] = scheme
+            rows[index]["payouts"] = [["scheme": NSNull(), "fee": 3, "grossPerPH": 100, "estimated": true, "solo": false]]
+            rows[index]["realFeeMeasurement"] = ["pool": "Pearl Fortune", "scheme": "PPS", "netPRL": 95, "expectedPRL": 100,
+                                                 "start": 100, "end": 200, "measuredAt": 250, "estimated": true,
+                                                 "sampleCount": 5, "theoryBasis": "hashrate_chain"] as [String: Any]
+            value["rows"] = rows; document["snapshot"] = value
+            let decoded = try JSONDecoder().decode(SharedOverviewContract.self, from: JSONSerialization.data(withJSONObject: document)).snapshot
+            return try #require(PoolsOverviewStore.build(decoded).first { $0.name == "Pearl Fortune" })
+        }
+        let pps = try row(scheme: "PPS")
+        #expect(pps.payoutComparisons.map(\.scheme) == ["PPS"])
+        #expect(close(try #require(pps.payoutComparisons.first?.netPerPH), 95))   // its Real Cost, not the 3% fee
+        let shared = try row(scheme: "PPLNS")
+        #expect(shared.payoutComparisons.map(\.scheme) == ["—"])
+        #expect(close(try #require(shared.payoutComparisons.first?.netPerPH), 97))
+    }
+
+    @Test func sortingAndTheGreenMarkUseWhatAMinerKeeps() throws {
+        func pool(_ id: String, scheme: String?, _ payouts: [PoolPayoutComparison], realCost: Double? = nil,
+                  trustworthy: Bool = true, solo: Bool = false) -> PoolOverview {
+            var value = PoolOverview(id: id, name: id, site: "https://example.com", gradient: Pearl.wash,
+                                     feeType: scheme, isSolo: solo)
+            value.sharedPayouts = payouts
+            value.sharedTrustworthy = trustworthy
+            value.ppsMeasurement = realCost.map { measured($0, scheme: scheme == "PPS+" ? "PPS+" : "PPS") }
+            return value
+        }
+        let kryptex = pool("kryptex", scheme: "PPS+", [payout("PPS+", fee: 3, gross: 100)], realCost: 6, trustworthy: false)
+        let f2pool = pool("f2pool", scheme: "PPS", [payout("PPS", fee: 1, gross: 100)], realCost: 3.5, trustworthy: false)
+        let fortune = pool("fortune", scheme: "PPLNS", [payout("PPS", fee: 5, gross: 100), payout("PPLNS", fee: 2, gross: 98)], realCost: 5)
+        let hero = pool("hero", scheme: "PPLNS", [payout("PPLNS", fee: 0, gross: 96.3)])
+        let pearl = pool("pearl", scheme: nil, [payout("—", fee: 1, gross: 97)])
+        let solo = pool("solo", scheme: "SOLO", [payout("SOLO", fee: 1, gross: 500, solo: true)], solo: true)
+        let unknown = pool("unknown", scheme: "PPLNS", [payout("PPLNS", fee: nil, gross: 200)])
+        let rows = [kryptex, f2pool, fortune, hero, pearl, solo, unknown]
+        // Fortune keeps 96.04 on PPLNS (more than its PPS 95); a 0% fee beats a higher gross at 1%.
+        #expect(close(try #require(fortune.netYield), 96.04))
+        #expect(close(try #require(kryptex.netYield), 94))
+        #expect(close(try #require(f2pool.netYield), 96.5))
+        #expect(close(try #require(pearl.netYield), 96.03))
+        #expect(solo.netYield == nil && unknown.netYield == nil)
+        let ranked = rows.filter { $0.netYield != nil }.sorted { $0.netYield! > $1.netYield! }.map(\.id)
+        #expect(ranked == ["f2pool", "hero", "fortune", "pearl", "kryptex"])
+        // F2Pool keeps the most, but PPS is never ranked: HeroMiners is the best measured payout.
+        #expect(close(try #require(PoolOverview.bestYield(rows)), 96.3))
+        #expect(fortune.rankedYield(fortune.payoutComparisons[0]) == nil)
+        #expect(close(try #require(fortune.rankedYield(fortune.payoutComparisons[1])), 96.04))
+        var doubtful = hero; doubtful.sharedTrustworthy = false
+        #expect(doubtful.rankedYield(doubtful.payoutComparisons[0]) == nil)
+        #expect(PoolOverview.bestYield([kryptex, f2pool, solo, unknown]) == nil)
+        #expect(PoolOverview.bestYield([]) == nil)
+    }
+}

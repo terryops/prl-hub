@@ -8,7 +8,8 @@ import SwiftUI
 // PearlHash publishes only a 48 px favicon; its glyph was enlarged and re-cut.
 // Dark mode gets a <name>-dark.png beside it (tools/make-pool-icons-dark.py): the same
 // logo on a dark plate, black glyphs (PearlHash, Pearl Fortune) turned light. Lucky
-// Pool's full-colour tile serves both.
+// Pool's full-colour tile serves both, and so does Jetski's (its gold glyph on the site's
+// own near-black, tools/make-jetski-icon.py).
 
 extension PoolKind {
     /// This pool's logo in the asset catalog.
@@ -20,6 +21,7 @@ extension PoolKind {
         case .pearlFortune: return "pool-pearlfortune"
         case .pearlHash:    return "pool-pearlhash"
         case .kryptex:      return "pool-kryptex"
+        case .jetski:       return "pool-jetski"
         case .f2pool:       return "pool-f2pool"
         }
     }

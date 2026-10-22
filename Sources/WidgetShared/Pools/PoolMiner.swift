@@ -8,7 +8,7 @@ import Foundation
 // SAME parsing code — they used to parse every pool twice, and drifted.
 
 /// A user-added per-miner watch = (pool, address). Pools with a public per-miner-by-address
-/// API: PearlHash, AlphaPool, Lucky Pool, HeroMiners, Pearl Fortune, Kryptex. F2Pool is the
+/// API: PearlHash, AlphaPool, Lucky Pool, HeroMiners, Pearl Fortune, Kryptex, Jetski. F2Pool is the
 /// exception — it has no by-address API, so its watches are keyed by the account's read-only
 /// page URL instead. See F2PoolRef.
 enum PoolKind: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -18,6 +18,8 @@ enum PoolKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case pearlFortune = "Pearl Fortune"
     case pearlHash = "PearlHash"
     case kryptex = "Kryptex"
+    /// Jetski Pool's Pearl pool (pearl.jetskipool.ai; the site itself is titled PEARLSKI).
+    case jetski = "Jetski"
     case f2pool = "F2Pool"
     var id: String { rawValue }
     var label: String { rawValue }
@@ -35,6 +37,7 @@ enum PoolKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .pearlFortune: return PearlFortuneSource.self
         case .pearlHash:    return PearlHashSource.self
         case .kryptex:      return KryptexSource.self
+        case .jetski:       return JetskiSource.self
         case .f2pool:       return F2PoolSource.self
         }
     }
@@ -45,11 +48,11 @@ enum PoolKind: String, Codable, CaseIterable, Identifiable, Sendable {
 ///
 /// No pool publishes all of them: the four by-address pools report a live rate but no
 /// 15-minute one, F2Pool is the mirror image — its freshest figure IS a 15-minute average
-/// and it has no instantaneous rate at all — and Kryptex publishes its own trio (30m / 3h /
-/// 24h). So a window is only ever OFFERED for a pool that actually publishes it
-/// (`PoolMinerStats.windows`); nothing is faked into a slot it doesn't fit.
+/// and it has no instantaneous rate at all — Kryptex publishes its own trio (30m / 3h /
+/// 24h), and Jetski stops at 6h. So a window is only ever OFFERED for a pool that actually
+/// publishes it (`PoolMinerStats.windows`); nothing is faked into a slot it doesn't fit.
 enum SpeedWindow: String, CaseIterable, Sendable {
-    case live, m15, m30, hour, h3, day
+    case live, m15, m30, hour, h3, h6, day
 
     /// The closest window this pool DOES publish. Ties (one step either way) go to the
     /// fresher one, so a user parked on 实时 lands on F2Pool's 15分 rather than its 24h.

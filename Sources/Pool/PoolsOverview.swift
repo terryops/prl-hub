@@ -102,6 +102,21 @@ struct PoolOverview: Identifiable {
         payoutComparisons.first(where: \.isPPS)?.realFeePercent
     }
 
+    /// The row's best take-home yield across its payout schemes — what 预估收益 sorts by.
+    var netYield: Double? { isSolo ? nil : payoutComparisons.compactMap(\.netPerPH).max() }
+
+    /// A payout's take-home yield when it may take the green "best" mark: trustworthy
+    /// shared-reward payouts only — a PPS figure is the network's, a SOLO one a lottery.
+    func rankedYield(_ payout: PoolPayoutComparison) -> Double? {
+        guard yieldTrustworthy, !isPPS, !isSolo, !payout.solo, !payout.isPPS else { return nil }
+        return payout.netPerPH
+    }
+
+    /// The green mark: the highest `rankedYield` in the table, nil when nothing qualifies.
+    static func bestYield(_ pools: [PoolOverview]) -> Double? {
+        pools.flatMap { pool in pool.payoutComparisons.compactMap { pool.rankedYield($0) } }.max()
+    }
+
     /// Keep PF as one physical pool, so its two contracts never double-count hashrate.
     var payoutComparisons: [PoolPayoutComparison] {
         if let sharedPayouts, !sharedPayouts.isEmpty {
@@ -175,10 +190,20 @@ struct PoolPayoutComparison {
 
     var isPPS: Bool { scheme.uppercased().hasPrefix("PPS") || scheme.uppercased().hasPrefix("FPPS") }
 
+    /// The percentage the pool keeps from this payout. PPS-family: the measured Real Cost, or
+    /// the tariff until one is measured — every PPS pool is quoted at the same network figure,
+    /// so this is all that tells them apart. Shared-reward: the fee only; luck is already in
+    /// the gross figure. Same rule as Web's `payoutCost`.
+    var costPercent: Double? {
+        guard let cost = isPPS ? (realFeePercent ?? feePercent) : feePercent, cost.isFinite else { return nil }
+        return cost
+    }
+
+    /// 预估收益 as shown: what a miner keeps, PRL per PH·day — the gross figure less
+    /// `costPercent`. Unknown when either is missing, and for SOLO. Web's `netPerPH`.
     var netPerPH: Double? {
-        guard let gross = grossPerPH, gross.isFinite, gross >= 0,
-              let fee = feePercent, fee.isFinite, (0...100).contains(fee) else { return nil }
-        return gross * (1 - fee / 100)
+        guard !solo, let gross = grossPerPH, gross.isFinite, let cost = costPercent else { return nil }
+        return gross * (1 - cost / 100)
     }
 
     var realFeePercent: Double? {
@@ -325,8 +350,12 @@ final class PoolsOverviewStore: ObservableObject {
             pool.lifetimeBlocks = row.lifetimeBlocks
             pool.sharedTrustworthy = row.trustworthy
             pool.luck7d = row.luck?["7d"]
+            // A payout without a scheme follows its row: on a PPS row it is the PPS contract, so
+            // its Real Cost applies (Web's `payoutCost` reads the row's PPS flag the same way).
+            let rowScheme = pool.isPPS ? pool.feeType : nil
             pool.sharedPayouts = row.payouts?.map {
-                PoolPayoutComparison(scheme: $0.scheme ?? "—", feePercent: $0.fee,
+                let own = $0.scheme?.trimmingCharacters(in: .whitespaces).isEmpty == false ? $0.scheme : nil
+                return PoolPayoutComparison(scheme: own ?? rowScheme ?? "—", feePercent: $0.fee,
                                      grossPerPH: $0.grossPerPH, theoreticalPerPH: row.theoreticalEarningsPerPH,
                                      estimated: $0.estimated, solo: $0.solo)
             }
@@ -539,6 +568,7 @@ final class PoolsOverviewStore: ObservableObject {
         "c3pool.org": "C3Pool", "baikalmine.com": "BaikalMine", "woolypooly.com": "WoolyPooly",
         "suprnova.cc": "Suprnova", "rabbitminer.cc": "RabbitMiner", "grandpool.io": "GrandPool",
         "himpool.com": "HimPool", "nushypool.com": "NushyPool", "akoyapool.com": "AkoyaPool",
+        "jetskipool.ai": "Jetski", "pearl.jetskipool.ai": "Jetski",
     ]
 
     /// Each pool's own colour — the same in either palette (配色), so from `Pearl.classic`.
@@ -907,7 +937,16 @@ private struct PoolComparisonTable: View {
     /// row stays short and the eye can run down a column.
     private var compact: Bool { availableWidth < 720 }
     private var lineGap: CGFloat { compact ? 3 : 8 }
-    private var best: Double { pools.filter(\.yieldTrustworthy).compactMap(\.estimatedEarningsPerPH).max() ?? -1 }
+    private var best: Double? { PoolOverview.bestYield(pools) }
+    private func isBest(_ pool: PoolOverview, _ payout: PoolPayoutComparison) -> Bool {
+        guard let mark = pool.rankedYield(payout) else { return false }
+        return mark == best
+    }
+    /// The arithmetic behind a 预估收益 figure, for the pointer tooltip (Web's title).
+    private func yieldFormula(_ payout: PoolPayoutComparison) -> String {
+        guard let net = payout.netPerPH, let gross = payout.grossPerPH, let cost = payout.costPercent else { return "" }
+        return "\(f(gross, 4)) × (1 − \(f(cost, 2))%) = \(f(net, 4)) PRL"
+    }
     private var sortedPools: [PoolOverview] {
         let selectedColumn = sortColumn
         let ascending = ascending
@@ -918,7 +957,7 @@ private struct PoolComparisonTable: View {
             func value(_ pool: PoolOverview) -> Double? {
                 switch selectedColumn {
                 case .hashrate: pool.poolHashrate
-                case .earnings: pool.isSolo ? nil : pool.estimatedEarningsPerPH
+                case .earnings: pool.netYield
                 case .blocks: pool.blocksPerDay
                 case .fee: pool.feePercent
                 case .realFee: pool.realFeePercent
@@ -1117,9 +1156,11 @@ private struct PoolComparisonTable: View {
                 ForEach(pool.payoutComparisons.indices, id: \.self) { index in
                     let comparison = pool.payoutComparisons[index]
                     let contract = comparison.scheme.hasPrefix("PPS") || comparison.scheme.hasPrefix("FPPS")
-                    value(comparison.solo ? nil : comparison.grossPerPH.map {
+                    // What a miner keeps: the gross figure less the pool's cut (`costPercent`).
+                    value(comparison.netPerPH.map {
                         (contract ? "≈" : (comparison.estimated ? "~" : "")) + f($0, 1) + " PRL"
-                    }, color: pool.yieldTrustworthy && pool.estimatedEarningsPerPH == best && !contract ? .green : .primary)
+                    }, color: isBest(pool, comparison) ? .green : .primary)
+                    .help(yieldFormula(comparison))
                     if pool.payoutComparisons.count > 1 { secondary(comparison.scheme) }
                 }
                 secondary(pool.usesWeekLuck ? Loc("每 PH/天 · 7 天") : Loc("每 PH/天"))
@@ -1324,12 +1365,12 @@ private struct PoolComparisonNotes: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             if pools.contains(where: \.usesWeekLuck) {
-                Text(Loc("预估收益 = 当前理论收益 × 该池近 7 天出块运气（实际出块 ÷ 按其算力应出的块，每 5 分钟采样）；PRL/PH·天，未扣手续费；绿色 = 最高。"))
+                Text(Loc("预估收益 = 当前理论收益 × 该池近 7 天出块运气（实际出块 ÷ 按其算力应出的块，每 5 分钟采样）×（1 − 手续费）；PRL/PH·天，为到手值；绿色 = 最高。"))
                 if pools.contains(where: { !$0.usesWeekLuck && !$0.isPPS && !$0.isSolo && $0.earningsPerPH != nil }) {
                     Text(Loc("未标「7 天」的矿池不足 7 天样本，按实际挖到的块 × 单块奖励 ÷ 算力计算。"))
                 }
             } else {
-                Text(Loc("收益/PH·天 = 该池实际挖到的块 × 单块奖励 ÷ 算力（PRL，未扣手续费）；绿色 = 最高。"))
+                Text(Loc("收益/PH·天 = 该池实际挖到的块 × 单块奖励 ÷ 算力 ×（1 − 手续费），即到手 PRL；绿色 = 最高。"))
             }
             Text(Loc("真实费用 =（1 − 实际结算收益 ÷ 同期理论收益）× 100%；负值表示收益高于理论。"))
             Text(Loc("真实费用仅计算 PPS、PPS+ 与 FPPS；其他方案或数据不足显示「—」。不含矿工软件抽水及转账费。"))
@@ -1349,7 +1390,7 @@ private struct PoolComparisonNotes: View {
                 Text(Loc("SOLO 池为「彩票式」收益，不参与最高收益的比较。"))
             }
             if pools.contains(where: { $0.payoutComparisons.contains(where: \.isPPS) }) {
-                Text(Loc("PPS 池按份额固定结算，收益/PH·天 取全网期望值（与该池运气无关），不参与最高收益的比较。"))
+                Text(Loc("PPS 池按份额固定结算，收益/PH·天 = 全网期望值（与该池运气无关）×（1 − 真实费用；尚未测出时用手续费），不参与最高收益的比较。"))
                 Text(Loc("「≈」表示估算，可能包含算力统计、观测缺口补估和链上历史插值误差；结果反映样本期收益折损，不等同于矿池公示手续费或额外抽水。"))
             }
             if pools.contains(where: \.hashFromPoolAPI) {
