@@ -204,6 +204,18 @@ struct PoolParsingTests {
         #expect(F2PoolRef("https://example.com/mining-user/0123456789abcdef") == nil)
     }
 
+    /// The card never shows an F2Pool link: its key is the capability to read the account.
+    @Test func f2poolWatchShowsAccountNotLink() {
+        let key = "0123456789abcdef0123456789abcdef"
+        let named = PoolWatch(pool: .f2pool, address: "https://www.f2pool.com/mining-user-prl/\(key)?user_name=My%20Rig")
+        #expect(named.displayAddress == "My Rig")
+        let bare = PoolWatch(pool: .f2pool, address: "https://www.f2pool.com/mining-user-prl/\(key)")
+        #expect(bare.displayAddress == "F2Pool")
+        #expect(!named.displayAddress.contains(key) && !bare.displayAddress.contains(key))
+        let addr = "prl1pexampleexampleexampleexampleexampleexampleexample"
+        #expect(PoolWatch(pool: .kryptex, address: addr).displayAddress == addr)
+    }
+
     /// The widget total and the app's snapshot total are the same function now.
     @Test func liveRateFallsBackToSmoothestWindow() {
         var s = PoolMinerStats()

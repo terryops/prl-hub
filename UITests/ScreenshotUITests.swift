@@ -55,6 +55,14 @@ final class ScreenshotUITests: XCTestCase {
         // Populate the Trade tab with a believable demo account (DEBUG seam) so the
         // promo shot shows balances + open orders, not the "configure API key" warning.
         app.launchEnvironment["SHOT_TRADE_DEMO"] = "1"
+        // Pro unlocked (DEBUG seam in ProStore): price alerts show their rule list instead
+        // of the paywall, and the trade tab its depth chart.
+        app.launchEnvironment["SHOT_PRO"] = "1"
+        // 价格提醒 seeded around this reference price and opened on the 设置 tab (DEBUG seam
+        // in PriceAlertStore; nothing is synced). Only shot when the runner passes a price.
+        if let ref = env["SHOT_PRICE_ALERTS"], !ref.isEmpty {
+            app.launchEnvironment["SHOT_PRICE_ALERTS"] = ref
+        }
         app.launch()
 
         importWalletIfNeeded(app)
@@ -83,6 +91,7 @@ final class ScreenshotUITests: XCTestCase {
         capture("03-pools")
 
         // 4) Pool monitor — the seeded watch's card (per-miner hashrate, workers, payouts).
+        //    SHOT_ADDR may also be an F2Pool read-only page link (SHOT_POOL=F2Pool).
         if let addr = env["SHOT_ADDR"], !addr.isEmpty {
             tapTab(app, "Monitor")
             // Guard against the app having been backgrounded/obscured (a stray keyboard
@@ -94,14 +103,34 @@ final class ScreenshotUITests: XCTestCase {
             capture("04-monitor")
         }
 
-        // 5) Trade — SafeTrade market: live PEARL/USDT price + candlestick K-line, demo
+        // 5) Price alerts — the seeded rule list (设置 → 通知 → 价格提醒, pushed at launch).
+        if let ref = env["SHOT_PRICE_ALERTS"], !ref.isEmpty {
+            tapTab(app, "Settings")
+            if app.state != .runningForeground { app.activate() }
+            _ = app.staticTexts["My Alerts"].waitForExistence(timeout: 10)
+            sleep(6)                   // reference price + 5m/1h/24h change fetch
+            capture("05-alerts")
+        }
+
+        // 6) Trade — SafeTrade market: live PEARL/USDT price + candlestick K-line, demo
         //    balances + open orders (seeded via SHOT_TRADE_DEMO). The Trade tab only
         //    exists in TRADE_ENABLED builds, which the screenshot build is.
         tapTab(app, "Trade")
         if app.state != .runningForeground { app.activate() }
         _ = app.buttons["Sell"].waitForExistence(timeout: 10)   // order form is up
         sleep(8)                       // public ticker + k-line fetch fills the chart
-        capture("05-trade")
+        capture("06-trade")
+
+        // 7) Security info — the self-custody card the wallet image lifts out (设置 → 安全性说明,
+        //    pushed at launch by SHOT_SECURITY). A fresh launch: SHOT_PRICE_ALERTS would push too.
+        app.terminate()
+        app.launchEnvironment["SHOT_PRICE_ALERTS"] = nil
+        app.launchEnvironment["SHOT_SECURITY"] = "1"
+        app.launchEnvironment["SHOT_TAB"] = "4"
+        app.launch()
+        _ = app.staticTexts["Self-custody wallet"].waitForExistence(timeout: 15)
+        sleep(3)
+        capture("07-security")
     }
 
     // MARK: - flows

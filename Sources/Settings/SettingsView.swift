@@ -14,6 +14,16 @@ struct SettingsView: View {
         #endif
     }
 
+    @State private var shotPriceAlerts = SettingsView.shotPriceAlerts
+
+    private static var shotPriceAlerts: Bool {
+        #if DEBUG
+        return !(ProcessInfo.processInfo.environment["SHOT_PRICE_ALERTS"] ?? "").isEmpty
+        #else
+        return false
+        #endif
+    }
+
     @State private var shotSecurity = SettingsView.shotSecurity
 
     private static var shotSecurity: Bool {
@@ -90,6 +100,7 @@ struct SettingsView: View {
             }
             #endif
             .navigationDestination(isPresented: $shotOfflineAlerts) { OfflineAlertsView() }
+            .navigationDestination(isPresented: $shotPriceAlerts) { PriceAlertsView() }
             .navigationDestination(isPresented: $shotWebLink) { WebLinkView() }
             .navigationDestination(isPresented: $shotSecurity) { SecurityInfoView() }
         }

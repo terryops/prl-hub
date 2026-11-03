@@ -317,6 +317,36 @@ final class PriceAlertStore: ObservableObject {
         accountProSub = ProStore.shared.$hasAccountPro.dropFirst().removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.jwsChanged() }
+        #if DEBUG
+        seedScreenshotRulesIfNeeded()
+        #endif
+    }
+
+    #if DEBUG
+    /// App Store screenshot harness ONLY (never compiled into release builds):
+    /// SHOT_PRICE_ALERTS=<reference USD price> fills 我的提醒 with a believable rule list
+    /// around that price. In memory only — nothing is persisted or sent to the worker.
+    private var shotDemo = false
+    private func seedScreenshotRulesIfNeeded() {
+        guard let ref = ProcessInfo.processInfo.environment["SHOT_PRICE_ALERTS"].flatMap(Double.init),
+              ref > 0 else { return }
+        shotDemo = true
+        func nickel(_ v: Double) -> Double { (v * 20).rounded() / 20 }   // nearest $0.05
+        rules = [
+            PriceAlertRule(kind: .above, value: nickel(ref * 1.15), repeats: false),
+            PriceAlertRule(kind: .below, value: nickel(ref * 0.87), repeats: false),
+            PriceAlertRule(kind: .move, value: 5, window: 3600, repeats: true),
+            PriceAlertRule(kind: .reach, value: nickel(ref * 1.05), repeats: true),
+        ]
+        syncState = .synced(Date())
+    }
+    #endif
+    private var isShotDemo: Bool {
+        #if DEBUG
+        return shotDemo
+        #else
+        return false
+        #endif
     }
 
     // MARK: rules
@@ -482,6 +512,7 @@ final class PriceAlertStore: ObservableObject {
     }
 
     private func persist() {
+        if isShotDemo { return }
         let d = defaults
         if let data = try? JSONEncoder().encode(rules) { d.set(data, forKey: Self.rulesKey) }
         if let data = try? JSONEncoder().encode(removed) { d.set(data, forKey: Self.removedKey) }
@@ -524,6 +555,7 @@ final class PriceAlertStore: ObservableObject {
     /// An alerts page opened (价格提醒 or 掉线提醒): the one place to ask for
     /// notifications for alerts that synced in from another device.
     func pageOpened() async {
+        if isShotDemo { return }
         guard hasContent, ProStore.shared.isPro, pushHere, authorization == .notDetermined else { return }
         await ensureRegistered()
     }
@@ -574,6 +606,7 @@ final class PriceAlertStore: ObservableObject {
     // MARK: server sync
 
     private func scheduleSync() {
+        if isShotDemo { return }
         unsynced = true
         syncTask?.cancel()
         syncTask = Task { [weak self] in
@@ -640,6 +673,7 @@ final class PriceAlertStore: ObservableObject {
     /// Send the device record now. Called through `inOrder` (scheduleSync, sendTest), so
     /// it never overlaps another request to the worker.
     private func sync() async {
+        if isShotDemo { return }
         guard let token else { return }
         syncState = .syncing
         puts += 1
@@ -676,6 +710,7 @@ final class PriceAlertStore: ObservableObject {
     /// Pull the server's view of this device's rules without re-sending them —
     /// picks up alerts that fired (and so switched themselves off) meanwhile.
     func refresh() async {
+        if isShotDemo { return }
         guard let token, ProStore.shared.isPro, pushHere, hasContent, syncState != .syncing else { return }
         let asked = localVersion, putsBefore = puts
         var req = URLRequest(url: Self.endpoint.appendingPathComponent("devices/\(token)"))

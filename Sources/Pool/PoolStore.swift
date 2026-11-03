@@ -53,9 +53,15 @@ final class PoolStore: ObservableObject {
     private func seedScreenshotWatchIfNeeded() {
         let env = ProcessInfo.processInfo.environment
         guard let raw = env["SHOT_WATCH_ADDR"], !raw.isEmpty else { return }
+        let pool = PoolKind(rawValue: env["SHOT_WATCH_POOL"] ?? "AlphaPool") ?? .alphaPool
+        // F2Pool watches are keyed by the account's read-only page link, not an address.
+        if !pool.isAddressBased {
+            guard let ref = F2PoolRef(raw) else { return }
+            watches = [PoolWatch(pool: pool, address: ref.pageURL)]
+            return
+        }
         let addr = Self.cleanAddr(raw).lowercased()
         guard PRLAddress.isValid(addr, network: .mainnet) else { return }
-        let pool = PoolKind(rawValue: env["SHOT_WATCH_POOL"] ?? "AlphaPool") ?? .alphaPool
         watches = [PoolWatch(pool: pool, address: addr)]
     }
     #endif

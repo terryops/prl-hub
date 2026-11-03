@@ -529,7 +529,7 @@ struct WatchCard: View {
                 }
                 .accessibilityLabel(Loc("监控选项"))
             }
-            Text(watch.address).font(.caption.monospaced()).foregroundStyle(.secondary)
+            Text(watch.displayAddress).font(.caption.monospaced()).foregroundStyle(.secondary)
                 .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
 
             if !watch.isEnabled {

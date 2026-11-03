@@ -36,6 +36,17 @@ struct PoolWatch: Codable, Identifiable, Equatable, Sendable {
         return pool.label
     }
 
+    /// The line under the title: the payout address, or for F2Pool the account name. An
+    /// F2Pool watch is stored as its read-only page link, whose key is the capability to
+    /// read the account — it is never put on screen (a screenshot would leak part of it).
+    var displayAddress: String {
+        guard !pool.isAddressBased else { return address }
+        #if DEBUG
+        if WatchData.anonymizeWorkers { return "test account" }   // screenshot runs
+        #endif
+        return F2PoolRef(address).map(\.account).flatMap { $0.isEmpty ? nil : $0 } ?? pool.label
+    }
+
     /// True when the user has given this watch a custom alias.
     var hasAlias: Bool {
         !(alias?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
