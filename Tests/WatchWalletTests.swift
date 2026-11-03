@@ -171,3 +171,141 @@ struct WatchWalletTests {
         #expect(d.object(forKey: "change.\(first.id).\(store.network.rawValue).lastBalance") == nil)
     }
 }
+
+/// The web's 钱包 page and the app's read-only wallets, both ways (`WebSharedMerge.wallets`).
+struct WebReadOnlyWalletSyncTests {
+    private let a = "prl1" + String(repeating: "a", count: 38)
+    private let b = "prl1" + String(repeating: "b", count: 38)
+    private let c = "prl1" + String(repeating: "c", count: 38)
+    private func live(_ config: [String: Any]) -> [[String: Any]] {
+        ((config["wallets"] as? [[String: Any]]) ?? []).filter { $0["deleted"] as? Bool != true }
+    }
+    private func seed(_ addr: String, _ name: String) -> WalletRecord { WalletRecord(id: UUID().uuidString, name: name, addresses: ["mainnet": addr]) }
+    private func watch(_ addr: String, _ name: String) -> WalletRecord {
+        WalletRecord(id: UUID().uuidString, name: name, addresses: ["mainnet": addr], watchAddress: addr)
+    }
+    private func entry(_ config: [String: Any], _ addr: String) -> [String: Any]? { live(config).first { $0["addr"] as? String == addr } }
+
+    /// An address added on the web arrives as a read-only wallet, once; taking it in adds no twin there.
+    @Test func webAddressesBecomeReadOnlyWalletsHere() throws {
+        let web: [String: Any] = ["wallets": [["id": "4b0c0f5e-0000-4000-8000-000000000001", "updated": 5, "addr": b, "label": "Pool B"]]]
+        let first = try WebSharedMerge.merge(local: ["wallets": WebSharedMerge.walletRows([seed(a, "Main")])], remote: web, base: nil, now: 10)
+        #expect(first.wallets.added == [.init(addr: b, label: "Pool B")])
+        #expect(first.wallets.renamed.isEmpty && first.wallets.removed.isEmpty)
+        // Next sync, with the wallet now here: nothing to send, nothing new, still one entry for b.
+        let local = WebSharedMerge.walletRows([seed(a, "Main"), watch(b, "Pool B")])
+        let next = try WebSharedMerge.merge(local: ["wallets": local], remote: first.config, base: first.base, now: 20)
+        #expect(!next.upload && next.wallets.isEmpty)
+        #expect(live(next.config).count == 2)
+    }
+
+    /// Another device's wallet (an entry with the app's own id scheme) comes in the same way.
+    @Test func anotherDevicesWalletComesInReadOnly() throws {
+        let mac = try WebSharedMerge.merge(local: ["wallets": WebSharedMerge.walletRows([seed(c, "Mac")])], remote: [:], base: nil, now: 10)
+        let phone = try WebSharedMerge.merge(local: ["wallets": WebSharedMerge.walletRows([seed(a, "Phone")])], remote: mac.config, base: nil, now: 20)
+        #expect(phone.wallets.added == [.init(addr: c, label: "Mac")])
+        let after = try WebSharedMerge.merge(local: ["wallets": WebSharedMerge.walletRows([seed(a, "Phone"), watch(c, "Mac")])],
+                                             remote: phone.config, base: phone.base, now: 30)
+        #expect(!after.upload && after.wallets.isEmpty && live(after.config).count == 2)
+    }
+
+    @Test func renamesTravelBothWaysAndTheWebWinsATie() throws {
+        let id = "4b0c0f5e-0000-4000-8000-000000000002"
+        let first = try WebSharedMerge.merge(local: ["wallets": [[String: Any]]()],
+                                             remote: ["wallets": [["id": id, "updated": 5, "addr": b, "label": "B"]]], base: nil, now: 10)
+        // Renamed here → renamed there.
+        let mine = try WebSharedMerge.merge(local: ["wallets": WebSharedMerge.walletRows([watch(b, "B here")])],
+                                            remote: first.config, base: first.base, now: 20)
+        #expect(mine.upload && entry(mine.config, b)?["label"] as? String == "B here")
+        #expect(mine.wallets.isEmpty)
+        // Renamed there → renamed here.
+        var remote = mine.config
+        remote["wallets"] = (remote["wallets"] as? [[String: Any]] ?? []).map { var r = $0; r["label"] = "B web"; r["updated"] = 99; return r }
+        let theirs = try WebSharedMerge.merge(local: ["wallets": WebSharedMerge.walletRows([watch(b, "B here")])],
+                                              remote: remote, base: mine.base, now: 100)
+        #expect(theirs.wallets.renamed == [b: "B web"] && !theirs.upload)
+        // Both renamed: the web's name is taken.
+        let both = try WebSharedMerge.merge(local: ["wallets": WebSharedMerge.walletRows([watch(b, "B again")])],
+                                            remote: remote, base: mine.base, now: 100)
+        #expect(both.wallets.renamed == [b: "B web"])
+    }
+
+    @Test func removalsTravelBothWays() throws {
+        let id = "4b0c0f5e-0000-4000-8000-000000000003"
+        let first = try WebSharedMerge.merge(local: ["wallets": [[String: Any]]()],
+                                             remote: ["wallets": [["id": id, "updated": 5, "addr": b, "label": "B"]]], base: nil, now: 10)
+        let linked = try WebSharedMerge.merge(local: ["wallets": WebSharedMerge.walletRows([watch(b, "B")])],
+                                              remote: first.config, base: first.base, now: 20)
+        // Removed here → a tombstone there.
+        let gone = try WebSharedMerge.merge(local: ["wallets": [[String: Any]]()], remote: linked.config, base: linked.base, now: 30)
+        #expect(gone.upload && live(gone.config).isEmpty)
+        // Removed there → removed here.
+        let tomb: [String: Any] = ["wallets": [["id": id, "updated": 50, "deleted": true]]]
+        let there = try WebSharedMerge.merge(local: ["wallets": WebSharedMerge.walletRows([watch(b, "B")])], remote: tomb, base: linked.base, now: 60)
+        #expect(there.wallets.removed == [b] && !there.upload)
+    }
+
+    /// A read-only wallet added here goes to the web and then follows it like the others.
+    @Test func aReadOnlyWalletAddedHereFollowsTheWebAfterwards() throws {
+        let rows = WebSharedMerge.walletRows([watch(c, "C")])
+        let pushed = try WebSharedMerge.merge(local: ["wallets": rows], remote: [:], base: nil, now: 10)
+        #expect(pushed.upload && entry(pushed.config, c)?["label"] as? String == "C")
+        #expect(pushed.wallets.isEmpty)
+        #expect((pushed.config["wallets"] as? [[String: Any]])?.first?["watch"] == nil)   // the flag stays here
+        var remote = pushed.config
+        remote["wallets"] = (remote["wallets"] as? [[String: Any]] ?? []).map { ["id": $0["id"]!, "updated": 80, "deleted": true] }
+        let removed = try WebSharedMerge.merge(local: ["wallets": rows], remote: remote, base: pushed.base, now: 90)
+        #expect(removed.wallets.removed == [c])
+    }
+
+    /// A wallet with its seed here only ever pushes: the web removing or renaming it changes nothing here.
+    @Test func aWalletWithItsSeedHereNeverFollowsTheWeb() throws {
+        let rows = WebSharedMerge.walletRows([seed(a, "Main")])
+        let pushed = try WebSharedMerge.merge(local: ["wallets": rows], remote: [:], base: nil, now: 10)
+        var remote = pushed.config
+        remote["wallets"] = (remote["wallets"] as? [[String: Any]] ?? []).map { var r = $0; r["label"] = "Renamed"; r["updated"] = 50; return r }
+        let renamed = try WebSharedMerge.merge(local: ["wallets": rows], remote: remote, base: pushed.base, now: 60)
+        #expect(renamed.wallets.isEmpty && !renamed.upload)
+        remote["wallets"] = (remote["wallets"] as? [[String: Any]] ?? []).map { ["id": $0["id"]!, "updated": 70, "deleted": true] }
+        let removed = try WebSharedMerge.merge(local: ["wallets": rows], remote: remote, base: pushed.base, now: 80)
+        #expect(removed.wallets.isEmpty && !removed.upload)
+    }
+}
+
+/// `WalletStore.applyWebWallets`: what the web changed, applied to the wallet list.
+@MainActor
+struct ApplyWebWalletsTests {
+    @Test func addsRenamesAndRemovesReadOnlyWalletsOnly() async throws {
+        let d = UserDefaults.standard
+        let keys = ["wallet.list", "wallet.active", "wallet.locked"]
+        let saved = keys.map { d.object(forKey: $0) }
+        defer { for (k, v) in zip(keys, saved) { if let v { d.set(v, forKey: k) } else { d.removeObject(forKey: k) } } }
+        d.removeObject(forKey: "wallet.list"); d.removeObject(forKey: "wallet.active")
+        URLProtocol.registerClass(WatchStubProtocol.self)
+        let (a, b) = (WatchWalletTests.mainA, WatchWalletTests.mainB)
+        WatchStubProtocol.answer(a, with: WatchWalletTests.page(for: a))
+        WatchStubProtocol.answer(b, with: WatchWalletTests.page(for: b))
+
+        let store = WalletStore()
+        store.bootstrap()
+        try #require(store.phase == .noWallet)   // the test host has no wallet
+        defer {
+            for id in store.wallets.map(\.id) {
+                for net in WalletNetwork.allCases { d.removeObject(forKey: "change.\(id).\(net.rawValue).lastBalance") }
+            }
+        }
+        // Added on the web, with nothing open here: the first one opens.
+        #expect(store.applyWebWallets(WebWalletChanges(added: [.init(addr: a, label: "Web A"), .init(addr: b, label: "Web B"),
+                                                              .init(addr: a, label: "Twin")])))
+        #expect(store.wallets.map(\.name) == ["Web A", "Web B"])
+        #expect(store.phase == .unlocked && store.watchAddress == a)
+        #expect(!store.applyWebWallets(WebWalletChanges(added: [.init(addr: b, label: "Again")])))   // already here
+
+        #expect(store.applyWebWallets(WebWalletChanges(renamed: [b: "Pool B"])))
+        #expect(store.wallets.last?.name == "Pool B")
+
+        // Removed on the web: the open one goes and the other opens.
+        #expect(store.applyWebWallets(WebWalletChanges(removed: [a])))
+        #expect(store.wallets.map(\.name) == ["Pool B"] && store.watchAddress == b)
+    }
+}

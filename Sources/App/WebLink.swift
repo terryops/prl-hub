@@ -415,7 +415,9 @@ final class WebLinkStore: NSObject, ObservableObject, ASWebAuthenticationPresent
             guard Stored.read() == stored,
                   WebSharedMerge.encoded(WebSharedMerge.read(UserDefaults.standard)) == WebSharedMerge.encoded(sharedLocal) else { continue }
             let sharedChanged = try WebSharedMerge.apply(shared.native, to: UserDefaults.standard)
-            let changedHere = stored.apply(outcome) || !sharedChanged.isEmpty
+            // Read-only wallets added, renamed or removed on the web (WalletStore owns the list).
+            let walletsChanged = !shared.wallets.isEmpty && WalletStore.shared.applyWebWallets(shared.wallets)
+            let changedHere = stored.apply(outcome) || !sharedChanged.isEmpty || walletsChanged
             if !sharedChanged.isEmpty {
                 sharedChanged.forEach(CloudSync.push)
                 NotificationCenter.default.post(name: .cloudSyncDidUpdate, object: nil)

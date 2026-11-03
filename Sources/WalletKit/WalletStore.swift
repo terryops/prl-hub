@@ -628,6 +628,43 @@ final class WalletStore: ObservableObject {
         return true
     }
 
+    /// Read-only wallets the account's web 钱包 page added, renamed or removed (WebLink sync,
+    /// `WebSharedMerge.wallets`). Only ever touches read-only wallets: one with its seed here is
+    /// what the web follows, never the other way round. Returns whether anything changed.
+    @discardableResult
+    func applyWebWallets(_ changes: WebWalletChanges) -> Bool {
+        // The list has to be in memory before it's edited and saved (a sync can land before
+        // the wallet tab first appears); bootstrap re-reads it later, additions included.
+        if phase == .loading { loadWallets() }
+        var changed = false
+        for (addr, label) in changes.renamed {
+            let name = label.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, let i = wallets.firstIndex(where: { $0.watchAddress == addr }), wallets[i].name != name else { continue }
+            wallets[i].name = name
+            changed = true
+            if wallets[i].id == activeWalletID { publishOverlay() }   // widget shows the new name
+        }
+        for a in changes.added where PRLAddress.isValid(a.addr, network: .mainnet)
+            && !wallets.contains(where: { $0.watchAddress == a.addr || $0.addresses.values.contains(a.addr) }) {
+            let name = a.label.trimmingCharacters(in: .whitespacesAndNewlines)
+            wallets.append(WalletRecord(id: UUID().uuidString.lowercased(), name: name.isEmpty ? suggestedWatchName() : name,
+                                        addresses: [WalletNetwork.mainnet.rawValue: a.addr], watchAddress: a.addr))
+            changed = true
+        }
+        if changed { saveWallets() }
+        for addr in changes.removed {
+            guard let w = wallets.first(where: { $0.watchAddress == addr }) else { continue }
+            // Removed on another screen, not by hand here: the exchange keys stay.
+            if removeWallet(id: w.id, clearingExchangeKeys: false) { changed = true }
+        }
+        // No wallet was open yet: open the first one the web brought.
+        if phase == .noWallet, let first = wallets.first(where: \.isWatchOnly), let watch = first.watchAddress {
+            select(walletID: first.id)
+            openWatch(watch)
+        }
+        return changed
+    }
+
     /// Re-open the wallet after a lock. Requires device auth — the lock would otherwise
     /// be decorative.
     func unlock() async {
@@ -1106,8 +1143,10 @@ final class WalletStore: ObservableObject {
     /// Opens the next remaining wallet whose seed can be read; removing the last one
     /// returns to onboarding. Returns false — and changes nothing — if the seed couldn't
     /// be deleted from the Keychain (it would otherwise reappear on the next launch).
+    /// `clearingExchangeKeys`: removing the last wallet by hand also removes the SafeTrade keys
+    /// (a full reset); a removal synced from the web doesn't.
     @discardableResult
-    func removeWallet(id: String) -> Bool {
+    func removeWallet(id: String, clearingExchangeKeys: Bool = true) -> Bool {
         guard let record = wallets.first(where: { $0.id == id }) else { return false }
         // A read-only wallet has no seed to delete.
         if !record.isWatchOnly {
@@ -1140,7 +1179,7 @@ final class WalletStore: ObservableObject {
             activeWalletID = nil
             saveWallets()
             manuallyLocked = false
-            SafeTradeSecrets.clear()   // last wallet gone → also de-provision the exchange API keys
+            if clearingExchangeKeys { SafeTradeSecrets.clear() }   // last wallet gone → also de-provision the exchange API keys
             phase = .noWallet
             return true
         }

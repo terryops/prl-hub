@@ -998,7 +998,7 @@ struct WebWalletSyncTests {
         ((config["wallets"] as? [[String: Any]]) ?? []).filter { $0["deleted"] as? Bool != true }
     }
 
-    @Test func theAppsWalletsShowOnTheWebOnceAndOneWay() throws {
+    @Test func theAppsWalletsShowOnTheWebOnce() throws {
         let rows = WebSharedMerge.walletRows([
             WalletRecord(id: "primary", name: "Main", addresses: ["mainnet": a]),
             WalletRecord(id: "t", name: "Testnet only", addresses: ["testnet": "tprl1" + String(repeating: "c", count: 38)]),
@@ -1008,7 +1008,7 @@ struct WebWalletSyncTests {
         let first = try WebSharedMerge.merge(local: ["wallets": rows], remote: [:], base: nil, now: 10)
         #expect(first.upload)
         #expect(live(first.config).map { [$0["addr"] as? String, $0["label"] as? String] } == [[a, "Main"]])
-        #expect(first.native["wallets"] == nil)          // nothing comes back into the app
+        #expect(first.native["wallets"] == nil && first.wallets.isEmpty)   // nothing new comes back
         let again = try WebSharedMerge.merge(local: ["wallets": rows], remote: first.config, base: first.base, now: 20)
         #expect(!again.upload)
     }
@@ -1053,7 +1053,9 @@ struct WebWalletSyncTests {
     @Test func aWalletRemovedHereLeavesATombstoneThere() throws {
         let rows = WebSharedMerge.walletRows([WalletRecord(id: "1", name: "A", addresses: ["mainnet": a])])
         let first = try WebSharedMerge.merge(local: ["wallets": rows], remote: ["wallets": [["id": "web-1", "updated": 5, "addr": b, "label": "Mine"]]], base: nil, now: 10)
-        let gone = try WebSharedMerge.merge(local: ["wallets": [[String: Any]]()], remote: first.config, base: first.base, now: 20)
+        #expect(first.wallets.added == [.init(addr: b, label: "Mine")])   // the web's entry becomes a read-only wallet here
+        let watching = WebSharedMerge.walletRows([WalletRecord(id: "2", name: "Mine", addresses: ["mainnet": b], watchAddress: b)])
+        let gone = try WebSharedMerge.merge(local: ["wallets": watching], remote: first.config, base: first.base, now: 20)
         #expect(gone.upload)
         #expect(live(gone.config).map { $0["id"] as? String } == ["web-1"])   // the web's own entry stays
         let tomb = try #require((gone.config["wallets"] as? [[String: Any]])?.first { $0["deleted"] as? Bool == true })

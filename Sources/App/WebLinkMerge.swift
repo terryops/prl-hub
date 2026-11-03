@@ -732,6 +732,18 @@ struct WebSharedResult {
     var base: WebSharedBase
     var native: [String: Any]
     var upload: Bool
+    /// What the web's 钱包 page changed about this device's read-only wallets.
+    var wallets = WebWalletChanges()
+}
+
+/// Read-only wallets to add, rename or remove here because of the account's web 钱包 page
+/// (`WebSharedMerge.wallets`), keyed by address. Applied by `WalletStore.applyWebWallets`.
+struct WebWalletChanges: Equatable {
+    struct Added: Equatable { let addr: String; let label: String }
+    var added: [Added] = []
+    var renamed: [String: String] = [:]
+    var removed: Set<String> = []
+    var isEmpty: Bool { added.isEmpty && renamed.isEmpty && removed.isEmpty }
 }
 enum WebSharedMerge {
     enum Invalid: Error { case config }
@@ -786,6 +798,7 @@ enum WebSharedMerge {
     }
     static func merge(local: [String: Any], remote: [String: Any], base previous: WebSharedBase?, now: Int64) throws -> WebSharedResult {
         var config = remote, base = previous ?? WebSharedBase(), native: [String: Any] = [:], upload = false
+        var walletChanges = WebWalletChanges()
         for section in ["devices", "contacts"] {
             guard let mine = local[section] as? [[String: Any]] else { continue } // unknown native schema: leave it alone
             if config[section] != nil && !(config[section] is [[String: Any]]) { throw Invalid.config }
@@ -836,6 +849,7 @@ enum WebSharedMerge {
             let w = wallets(mine, remote: config["wallets"] as? [[String: Any]] ?? [], base: base.items["wallets"] ?? [:], now: now)
             config["wallets"] = w.rows; base.items["wallets"] = w.base
             upload = upload || w.changed
+            walletChanges = w.native
         }
         for path in paths.keys.sorted() {
             let mine = local[path], theirs = value(path, in: config), agreed = base.settings[path]
@@ -858,7 +872,7 @@ enum WebSharedMerge {
             }
             config["settingsUpdated"] = max(now, (config["settingsUpdated"] as? NSNumber)?.int64Value ?? 0) + 1
         }
-        return WebSharedResult(config: config, base: base, native: native, upload: upload)
+        return WebSharedResult(config: config, base: base, native: native, upload: upload, wallets: walletChanges)
     }
     // MARK: wallets
 
@@ -870,6 +884,7 @@ enum WebSharedMerge {
     /// mainnet receive address at index 0 under the wallet's name. The id comes from the
     /// address, so the same wallet on a phone and a Mac is one entry and two different
     /// wallets never share one. Wallets without a cached mainnet address are left out.
+    /// `watch` marks a read-only wallet here (it follows the web too); it never leaves the device.
     static func walletRows(_ records: [WalletRecord]) -> [[String: Any]] {
         var seen = Set<String>()
         return records.compactMap { r in
@@ -880,24 +895,59 @@ enum WebSharedMerge {
             if label.isEmpty { label = "Pearl Wallet" }
             // The web counts UTF-16 units; drop whole characters until it fits.
             while label.utf16.count > 40 { label.removeLast() }
-            return ["id": "w-" + digest.prefix(32), "addr": addr, "label": label]
+            var row: [String: Any] = ["id": "w-" + digest.prefix(32), "addr": addr, "label": label]
+            if r.isWatchOnly { row["watch"] = true }
+            return row
         }
     }
 
-    /// One way only: the web's own watch addresses never become wallets here, and an entry
-    /// renamed or removed there stays that way until the wallet itself changes here.
-    /// `base`: id → what this device last sent.
+    /// Both ways for read-only wallets, one way for the others:
+    /// - every wallet here goes to the web (as before); one with its seed here is never changed
+    ///   or removed by the web — an entry renamed or removed there stays that way until the
+    ///   wallet itself changes here;
+    /// - every other live entry there (an address added on the web, another device's wallet)
+    ///   becomes a read-only wallet here, and renaming or removing a read-only wallet on either
+    ///   side does the same on the other. When both renamed it, the web's name wins.
+    /// `base`: id → the entry's content as both sides last agreed (pushed from here, or taken in).
     static func wallets(_ mine: [[String: Any]], remote: [[String: Any]], base old: [String: Data], now: Int64)
-        -> (rows: [[String: Any]], base: [String: Data], changed: Bool) {
-        var rows = remote, base: [String: Data] = [:], changed = false
+        -> (rows: [[String: Any]], base: [String: Data], changed: Bool, native: WebWalletChanges) {
+        var rows = remote, base: [String: Data] = [:], changed = false, native = WebWalletChanges()
         let isLive = { (row: [String: Any]) in row["deleted"] as? Bool != true }
         let stamp = { (row: [String: Any]) in max(now, (row["updated"] as? NSNumber)?.int64Value ?? 0) + 1 }
+        let entry = { (addr: String, label: String) in encoded(["addr": addr, "label": label]) }
+        let agreed = { (id: String) -> (addr: String, label: String)? in
+            guard let data = old[id], let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let addr = o["addr"] as? String, let label = o["label"] as? String else { return nil }
+            return (addr, label)
+        }
         var live = rows.filter(isLive).count
+        var mineIDs = Set<String>()
+        var here: [String: (label: String, watch: Bool)] = [:]   // address → this device's wallet
         for row in mine {
             guard let id = row["id"] as? String, let addr = row["addr"] as? String, let label = row["label"] as? String else { continue }
-            let content = encoded(["addr": addr, "label": label])
-            if old[id] == content { base[id] = content; continue }
+            mineIDs.insert(id)
+            here[addr] = (label, row["watch"] as? Bool == true)
+        }
+        // Read-only wallets taken in from an entry there with another id: that entry stands for
+        // them (step 2), so they're never pushed again under their own.
+        let rowIDs = Set(rows.compactMap { $0["id"] as? String })
+        let linked = Set(old.keys.filter { !mineIDs.contains($0) && rowIDs.contains($0) }.compactMap { agreed($0)?.addr })
+        // 1. This device's wallets.
+        for row in mine {
+            guard let id = row["id"] as? String, let addr = row["addr"] as? String, let label = row["label"] as? String else { continue }
+            if old[id] == nil, row["watch"] as? Bool == true, linked.contains(addr) { continue }
+            let content = entry(addr, label)
             let index = rows.firstIndex { $0["id"] as? String == id }
+            if old[id] == content {
+                // Unchanged here since the last sync: a read-only wallet follows what the web did.
+                if row["watch"] as? Bool == true, let i = index {
+                    if !isLive(rows[i]) { native.removed.insert(addr); continue }
+                    if rows[i]["addr"] as? String == addr, let theirs = rows[i]["label"] as? String, theirs != label, !theirs.isEmpty {
+                        native.renamed[addr] = theirs; base[id] = entry(addr, theirs); continue
+                    }
+                }
+                base[id] = content; continue
+            }
             // The web already watches this address under an entry of its own: no twin.
             if rows.contains(where: { isLive($0) && $0["addr"] as? String == addr && $0["id"] as? String != id }) { continue }
             let wasLive = index.map { isLive(rows[$0]) } ?? false
@@ -910,13 +960,39 @@ enum WebSharedMerge {
             if !wasLive { live += 1 }
             base[id] = content; changed = true
         }
-        // A wallet removed here leaves a tombstone for the entry it put there.
-        for id in old.keys where base[id] == nil {
-            guard let i = rows.firstIndex(where: { $0["id"] as? String == id }), isLive(rows[i]) else { continue }
-            rows[i] = ["id": id, "deleted": true, "updated": stamp(rows[i])]
-            changed = true
+        // 2. Every other entry: the web's own, another device's, or one of ours removed here.
+        for i in rows.indices {
+            let row = rows[i]
+            guard let id = row["id"] as? String, !mineIDs.contains(id) else { continue }
+            guard isLive(row) else {
+                // Removed on the web: so goes the read-only wallet it became here.
+                if let prior = agreed(id), here[prior.addr]?.watch == true { native.removed.insert(prior.addr) }
+                continue
+            }
+            guard let addr = row["addr"] as? String, addr.range(of: "^prl1[0-9a-z]{20,100}$", options: .regularExpression) != nil,
+                  let label = row["label"] as? String else { continue }
+            let content = entry(addr, label)
+            if let mineHere = here[addr] {
+                // Already a wallet here (a read-only one taken in earlier, or its seed is here).
+                guard mineHere.watch else { continue }
+                if let prior = agreed(id), entry(prior.addr, prior.label) == content, mineHere.label != label {
+                    // Renamed here: rename the entry there.
+                    rows[i]["label"] = mineHere.label; rows[i]["updated"] = stamp(row)
+                    base[id] = entry(addr, mineHere.label); changed = true
+                } else {
+                    if mineHere.label != label, !label.isEmpty { native.renamed[addr] = label }
+                    base[id] = content
+                }
+            } else if old[id] != nil {
+                // It was a wallet here (ours, or one taken in) and was removed here.
+                rows[i] = ["id": id, "deleted": true, "updated": stamp(row)]
+                changed = true
+            } else {
+                native.added.append(.init(addr: addr, label: label))
+                base[id] = content
+            }
         }
-        return (rows, base, changed)
+        return (rows, base, changed, native)
     }
 
     static func read(_ d: UserDefaults) -> [String: Any] {
