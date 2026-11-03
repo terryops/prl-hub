@@ -33,6 +33,30 @@ struct PearlWidget: Widget {
     }
 }
 
+/// The medium widget with three pool watches instead of two: the same price | balance
+/// header, then a three-column panel — each pool's hashrate and rigs online, no names.
+/// Medium only, Pro like the other medium / large sizes. A separate gallery entry, so
+/// the original layout stays as it is.
+struct PearlPoolsWidget: Widget {
+    let kind = "PRLHubPoolsWidget"
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: PearlProvider(demo: .demoThreePools)) { entry in
+            WidgetPresentation(appearance: entry.appearance) {
+                if entry.locked {
+                    PearlWidgetLocked(languageCode: entry.snap.languageCode)
+                } else {
+                    MediumThreePools(snap: entry.snap, age: entry.age, fresh: entry.fresh)
+                }
+            }
+            .containerBackground(for: .widget) { WidgetBackground(appearance: entry.appearance) }
+            .environment(\.locale, widgetLocale(entry.snap.languageCode))
+        }
+        .configurationDisplayName("Pearl Hub")
+        .description("币价、余额和三个矿池的算力（需高级版）")
+        .supportedFamilies([.systemMedium])
+    }
+}
+
 struct PearlEntry: TimelineEntry {
     let date: Date
     let snap: WidgetSnapshot
@@ -99,13 +123,16 @@ private enum FreshnessFormatter {
 }
 
 struct PearlProvider: TimelineProvider {
-    func placeholder(in context: Context) -> PearlEntry { PearlEntry(date: Date(), snap: .demo) }
+    /// What the gallery previews (and the placeholder shows).
+    var demo: WidgetSnapshot = .demo
+
+    func placeholder(in context: Context) -> PearlEntry { PearlEntry(date: Date(), snap: demo) }
 
     func getSnapshot(in context: Context, completion: @escaping (PearlEntry) -> Void) {
         let now = Date()
         // The gallery previews what Pro gets; a placed widget shows what this user gets.
         if context.isPreview {
-            completion(PearlEntry(date: now, snap: .demo))
+            completion(PearlEntry(date: now, snap: demo))
             return
         }
         nonisolated(unsafe) let completion = completion
@@ -311,28 +338,38 @@ struct PearlWidgetLocked: View {
 /// dims the text. The icon is the main tell — it survives the macOS desktop's vibrant
 /// (desaturated) rendering, where colour and opacity differences flatten out.
 private struct FreshnessStamp: View {
-    @Environment(\.widgetColors) private var colors
     let age: String
     let fresh: Bool
     let font: Font
     var body: some View {
         HStack(spacing: 0) {
             Spacer(minLength: 0)
-            HStack(spacing: 3) {
-                if fresh {
-                    Image(systemName: "checkmark.circle.fill")
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, Color.green)
-                }
-                Text(age)
-                    .fontWeight(fresh ? .semibold : .regular)
-                    .foregroundStyle(fresh ? colors.primary : colors.muted)
-            }
-            .font(font)
-            // Same padding in both states so the text doesn't shift when the badge flips.
-            .padding(.horizontal, 5).padding(.vertical, 1.5)
-            .background(Capsule().fill(colors.panel.opacity(fresh ? 1 : 0)))
+            FreshnessBadge(age: age, fresh: fresh, font: font)
         }
+    }
+}
+
+private struct FreshnessBadge: View {
+    @Environment(\.widgetColors) private var colors
+    let age: String
+    let fresh: Bool
+    let font: Font
+    var body: some View {
+        HStack(spacing: 3) {
+            if fresh {
+                Image(systemName: "checkmark.circle.fill")
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, Color.green)
+            }
+            Text(age)
+                .fontWeight(fresh ? .semibold : .regular)
+                .foregroundStyle(fresh ? colors.primary : colors.muted)
+        }
+        .font(font)
+        // Same padding in both states so the text doesn't shift when the badge flips.
+        .padding(.horizontal, 5).padding(.vertical, 1.5)
+        .background(Capsule().fill(colors.panel.opacity(fresh ? 1 : 0)))
+        .fixedSize()
     }
 }
 
@@ -367,8 +404,7 @@ private struct SmallCombined: View {
                     Image(systemName: "bolt.fill").foregroundStyle(colors.gold)
                     Text(raw > 0 ? formatHashrate(raw) : "—").lineLimit(1).minimumScaleFactor(0.6)
                     Spacer(minLength: 2)
-                    Image(systemName: "desktopcomputer")
-                    Text("\(online)/\(total)").monospacedDigit()
+                    RigsPill(text: "\(online)/\(total)", tone: RigsTone(online: online, total: total), size: 10)
                 }
                 .font(.caption2).foregroundStyle(colors.primary)
             }
@@ -491,7 +527,9 @@ private struct LargeCombined: View {
                 Link(destination: WidgetDeepLink.wallet.url) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(WLoc("最近交易", snap.languageCode)).font(.caption2.weight(.semibold)).foregroundStyle(colors.secondary)
-                    ForEach(Array(snap.recentTx.prefix(2).enumerated()), id: \.offset) { _, tx in
+                    // Four pool rows leave room for one transfer (on a 338 × 354 widget two
+                    // would squeeze every row's type).
+                    ForEach(Array(snap.recentTx.prefix(snap.pools.count >= 4 ? 1 : 2).enumerated()), id: \.offset) { _, tx in
                         TxRow(tx: tx).font(.caption)
                     }
                 }
@@ -503,7 +541,7 @@ private struct LargeCombined: View {
             } else {
                 WidgetDivider()
                 Link(destination: WidgetDeepLink.pools.url) {
-                VStack(alignment: .leading, spacing: 11) {
+                VStack(alignment: .leading, spacing: snap.pools.count >= 4 ? 9 : 11) {
                     ForEach(Array(snap.pools.prefix(4).enumerated()), id: \.offset) { index, p in
                         if index > 0 { WidgetDivider().opacity(0.65) }
                         PoolRow(pool: p, compact: false)
@@ -513,6 +551,9 @@ private struct LargeCombined: View {
                     }
                 }
                 }
+                // Ahead of the trailing spacer: otherwise the stack splits what's left
+                // between the two and, from three pools up, squeezes the rows' type smaller.
+                .layoutPriority(1)
             }
             Spacer(minLength: 0)
         }
@@ -520,6 +561,146 @@ private struct LargeCombined: View {
         // Fallback for the gaps between Link regions (divider, freshness stamp).
         .widgetURL(WidgetDeepLink.wallet.url)
     }
+}
+
+// MARK: medium, three pools — price | balance header, then a three-column pool panel
+
+private struct MediumThreePools: View {
+    @Environment(\.widgetColors) private var colors
+    let snap: WidgetSnapshot
+    let age: String
+    var fresh: Bool = false
+    private var pools: [WidgetPool] { Array(snap.pools.prefix(3)) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            // The medium header: price (→ 交易) | balance (→ 钱包). The freshness badge sits
+            // beside 余额 rather than on a row of its own, to leave the panel its room.
+            HStack(spacing: 0) {
+                Link(destination: WidgetDeepLink.trade.url) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("PRL/USD").font(.caption2.weight(.medium)).foregroundStyle(colors.secondary)
+                    PriceBig(snap: snap, size: 22)
+                    Text("USD").font(.system(size: 10)).foregroundStyle(colors.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                WidgetDivider(vertical: true).frame(height: 52)
+
+                Link(destination: WidgetDeepLink.wallet.url) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Text(WLoc("余额", snap.languageCode)).font(.caption2.weight(.medium)).foregroundStyle(colors.secondary)
+                        Spacer(minLength: 2)
+                        if !age.isEmpty { FreshnessBadge(age: age, fresh: fresh, font: .system(size: 9)) }
+                    }
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        balanceText(snap, head: .system(.title3, design: .rounded).weight(.bold),
+                                    tail: .system(.caption2, design: .rounded).weight(.bold), tailColor: colors.secondary)
+                            .monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
+                        Text("PRL").font(.caption2.weight(.semibold)).foregroundStyle(colors.secondary)
+                    }
+                    Text(fiatLine(snap) ?? " ").font(.system(size: 10)).foregroundStyle(colors.secondary)
+                        .lineLimit(1).minimumScaleFactor(0.6)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 14)
+                }
+            }
+            .foregroundStyle(colors.primary)
+
+            WidgetDivider().padding(.vertical, 11)
+
+            if pools.isEmpty {
+                Link(destination: WidgetDeepLink.wallet.url) { TxStrip(snap: snap) }
+            } else {
+                Link(destination: WidgetDeepLink.pools.url) { ThreePoolPanel(pools: pools) }
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Fallback for the gaps between Link regions (dividers, freshness badge).
+        .widgetURL(WidgetDeepLink.wallet.url)
+    }
+}
+
+/// The medium mining panel with a third column: each pool is just its hashrate and rigs
+/// online on one line — no name, smaller type than the two-pool panel.
+private struct ThreePoolPanel: View {
+    @Environment(\.widgetColors) private var colors
+    let pools: [WidgetPool]
+    /// One size for all three, set by the longest figure: "740.90 TH/s" needs a point
+    /// less than "1.46 PH/s" on a 338-pt widget, and letting just that column shrink
+    /// itself would leave the three at different sizes.
+    private var numberSize: CGFloat { pools.contains { $0.hashrate.count > 9 } ? 11 : 12 }
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(pools.enumerated()), id: \.offset) { i, p in
+                let tone = RigsTone(online: p.online, total: p.total)
+                HStack(spacing: 2) {
+                    hashrateText(p.hashrate, number: .system(size: numberSize, weight: .bold, design: .rounded),
+                                 unit: .system(size: 8, weight: .semibold), unitColor: colors.secondary)
+                        .foregroundStyle(tone == .down ? colors.muted : colors.primary)
+                        .monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
+                    Spacer(minLength: 1)
+                    RigsPill(text: "\(p.online)/\(p.total)", tone: tone)
+                }
+                .padding(.horizontal, 7).padding(.vertical, 11)
+                .frame(maxWidth: .infinity)
+                if i < pools.count - 1 { WidgetDivider(vertical: true).frame(height: 20) }
+            }
+        }
+        .foregroundStyle(colors.primary)
+        .background(colors.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private enum RigsTone {
+    case ok, partial, down
+    init(online: Int, total: Int) {
+        self = total == 0 || online == 0 ? .down : (online < total ? .partial : .ok)
+    }
+}
+
+/// Rigs online as a pill (every size of both home widgets), like the app's 一览 tiles:
+/// quiet when all are up, hard-hat gold when some are down, rose when none are. On classic blue a tint vanishes into the
+/// gradient, so trouble there is a solid pill.
+private struct RigsPill: View {
+    @Environment(\.widgetColors) private var colors
+    let text: String
+    let tone: RigsTone
+    var size: CGFloat = 8.5
+    var body: some View {
+        Text(text)
+            .font(.system(size: size, weight: .semibold)).monospacedDigit()
+            .lineLimit(1)
+            .padding(.horizontal, size > 9 ? 6 : 5).padding(.vertical, size > 9 ? 2.5 : 2)
+            .foregroundStyle(ink)
+            .background(fill, in: Capsule())
+            .fixedSize()
+    }
+    private var ink: Color {
+        switch tone {
+        case .ok: colors.secondary
+        case .partial: colors.isClassic ? Color(red: 0.29, green: 0.19, blue: 0) : colors.gold
+        case .down: colors.isClassic ? .white : colors.negative
+        }
+    }
+    private var fill: Color {
+        switch tone {
+        case .ok: colors.primary.opacity(colors.isClassic ? 0.16 : 0.08)
+        case .partial: colors.isClassic ? .pearlGold : colors.gold.opacity(0.2)
+        case .down: colors.isClassic ? Color(red: 1.0, green: 0.45, blue: 0.62) : colors.negative.opacity(0.18)
+        }
+    }
+}
+
+/// "740.90 TH/s" → the number in `number`, the unit smaller and dimmer.
+private func hashrateText(_ s: String, number: Font, unit: Font, unitColor: Color) -> Text {
+    guard let space = s.range(of: " ", options: .backwards) else { return Text(s).font(number) }
+    return Text(String(s[..<space.lowerBound])).font(number)
+        + Text(" " + String(s[space.upperBound...])).font(unit).foregroundStyle(unitColor)
 }
 
 // MARK: - Shared pieces
@@ -549,14 +730,14 @@ private struct MiningPanel: View {
     var body: some View {
         HStack(spacing: 0) {
             ForEach(Array(shown.enumerated()), id: \.offset) { idx, p in
+                let tone = RigsTone(online: p.online, total: p.total)
                 HStack(spacing: 6) {
-                    Circle().fill(p.online > 0 ? colors.positive : colors.muted).frame(width: 7, height: 7)
                     Image(systemName: "bolt.fill").font(.system(size: 11)).foregroundStyle(colors.gold)
                     Text(p.hashrate).font(.system(size: 13, weight: .bold)).monospacedDigit()
+                        .foregroundStyle(tone == .down ? colors.muted : colors.primary)
                         .lineLimit(1).minimumScaleFactor(0.55)
                     Spacer(minLength: 3)
-                    Text("\(p.online)/\(p.total)").font(.system(size: 11, weight: .medium)).monospacedDigit()
-                        .foregroundStyle(colors.secondary)
+                    RigsPill(text: "\(p.online)/\(p.total)", tone: tone, size: 10)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 10)
                 .frame(maxWidth: .infinity)
@@ -570,14 +751,14 @@ private struct MiningPanel: View {
     }
 }
 
-/// One pool row: status dot · label · hashrate · online/total — matches the design.
+/// One pool row: label · hashrate · rigs-online pill (coloured when rigs are down).
 private struct PoolRow: View {
     @Environment(\.widgetColors) private var colors
     let pool: WidgetPool
     let compact: Bool
     var body: some View {
+        let tone = RigsTone(online: pool.online, total: pool.total)
         HStack(spacing: 7) {
-            Circle().fill(pool.online > 0 ? colors.positive : colors.muted).frame(width: 7, height: 7)
             Text(pool.label)
                 .font(compact ? .caption.weight(.medium) : .subheadline.weight(.medium))
                 .lineLimit(1).minimumScaleFactor(0.7)
@@ -586,16 +767,15 @@ private struct PoolRow: View {
                 Image(systemName: "bolt.fill").foregroundStyle(colors.gold).font(.caption2)
                 Text(pool.hashrate)
                     .font(compact ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
+                    .foregroundStyle(tone == .down ? colors.muted : colors.primary)
                     .monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
             }
-            HStack(spacing: 3) {
-                Image(systemName: "desktopcomputer").font(.caption2)
-                Text("\(pool.online)/\(pool.total)")
-                    .font(compact ? .caption : .subheadline).monospacedDigit()
-            }
-            .foregroundStyle(colors.secondary)
+            RigsPill(text: "\(pool.online)/\(pool.total)", tone: tone, size: compact ? 10 : 11)
         }
         .foregroundStyle(colors.primary)
+        // Never shrink a row's type to save height: in a tight stack the first rows
+        // would come out smaller than the rest.
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -632,6 +812,7 @@ private struct TxRow: View {
             Spacer(minLength: 2)
             Text(tx.time, style: .relative).foregroundStyle(colors.muted).lineLimit(1)
         }
+        .fixedSize(horizontal: false, vertical: true)   // same as PoolRow: no uneven shrinking
     }
 }
 

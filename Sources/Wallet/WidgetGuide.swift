@@ -55,11 +55,11 @@ struct WidgetInlineLink: View {
 
     /// Whether a Pearl Hub home / desktop widget is already placed (false if unsure).
     private static func homeWidgetPlaced() async -> Bool {
-        let home = WidgetBridge.homeKind
+        let home = Set(WidgetBridge.homeKinds)
         return await withCheckedContinuation { c in
             WidgetCenter.shared.getCurrentConfigurations { result in
                 let kinds = (try? result.get())?.map(\.kind) ?? []
-                c.resume(returning: kinds.contains(home))
+                c.resume(returning: kinds.contains(where: home.contains))
             }
         }
     }

@@ -4,8 +4,11 @@ import SwiftUI
 struct WidgetColors {
     let primary, secondary, muted, accent, price, gold, divider, panel, positive, negative: Color
     let background: LinearGradient
+    /// Classic blue: white type on the pearl gradient, where faint tints don't show.
+    let isClassic: Bool
 
     init(_ appearance: WidgetAppearance, scheme: ColorScheme) {
+        isClassic = !appearance.isModern
         func color(_ light: UInt32, _ dark: UInt32? = nil) -> Color {
             let h = scheme == .dark ? (dark ?? light) : light
             return Color(red: Double((h >> 16) & 255) / 255,
