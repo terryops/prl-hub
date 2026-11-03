@@ -21,7 +21,9 @@ struct WalletSwitcherMenu: View {
                             Text(w.name)
                         }
                         if let a = w.addresses[store.network.rawValue] {
-                            Text(shortAddr(a))
+                            Text(w.isWatchOnly ? Loc("只读") + " · " + shortAddr(a) : shortAddr(a))
+                        } else if w.isWatchOnly {
+                            Text(Loc("只读"))
                         }
                     }
                 }
@@ -36,7 +38,7 @@ struct WalletSwitcherMenu: View {
             }
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: "wallet.pass")
+                Image(systemName: store.isWatchOnly ? "eye" : "wallet.pass")
                 Text(store.walletName).lineLimit(1)
                 #if os(iOS)
                 // macOS toolbar menus draw their own disclosure chevron.
@@ -98,6 +100,17 @@ struct AddWalletView: View {
                     }
                     .buttonStyle(.bordered).controlSize(.large)
                     .disabled(!store.frameworkOK)
+
+                    // Same as the web's wallet page: just an address, no seed. Needs no Go
+                    // framework, so it stays available when the two above can't be used.
+                    NavigationLink {
+                        WatchWalletView(store: store) { dismiss() }
+                    } label: {
+                        WatchWalletOption()
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("watch-wallet-option")
+                    .padding(.top, Pearl.Space.sm)
                 }
                 .padding(Pearl.Space.screen)
                 .frame(maxWidth: 460)
@@ -190,7 +203,9 @@ struct ManageWalletsView: View {
             }
             Button(Loc("取消"), role: .cancel) { removing = nil }
         } message: {
-            Text(Loc("助记词将从本机删除且无法恢复。请确认你已安全备份助记词，否则资产将永久丢失。"))
+            Text(removing?.isWatchOnly == true
+                 ? Loc("只从本机删除这个地址，不影响链上资产，之后可以再添加。")
+                 : Loc("助记词将从本机删除且无法恢复。请确认你已安全备份助记词，否则资产将永久丢失。"))
         }
         .alert(failure?.title ?? "", isPresented: Binding(
             get: { failure != nil }, set: { if !$0 { failure = nil } })) {
@@ -207,9 +222,12 @@ struct ManageWalletsView: View {
 
     private func row(_ w: WalletRecord) -> some View {
         HStack(spacing: Pearl.Space.sm) {
-            PearlIconBadge(systemImage: "wallet.pass", size: 34)
+            PearlIconBadge(systemImage: w.isWatchOnly ? "eye" : "wallet.pass", size: 34)
             VStack(alignment: .leading, spacing: 2) {
-                Text(w.name).font(.body.weight(.semibold)).lineLimit(1)
+                HStack(spacing: Pearl.Space.xs) {
+                    Text(w.name).font(.body.weight(.semibold)).lineLimit(1)
+                    if w.isWatchOnly { PearlBadge(text: Loc("只读"), tint: .secondary) }
+                }
                 if let a = w.addresses[store.network.rawValue] {
                     Text(shortAddr(a)).font(.caption.monospaced()).foregroundStyle(.secondary)
                 }
@@ -227,5 +245,116 @@ struct ManageWalletsView: View {
     private func startRename(_ w: WalletRecord) {
         renameText = w.name
         renaming = w
+    }
+}
+
+// MARK: - Read-only wallet
+
+/// The read-only choice on 添加钱包 and the welcome screen: what it is, in one card.
+struct WatchWalletOption: View {
+    var body: some View {
+        HStack(spacing: Pearl.Space.sm) {
+            PearlInfoRow(Loc("只填一个地址，就能查看它的余额和交易记录。不需要助记词，也不能转账。"),
+                         title: Loc("添加只读钱包"), systemImage: "eye")
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .pearlCard(padding: Pearl.Space.md)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Add a read-only wallet: a name and the address to watch (on the current network). It then
+/// works like any other wallet here — balance, history, 收款 — except that it can't send.
+struct WatchWalletView: View {
+    @ObservedObject var store: WalletStore
+    /// Extra close step after a successful commit (the add-wallet sheet closes itself).
+    var onCommitted: (() -> Void)?
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var address = ""
+    @State private var error: String?
+
+    init(store: WalletStore, onCommitted: (() -> Void)? = nil) {
+        self.store = store
+        self.onCommitted = onCommitted
+        _name = State(initialValue: store.suggestedWatchName())
+    }
+
+    private var addr: String { address.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var addressValid: Bool { PRLAddress.isValid(addr, network: store.network) }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Pearl.Space.lg) {
+                PearlInfoRow(Loc("只填一个地址，就能查看它的余额和交易记录。不需要助记词，也不能转账。"),
+                             title: Loc("只读钱包"), systemImage: "eye")
+
+                VStack(alignment: .leading, spacing: Pearl.Space.md) {
+                    PearlSectionHeader(Loc("钱包名称"), systemImage: "wallet.pass")
+                    TextField(store.suggestedWatchName(), text: $name).textFieldStyle(.roundedBorder)
+                }
+                .pearlCard()
+
+                VStack(alignment: .leading, spacing: Pearl.Space.md) {
+                    HStack {
+                        PearlSectionHeader(Loc("地址"), systemImage: "eye")
+                        Spacer()
+                        Button(Loc("粘贴")) {
+                            #if os(iOS)
+                            if let s = UIPasteboard.general.string { address = s }
+                            #else
+                            if let s = NSPasteboard.general.string(forType: .string) { address = s }
+                            #endif
+                        }.font(.caption)
+                    }
+                    TextField("\(store.network.addressPrefix)…", text: $address, axis: .vertical)
+                        .lineLimit(1...3)
+                        .textFieldStyle(.roundedBorder).font(.body.monospaced())
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        #endif
+                        .onChange(of: address) { _, _ in error = nil }
+                        .accessibilityIdentifier("watch-address")
+                    if !addr.isEmpty && !addressValid {
+                        Text(Loc("地址格式不正确（需为 %@ 开头的 Taproot 地址）", store.network.addressPrefix))
+                            .font(.caption).foregroundStyle(.red)
+                    }
+                }
+                .pearlCard()
+
+                if let error {
+                    Label(error, systemImage: "exclamationmark.octagon")
+                        .font(.footnote).foregroundStyle(.red)
+                }
+                Button { commit() } label: {
+                    Label(Loc("添加只读钱包"), systemImage: "eye")
+                }
+                .buttonStyle(.pearl)
+                .disabled(!addressValid)
+                .accessibilityIdentifier("watch-add")
+            }
+            .padding(Pearl.Space.screen).frame(maxWidth: 520).frame(maxWidth: .infinity)
+        }
+        .pearlScreenBackground()
+        .navigationTitle(Loc("只读钱包"))
+        #if os(iOS)
+        .scrollDismissesKeyboard(.interactively)
+        #endif
+    }
+
+    private func commit() {
+        guard store.commitWatchWallet(name: name, address: addr) else {
+            error = store.lastError ?? Loc("地址格式不正确（需为 %@ 开头的 Taproot 地址）", store.network.addressPrefix)
+            store.lastError = nil
+            return
+        }
+        // Phase may flip to .unlocked (from the welcome screen), swapping the NavigationStack
+        // root: pop this pushed view too, or it stays orphaned on top of the new root.
+        dismiss()
+        onCommitted?()
     }
 }

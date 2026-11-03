@@ -13,6 +13,9 @@ struct DashboardView: View {
     @State private var managingWallets = false
     @State private var donating = false
     @State private var donationPromptPending = false
+    /// 转账 on a read-only wallet: why it can't, and the way to a wallet that can.
+    @State private var watchSendInfo = false
+    @State private var restoringWatched = false
     /// False while a pushed screen (收款 / 转账 / 记录) or another tab covers the dashboard.
     @State private var dashboardVisible = false
     /// DEBUG: SHOT_NOCK=1 opens the NOCK page on launch (screenshot / verification runs).
@@ -66,7 +69,8 @@ struct DashboardView: View {
     private var hasBalance: Bool { store.backendReady || store.balanceIsCached }
 
     private var canDonate: Bool {
-        guard Donation.isConfigured, store.network == .mainnet else { return false }
+        // A read-only wallet has no keys to give with.
+        guard Donation.isConfigured, store.network == .mainnet, !store.isWatchOnly else { return false }
         let mainAddress = store.activeRecord?.addresses[WalletNetwork.mainnet.rawValue]
         return mainAddress != Donation.address && store.address != Donation.address
     }
@@ -163,6 +167,15 @@ struct DashboardView: View {
                         // toolbar switcher). The chip always holds its slot — "—" until the first
                         // price loads — so the hero never changes height.
                         HStack(spacing: Pearl.Space.sm) {
+                            // Like the web's wallet page: a read-only wallet says so on its card.
+                            if store.isWatchOnly {
+                                Label(Loc("只读"), systemImage: "eye")
+                                    .font(Self.chipLabelFont)
+                                    .foregroundStyle(Pearl.onHeroChip.opacity(0.75))
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 10).padding(.vertical, 5)
+                                    .background(Pearl.heroChip, in: Capsule())
+                            }
                             Spacer(minLength: Pearl.Space.xs)
                             HStack(spacing: 6) {
                                 Text(verbatim: "PRL").font(Self.chipLabelFont)
@@ -245,7 +258,12 @@ struct DashboardView: View {
                 // Actions
                 HStack(spacing: Pearl.Space.md) {
                     action(Loc("收款"), "qrcode") { ReceiveView(store: store) }
-                    action(Loc("转账"), "paperplane") { SendView(store: store) }
+                    if store.isWatchOnly {
+                        Button { watchSendInfo = true } label: { actionTile(Loc("转账"), "paperplane") }
+                            .buttonStyle(.plain)
+                    } else {
+                        action(Loc("转账"), "paperplane") { SendView(store: store) }
+                    }
                     action(Loc("记录"), "clock.arrow.circlepath") { ActivityView(store: store) }
                 }
 
@@ -291,13 +309,15 @@ struct DashboardView: View {
                 .animation(.snappy, value: store.backendReady)
 
                 // The same seed's NOCK side, after everything PRL: a small muted strip once the
-                // wallet uses NOCK…
-                NockWalletEntry(slot: .card, surface: cardSurface, secondary: cardSecondary)
+                // wallet uses NOCK… (a read-only wallet has no seed, so no NOCK side)
+                if !store.isWatchOnly {
+                    NockWalletEntry(slot: .card, surface: cardSurface, secondary: cardSecondary)
+                }
 
                 PriceAlertInlineLink()
                 WidgetInlineLink()
                 // …otherwise only this line, deliberately the quietest entry on the page.
-                NockWalletEntry(slot: .link)
+                if !store.isWatchOnly { NockWalletEntry(slot: .link) }
             }
             .padding(Pearl.Space.screen)
             .frame(maxWidth: 560)
@@ -345,6 +365,24 @@ struct DashboardView: View {
         }
         .sheet(isPresented: $addingWallet) { AddWalletView(store: store) }
         .sheet(isPresented: $donating) { DonateView(store: store) }
+        .alert(Loc("只读钱包不能转账"), isPresented: $watchSendInfo) {
+            if store.frameworkOK {
+                Button(Loc("用助记词恢复钱包")) { restoringWatched = true }
+            }
+            Button(Loc("知道了"), role: .cancel) {}
+        } message: {
+            Text(Loc("只读钱包只保存地址，没有私钥。要从这个地址转账，请用它所属钱包的助记词恢复。"))
+        }
+        .sheet(isPresented: $restoringWatched) {
+            NavigationStack {
+                ImportWalletView(store: store) { restoringWatched = false }
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button(Loc("取消")) { restoringWatched = false }
+                        }
+                    }
+            }
+        }
         .onChange(of: store.backendReady) { _, _ in promptDonationIfDue() }
         .onChange(of: store.balance) { _, _ in promptDonationIfDue() }
         .onAppear { dashboardVisible = true; promptDonationIfDue() }
@@ -436,18 +474,21 @@ struct DashboardView: View {
     }
 
     private func action<Dest: View>(_ title: String, _ icon: String, @ViewBuilder dest: () -> Dest) -> some View {
-        NavigationLink(destination: dest()) {
-            VStack(spacing: Pearl.Space.sm) {
-                PearlIconBadge(systemImage: icon, gradient: isClassicNight ? balanceGradient : nil)
-                // One line, shrunk to fit: "Empfangen" is a few points wider than a third of
-                // a phone, and wrapped as "Empfan-gen" in a tile taller than its neighbours.
-                Text(title).font(.callout.weight(.medium))
-                    .lineLimit(1).minimumScaleFactor(0.7)
-            }
-            .frame(maxWidth: .infinity)
-            .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md, frosted: true, surface: cardSurface)
+        NavigationLink(destination: dest()) { actionTile(title, icon) }
+            .buttonStyle(.plain)
+    }
+
+    private func actionTile(_ title: String, _ icon: String) -> some View {
+        VStack(spacing: Pearl.Space.sm) {
+            PearlIconBadge(systemImage: icon, gradient: isClassicNight ? balanceGradient : nil)
+            // One line, shrunk to fit: "Empfangen" is a few points wider than a third of
+            // a phone, and wrapped as "Empfan-gen" in a tile taller than its neighbours.
+            Text(title).font(.callout.weight(.medium))
+                .lineLimit(1).minimumScaleFactor(0.7)
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
+        .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md, frosted: true, surface: cardSurface)
+        .contentShape(Rectangle())
     }
 
 }
@@ -495,29 +536,32 @@ struct ReceiveView: View {
                     .accessibilityLabel(Loc("复制收款地址"))
 
                     // 换地址：点按派生下一个收款地址（0…9 轮换），每个都可正常收款，换地址更利于隐私。
-                    HStack(spacing: Pearl.Space.lg) {
-                        Button {
-                            copied = false
-                            store.nextReceiveAddress()
-                        } label: {
-                            Label(Loc("换一个地址"), systemImage: "arrow.triangle.2.circlepath")
-                        }
-                        .accessibilityLabel(Loc("换一个收款地址"))
-                        if store.receiveIndex > 0 {
+                    // A read-only wallet has exactly one address — the one it watches.
+                    if !store.isWatchOnly {
+                        HStack(spacing: Pearl.Space.lg) {
                             Button {
                                 copied = false
-                                Task { await store.setReceiveIndex(0) }
+                                store.nextReceiveAddress()
                             } label: {
-                                Label(Loc("回到主地址"), systemImage: "house")
+                                Label(Loc("换一个地址"), systemImage: "arrow.triangle.2.circlepath")
+                            }
+                            .accessibilityLabel(Loc("换一个收款地址"))
+                            if store.receiveIndex > 0 {
+                                Button {
+                                    copied = false
+                                    Task { await store.setReceiveIndex(0) }
+                                } label: {
+                                    Label(Loc("回到主地址"), systemImage: "house")
+                                }
                             }
                         }
-                    }
-                    .font(.callout.weight(.medium))
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Pearl.accent)
+                        .font(.callout.weight(.medium))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Pearl.accent)
 
-                    Text(Loc("把这个地址发给对方即可收到 PRL。点按「换一个地址」可生成新地址，更好地保护隐私。"))
-                        .pearlExplanation().multilineTextAlignment(.center)
+                        Text(Loc("把这个地址发给对方即可收到 PRL。点按「换一个地址」可生成新地址，更好地保护隐私。"))
+                            .pearlExplanation().multilineTextAlignment(.center)
+                    }
                 } else {
                     ProgressView(Loc("派生地址…")).frame(maxHeight: 240)
                 }

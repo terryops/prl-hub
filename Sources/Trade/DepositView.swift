@@ -18,9 +18,10 @@ struct DepositView: View {
 
     private var isPearl: Bool { store.currency == SafeTradeMarket.base }
     private var unit: String { store.currency.uppercased() }
-    /// The in-app wallet can pay the deposit itself: PRL, a mainnet wallet, unlocked.
+    /// The in-app wallet can pay the deposit itself: PRL, a mainnet wallet with its seed
+    /// here (not a read-only one), unlocked.
     private var canSendFromWallet: Bool {
-        isPearl && wallet.phase == .unlocked && wallet.network == .mainnet
+        isPearl && wallet.phase == .unlocked && wallet.network == .mainnet && !wallet.isWatchOnly
     }
 
     var body: some View {

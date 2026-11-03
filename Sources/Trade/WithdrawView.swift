@@ -78,10 +78,12 @@ struct WithdrawView: View {
             && store.unverified == nil && !store.verifying   // a previous one's outcome is still unknown
     }
 
-    /// Mainnet receive address of every wallet on this device (index 0).
+    /// Mainnet receive address of every wallet on this device (index 0). Read-only wallets are
+    /// left out: the address they watch may well be someone else's.
     private var myWallets: [(name: String, address: String)] {
         guard isPearl else { return [] }
-        return wallet.wallets.compactMap { w in w.addresses[WalletNetwork.mainnet.rawValue].map { (w.name, $0) } }
+        return wallet.wallets.filter { !$0.isWatchOnly }
+            .compactMap { w in w.addresses[WalletNetwork.mainnet.rawValue].map { (w.name, $0) } }
     }
 
     var body: some View {
@@ -178,7 +180,8 @@ struct WithdrawView: View {
     }
 
     private var activeWalletAddress: String? {
-        wallet.wallets.first { $0.id == wallet.activeWalletID }?.addresses[WalletNetwork.mainnet.rawValue]
+        guard let w = wallet.activeRecord, !w.isWatchOnly else { return nil }
+        return w.addresses[WalletNetwork.mainnet.rawValue]
     }
 
     // MARK: presets

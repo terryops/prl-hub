@@ -81,6 +81,15 @@ struct WelcomeView: View {
                     }
                     .buttonStyle(.bordered).controlSize(.large)
                     .disabled(!store.frameworkOK)
+
+                    NavigationLink {
+                        WatchWalletView(store: store)
+                    } label: {
+                        WatchWalletOption()
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("watch-wallet-option")
+                    .padding(.top, Pearl.Space.sm)
                 }
                 .padding(.top, Pearl.Space.xs)
 

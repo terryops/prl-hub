@@ -1311,3 +1311,14 @@
 "用 %@ 登录网页版，账号里的监控和提醒会自动同步过去。" = "Accedi alla versione web con %@ e i monitor e gli avvisi del tuo account si sincronizzeranno automaticamente.";
 "在浏览器打开" = "Apri nel browser";
 "分享" = "Condividi";
+
+/* Read-only wallet */
+"只读" = "Sola lettura";
+"只读钱包" = "Wallet in sola lettura";
+"添加只读钱包" = "Aggiungi wallet in sola lettura";
+"只填一个地址，就能查看它的余额和交易记录。不需要助记词，也不能转账。" = "Basta un indirizzo per vederne saldo e transazioni. Non serve la frase di recupero, ma non si possono inviare fondi.";
+"只读钱包不能转账" = "Un wallet in sola lettura non può inviare";
+"只读钱包只保存地址，没有私钥。要从这个地址转账，请用它所属钱包的助记词恢复。" = "Un wallet in sola lettura conserva solo l'indirizzo, non la chiave privata. Per inviare da questo indirizzo, ripristina il wallet a cui appartiene con la sua frase di recupero.";
+"这个只读钱包的地址不属于 %@ 网络" = "L'indirizzo di questo wallet in sola lettura non è della rete %@";
+"移除只读钱包" = "Rimuovi wallet in sola lettura";
+"只从本机删除这个地址，不影响链上资产，之后可以再添加。" = "Viene rimosso solo questo indirizzo dal dispositivo. Sulla blockchain non cambia nulla e puoi aggiungerlo di nuovo quando vuoi.";

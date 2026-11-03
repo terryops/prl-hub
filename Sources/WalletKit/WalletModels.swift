@@ -25,9 +25,15 @@ struct WalletRecord: Codable, Identifiable, Equatable {
     /// seed that's already here without reading every wallet's seed from the Keychain.
     /// nil for records saved before it existed; filled in the next time the seed is read.
     var fingerprint: String?
+    /// Set only for a read-only wallet: the one address it watches. Such a wallet has no seed
+    /// on this device — it shows that address's balance and history and can't send.
+    var watchAddress: String?
+    var isWatchOnly: Bool { watchAddress != nil }
 
-    init(id: String, name: String, addresses: [String: String] = [:], fingerprint: String? = nil) {
+    init(id: String, name: String, addresses: [String: String] = [:], fingerprint: String? = nil,
+         watchAddress: String? = nil) {
         self.id = id; self.name = name; self.addresses = addresses; self.fingerprint = fingerprint
+        self.watchAddress = watchAddress
     }
 
     // Synthesized Decodable ignores property defaults, so a list saved before a field
@@ -38,6 +44,7 @@ struct WalletRecord: Codable, Identifiable, Equatable {
         name = try c.decode(String.self, forKey: .name)
         addresses = try c.decodeIfPresent([String: String].self, forKey: .addresses) ?? [:]
         fingerprint = try c.decodeIfPresent(String.self, forKey: .fingerprint)
+        watchAddress = try c.decodeIfPresent(String.self, forKey: .watchAddress)
     }
 }
 
@@ -73,6 +80,11 @@ enum PRLAddress {
 
     static func isValidAnyNetwork(_ address: String) -> Bool {
         validate(address, expectedHRP: nil) != nil
+    }
+
+    /// The network a valid address belongs to (nil if it isn't one).
+    static func network(of address: String) -> WalletNetwork? {
+        WalletNetwork.allCases.first { isValid(address, network: $0) }
     }
 
     private static func validate(_ raw: String, expectedHRP: String?) -> [UInt8]? {

@@ -1311,3 +1311,14 @@
 "用 %@ 登录网页版，账号里的监控和提醒会自动同步过去。" = "Đăng nhập phiên bản web bằng %@, theo dõi và cảnh báo trong tài khoản sẽ tự động đồng bộ.";
 "在浏览器打开" = "Mở trong trình duyệt";
 "分享" = "Chia sẻ";
+
+/* Read-only wallet */
+"只读" = "Chỉ đọc";
+"只读钱包" = "Ví chỉ đọc";
+"添加只读钱包" = "Thêm ví chỉ đọc";
+"只填一个地址，就能查看它的余额和交易记录。不需要助记词，也不能转账。" = "Chỉ cần nhập một địa chỉ để xem số dư và giao dịch của nó. Không cần cụm từ khôi phục, nhưng cũng không thể chuyển tiền.";
+"只读钱包不能转账" = "Ví chỉ đọc không thể chuyển tiền";
+"只读钱包只保存地址，没有私钥。要从这个地址转账，请用它所属钱包的助记词恢复。" = "Ví chỉ đọc chỉ lưu địa chỉ, không có khóa riêng. Để chuyển tiền từ địa chỉ này, hãy khôi phục ví chứa nó bằng cụm từ khôi phục.";
+"这个只读钱包的地址不属于 %@ 网络" = "Địa chỉ của ví chỉ đọc này không thuộc mạng %@";
+"移除只读钱包" = "Xóa ví chỉ đọc";
+"只从本机删除这个地址，不影响链上资产，之后可以再添加。" = "Chỉ xóa địa chỉ này khỏi máy, không ảnh hưởng tài sản trên chuỗi, bạn có thể thêm lại sau.";

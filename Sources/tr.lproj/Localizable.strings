@@ -1311,3 +1311,14 @@
 "用 %@ 登录网页版，账号里的监控和提醒会自动同步过去。" = "Web sürümüne %@ ile giriş yapın; hesabınızdaki izlemeler ve uyarılar otomatik olarak eşitlenir.";
 "在浏览器打开" = "Tarayıcıda Aç";
 "分享" = "Paylaş";
+
+/* Read-only wallet */
+"只读" = "Salt okunur";
+"只读钱包" = "Salt okunur cüzdan";
+"添加只读钱包" = "Salt okunur cüzdan ekle";
+"只填一个地址，就能查看它的余额和交易记录。不需要助记词，也不能转账。" = "Bakiyesini ve işlemlerini görmek için yalnızca bir adres girin. Kurtarma ifadesi gerekmez, ancak gönderim de yapılamaz.";
+"只读钱包不能转账" = "Salt okunur cüzdan gönderim yapamaz";
+"只读钱包只保存地址，没有私钥。要从这个地址转账，请用它所属钱包的助记词恢复。" = "Salt okunur cüzdan yalnızca adresi saklar, özel anahtarı yoktur. Bu adresten göndermek için ait olduğu cüzdanı kurtarma ifadesiyle geri yükleyin.";
+"这个只读钱包的地址不属于 %@ 网络" = "Bu salt okunur cüzdanın adresi %@ ağına ait değil";
+"移除只读钱包" = "Salt okunur cüzdanı kaldır";
+"只从本机删除这个地址，不影响链上资产，之后可以再添加。" = "Yalnızca bu adres cihazdan silinir. Zincirdeki varlıklar etkilenmez, adresi daha sonra yeniden ekleyebilirsiniz.";

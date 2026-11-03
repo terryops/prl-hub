@@ -54,6 +54,10 @@ enum WidgetFetch {
     /// xpub so the caller can fire it concurrently without a pre-guard.
     static func balancePRL(xpub: String?, network: String) async -> Double? {
         guard let xpub, !xpub.isEmpty else { return nil }
+        // A read-only wallet publishes the address it watches in place of an xpub; Blockbook
+        // answers `/address/` with the same balance fields. (Base58 has no "l", so no xpub
+        // starts like a bech32 PRL address.)
+        let kind = xpub.hasPrefix("prl1") || xpub.hasPrefix("tprl1") ? "address" : "xpub"
         // Same indexers and order as the app's BlockbookClient: Pearl Hub's own first (it
         // answers 503 while lagging), then the official one.
         let own = "https://node.pearlhub.net"
@@ -61,7 +65,7 @@ enum WidgetFetch {
             : NodeAccess.enabled ? [own, "https://blockbook.pearlresearch.ai"] : ["https://blockbook.pearlresearch.ai"]
         for base in bases {
             let headers = base == own ? [NodeAccess.header: NodeAccess.key] : [:]
-            guard let obj = await json("\(base)/api/v2/xpub/\(xpub)?details=basic", headers: headers) as? [String: Any],
+            guard let obj = await json("\(base)/api/v2/\(kind)/\(xpub)?details=basic", headers: headers) as? [String: Any],
                   let total = xpubBalancePRL(obj) else { continue }
             return total
         }

@@ -249,7 +249,17 @@ struct BlockbookClient {
 
     /// `summary`, and which indexer answered it — the one the rest of the refresh is pinned to.
     func summaryFrom(xpub: String) async throws -> (summary: XpubSummary, base: String) {
-        let r = try await fetch("/api/v2/xpub/\(xpub)?details=basic", timeout: 25, session: session) { d in
+        try await summaryFrom(path: "/api/v2/xpub/\(xpub)")
+    }
+
+    /// `summaryFrom(xpub:)` for a single address (a read-only wallet). Blockbook's `/address/`
+    /// answer carries the same balance and count fields as `/xpub/`.
+    func summaryFrom(address: String) async throws -> (summary: XpubSummary, base: String) {
+        try await summaryFrom(path: "/api/v2/address/\(address)")
+    }
+
+    private func summaryFrom(path: String) async throws -> (summary: XpubSummary, base: String) {
+        let r = try await fetch("\(path)?details=basic", timeout: 25, session: session) { d in
             let r = try JSONDecoder().decode(XpubResponse.self, from: d)
             guard let b = Self.balances(r) else { throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "no balance")) }
             return XpubSummary(confirmed: b.confirmed, unconfirmed: b.unconfirmed,
@@ -273,6 +283,19 @@ struct BlockbookClient {
                            unconfirmed: b.unconfirmed,
                            txs: Self.mapTxs(r.transactions ?? [], mine: addresses.union(knownChange)),
                            addresses: addresses,
+                           hasMorePages: (r.page ?? 1) < (r.totalPages ?? 1))
+    }
+
+    /// Balance + one history page of a single watched address (a read-only wallet), the
+    /// `/address/` twin of `account(xpub:)`. Direction and amounts are as seen from that one
+    /// address: what it received, and what it sent to any other address.
+    func account(address: String, page: Int = 1, pageSize: Int = 10) async throws -> XpubAccount {
+        let r = try await get("/api/v2/address/\(address)?details=txs&page=\(page)&pageSize=\(pageSize)", as: XpubResponse.self)
+        guard let b = Self.balances(r) else { throw URLError(.cannotParseResponse) }
+        return XpubAccount(confirmed: b.confirmed,
+                           unconfirmed: b.unconfirmed,
+                           txs: Self.mapTxs(r.transactions ?? [], mine: [address]),
+                           addresses: [address],
                            hasMorePages: (r.page ?? 1) < (r.totalPages ?? 1))
     }
 

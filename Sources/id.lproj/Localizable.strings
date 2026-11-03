@@ -1311,3 +1311,14 @@
 "用 %@ 登录网页版，账号里的监控和提醒会自动同步过去。" = "Masuk ke versi web dengan %@, monitor dan peringatan akun Anda akan tersinkron otomatis.";
 "在浏览器打开" = "Buka di Browser";
 "分享" = "Bagikan";
+
+/* Read-only wallet */
+"只读" = "Hanya baca";
+"只读钱包" = "Dompet hanya baca";
+"添加只读钱包" = "Tambah dompet hanya baca";
+"只填一个地址，就能查看它的余额和交易记录。不需要助记词，也不能转账。" = "Cukup masukkan alamat untuk melihat saldo dan transaksinya. Tidak perlu frasa pemulihan, tetapi juga tidak bisa mengirim.";
+"只读钱包不能转账" = "Dompet hanya baca tidak bisa mengirim";
+"只读钱包只保存地址，没有私钥。要从这个地址转账，请用它所属钱包的助记词恢复。" = "Dompet hanya baca hanya menyimpan alamat, tanpa kunci privat. Untuk mengirim dari alamat ini, pulihkan dompet pemiliknya dengan frasa pemulihannya.";
+"这个只读钱包的地址不属于 %@ 网络" = "Alamat dompet hanya baca ini bukan dari jaringan %@";
+"移除只读钱包" = "Hapus dompet hanya baca";
+"只从本机删除这个地址，不影响链上资产，之后可以再添加。" = "Hanya alamat ini yang dihapus dari perangkat. Aset on-chain tidak terpengaruh, dan Anda bisa menambahkannya lagi nanti.";

@@ -15,6 +15,9 @@ final class WalletStore: ObservableObject {
     @Published private(set) var phase: Phase = .loading
     @Published var network: WalletNetwork = .mainnet
     @Published private(set) var mnemonic: String?      // in memory only while unlocked
+    /// The address a read-only wallet watches, while one is open. Such a wallet has no seed,
+    /// so `mnemonic` stays nil: everything that signs (send, recovery, NOCK) is unavailable.
+    @Published private(set) var watchAddress: String?
     @Published private(set) var balance: WalletBalance = .zero
     @Published private(set) var txs: [WalletTx] = []
     /// Stranded-change recovery: funds on change addresses the xpub scan can't see,
@@ -89,6 +92,10 @@ final class WalletStore: ObservableObject {
     /// Every wallet on this device, in display order, and which one is open.
     @Published private(set) var wallets: [WalletRecord] = []
     @Published private(set) var activeWalletID: String?
+    /// The open (or, while locked, the selected) wallet only watches an address.
+    var isWatchOnly: Bool { activeRecord?.isWatchOnly == true }
+    /// A wallet is open: its seed, or the address a read-only one watches, is in memory.
+    private var isOpen: Bool { mnemonic != nil || watchAddress != nil }
 
     /// The wallet that predates multi-wallet support keeps its original Keychain
     /// account, data dir and change-cache keys, so upgrading moves nothing on disk.
@@ -239,12 +246,16 @@ final class WalletStore: ObservableObject {
             // Mac capture run (no XCUITest to drive the import sheet) lands on a real 钱包 tab.
             if let m = ProcessInfo.processInfo.environment["SHOT_MNEMONIC"],
                commitWallet(name: "Pearl Wallet", mnemonic: m) { return }
+            // SHOT_WATCH=<address> adds a read-only wallet instead.
+            if let a = ProcessInfo.processInfo.environment["SHOT_WATCH"],
+               commitWatchWallet(name: "", address: a) { return }
             #endif
             phase = .noWallet
             return
         }
         // Locked by hand last session: stay locked until the owner authenticates.
         if manuallyLocked { phase = .locked; return }
+        if let watch = activeRecord?.watchAddress { openWatch(watch); return }
         if let m = Keychain.get(account: mnemonicAccount(for: id)) {
             open(mnemonic: m)
         } else {
@@ -304,7 +315,8 @@ final class WalletStore: ObservableObject {
             return
         }
         let present = Set(accounts)
-        var list = persisted.filter { present.contains(mnemonicAccount(for: $0.id)) }
+        // A read-only wallet has nothing in the Keychain: its entry is all there is of it.
+        var list = persisted.filter { $0.isWatchOnly || present.contains(mnemonicAccount(for: $0.id)) }
         var known = Set(list.map(\.id))
         if !known.contains(Self.legacyWalletID), present.contains(mnemonicAccount(for: Self.legacyWalletID)) {
             let legacyName = d.string(forKey: nameKey).flatMap { $0.isEmpty ? nil : $0 } ?? "Pearl Wallet"
@@ -341,12 +353,14 @@ final class WalletStore: ObservableObject {
 
     /// "Pearl Wallet", then "Pearl Wallet 2", "Pearl Wallet 3"… — the first name no wallet uses.
     func suggestedWalletName() -> String { suggestedWalletName(in: wallets) }
-    private func suggestedWalletName(in list: [WalletRecord]) -> String {
+    /// "只读钱包", "只读钱包 2"… for a read-only wallet.
+    func suggestedWatchName() -> String { suggestedWalletName(in: wallets, base: Loc("只读钱包")) }
+    private func suggestedWalletName(in list: [WalletRecord], base: String = "Pearl Wallet") -> String {
         let used = Set(list.map(\.name))
-        if !used.contains("Pearl Wallet") { return "Pearl Wallet" }
+        if !used.contains(base) { return base }
         var n = 2
-        while used.contains("Pearl Wallet \(n)") { n += 1 }
-        return "Pearl Wallet \(n)"
+        while used.contains("\(base) \(n)") { n += 1 }
+        return "\(base) \(n)"
     }
 
     /// Adopt wallet name / network pushed in from another device via iCloud
@@ -390,6 +404,11 @@ final class WalletStore: ObservableObject {
             lastError = nil
             return true
         }
+        if let watch = wallets.first(where: { $0.id == id })?.watchAddress {
+            select(walletID: id)
+            openWatch(watch)
+            return true
+        }
         guard let m = Keychain.get(account: mnemonicAccount(for: id)) else {
             lastError = Loc("无法读取该钱包的助记词（钥匙串拒绝了访问），请重试")
             return false
@@ -414,11 +433,23 @@ final class WalletStore: ObservableObject {
     private func open(mnemonic m: String) {
         invalidateChainLoads()
         restoreOverlay()
+        watchAddress = nil
         mnemonic = m
         phase = .unlocked
         manuallyLocked = false
         lastError = nil
         if let id = activeWalletID { noteFingerprint(of: m, for: id) }
+        Task { await loadChain() }
+    }
+
+    /// Open the active read-only wallet: no seed, just the address it watches.
+    private func openWatch(_ address: String) {
+        invalidateChainLoads()
+        mnemonic = nil
+        watchAddress = address
+        phase = .unlocked
+        manuallyLocked = false
+        lastError = nil
         Task { await loadChain() }
     }
 
@@ -527,7 +558,7 @@ final class WalletStore: ObservableObject {
     private func existingWallet(for phrase: String) -> WalletRecord? {
         let fp = Self.fingerprint(of: phrase)
         if let hit = wallets.first(where: { $0.fingerprint == fp }) { return hit }
-        for w in wallets where w.fingerprint == nil {
+        for w in wallets where w.fingerprint == nil && !w.isWatchOnly {
             guard let m = Keychain.get(account: mnemonicAccount(for: w.id)) else { continue }
             noteFingerprint(of: m, for: w.id)
             if Self.normalizedPhrase(m) == phrase { return w }
@@ -572,6 +603,31 @@ final class WalletStore: ObservableObject {
         return true
     }
 
+    /// Add a read-only wallet for `address` (on the current network) and open it. An address
+    /// some wallet here already shows — watched, or a wallet's main address — just switches to it.
+    func commitWatchWallet(name: String, address raw: String) -> Bool {
+        let addr = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard PRLAddress.isValid(addr, network: network) else {
+            lastError = Loc("地址格式不正确（需为 %@ 开头的 Taproot 地址）", network.addressPrefix)
+            return false
+        }
+        if let existing = wallets.first(where: { $0.watchAddress == addr || $0.addresses[network.rawValue] == addr }) {
+            if existing.id != activeWalletID {
+                guard switchWallet(to: existing.id) else { return false }
+            }
+            lastError = nil
+            flashToast(Loc("该钱包已在本机，已切换到「%@」", existing.name))
+            return true
+        }
+        let id = UUID().uuidString.lowercased()
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        wallets.append(WalletRecord(id: id, name: trimmed.isEmpty ? suggestedWatchName() : trimmed,
+                                    addresses: [network.rawValue: addr], watchAddress: addr))
+        select(walletID: id)
+        openWatch(addr)
+        return true
+    }
+
     /// Re-open the wallet after a lock. Requires device auth — the lock would otherwise
     /// be decorative.
     func unlock() async {
@@ -587,6 +643,7 @@ final class WalletStore: ObservableObject {
             }
         }
         guard phase == .locked, id == activeWalletID else { return }
+        if let watch = activeRecord?.watchAddress { openWatch(watch); return }
         guard let m = Keychain.get(account: mnemonicAccount(for: id)) else {
             lastError = Loc("无法读取钥匙串中的助记词，请重试解锁")
             return
@@ -604,8 +661,8 @@ final class WalletStore: ObservableObject {
         clearChainState()
         // Locked: leave the parked state where it is — unlock() restores the network then
         // current. Pulling it into memory now would let a second locked switch clear it.
-        if mnemonic != nil { restoreOverlay() }
-        if mnemonic != nil { Task { await loadChain() } }
+        if isOpen { restoreOverlay() }
+        if isOpen { Task { await loadChain() } }
     }
 
     #if DEBUG
@@ -676,6 +733,7 @@ final class WalletStore: ObservableObject {
     }
 
     private func loadChainOnce() async {
+        if let watchAddress { await loadWatchOnce(watchAddress); return }
         guard let mnemonic else { return }
         let token = chainLoadToken
         let expectedNetwork = network
@@ -766,6 +824,72 @@ final class WalletStore: ObservableObject {
         publishOverlay()
     }
 
+    /// A read-only wallet's refresh: the watched address's balance summary, then — when it
+    /// moved — its first history page, both from one indexer. No keys, UTXOs or change
+    /// chain: nothing here is spent, so `available` is only the confirmed part.
+    private func loadWatchOnce(_ watch: String) async {
+        let token = chainLoadToken
+        let net = network
+        func current() -> Bool { isCurrentWatchLoad(token, address: watch, network: net) }
+        // Added on the other network (设置 → 网络 changed since): nothing to read here.
+        guard PRLAddress.isValid(watch, network: net) else {
+            syncError = Loc("这个只读钱包的地址不属于 %@ 网络", net.label)
+            if !historyReady { historyReady = true }
+            lastChainLoadAt = Date()
+            return
+        }
+        if address != watch { address = watch }
+        if xpubAddresses != [watch] { xpubAddresses = [watch] }
+        if !backendReady, !balanceIsCached, let cached = cachedBalance(network: net) {
+            serverBalance = cached
+            balanceIsCached = true
+            publishOverlay()
+        }
+        func balance(_ confirmed: Decimal, _ unconfirmed: Decimal) -> WalletBalance {
+            let total = confirmed + unconfirmed
+            return WalletBalance(total: total, available: max(0, min(confirmed + min(0, unconfirmed), total)))
+        }
+        let summary: BlockbookClient.XpubSummary
+        let bb: BlockbookClient
+        let switchedIndex: Bool
+        do {
+            let answer = try await BlockbookClient(network: net).summaryFrom(address: watch)
+            guard current() else { return }
+            summary = answer.summary
+            switchedIndex = answer.base != chainReadBase
+            chainReadBase = answer.base
+            bb = BlockbookClient(network: net).pinned(to: answer.base, strict: true)
+        } catch {
+            guard current() else { return }
+            syncError = Loc("无法连接区块浏览器")
+            lastChainLoadAt = Date()
+            return
+        }
+        let moved = switchedIndex || summary != lastSummary || !historyReady
+        if moved {
+            serverBalance = balance(summary.confirmed, summary.unconfirmed)
+            rememberBalance(network: net)
+        }
+        if !backendReady { backendReady = true }
+        if balanceIsCached { balanceIsCached = false }
+        lastSyncedAt = Date()
+        if syncError != nil { syncError = nil }
+        publishOverlay()
+        if moved, let page = try? await bb.account(address: watch) {
+            guard current() else { return }
+            serverBalance = balance(page.confirmed, page.unconfirmed)
+            rememberBalance(network: net)
+            if historyPagesLoaded <= 1, historyHasMore != page.hasMorePages { historyHasMore = page.hasMorePages }
+            serverTxs = page.txs
+            if !historyReady { historyReady = true }
+            // Only a complete read is remembered, so a failed page is retried next time.
+            lastSummary = summary
+            publishOverlay()
+        }
+        guard current() else { return }
+        lastChainLoadAt = Date()
+    }
+
     /// 2. Balance + first history page in ONE response (they can't disagree about a
     /// just-indexed send), alongside the confirmed UTXOs that define what is actually
     /// spendable. Only a complete read is remembered as `lastSummary`, so a failed page
@@ -803,16 +927,24 @@ final class WalletStore: ObservableObject {
 
     /// Append the next history page (交易记录「加载更多」).
     func loadMoreHistory() async {
-        guard historyHasMore, !loadingMoreHistory, mnemonic != nil, let xp = xpub else { return }
+        let watch = watchAddress, xp = xpub
+        guard historyHasMore, !loadingMoreHistory, watch != nil || (mnemonic != nil && xp != nil) else { return }
         let token = chainLoadToken
         let net = network
         let page = historyPagesLoaded + 1
         loadingMoreHistory = true
         defer { loadingMoreHistory = false }
         // From the index page 1 came from.
-        guard let more = try? await BlockbookClient(network: net).pinned(to: chainReadBase, strict: true)
-                .account(xpub: xp, page: page, knownChange: change.owned.union(xpubAddresses)),
-              chainLoadToken == token, network == net else { return }
+        let bb = BlockbookClient(network: net).pinned(to: chainReadBase, strict: true)
+        let next: BlockbookClient.XpubAccount?
+        if let watch {
+            next = try? await bb.account(address: watch, page: page)
+        } else if let xp {
+            next = try? await bb.account(xpub: xp, page: page, knownChange: change.owned.union(xpubAddresses))
+        } else {
+            next = nil
+        }
+        guard let more = next, chainLoadToken == token, network == net else { return }
         let known = Set(serverTxs.map(\.txid)).union(olderTxs.map(\.txid))
         olderTxs += more.txs.filter { !known.contains($0.txid) }
         historyPagesLoaded = page
@@ -882,8 +1014,9 @@ final class WalletStore: ObservableObject {
         // Mirror the published wallet state into the shared App Group so the
         // home-screen Wallet widget has fresh inputs (xpub/network) + values to
         // show immediately. Only once the xpub is known — before that there's
-        // nothing the widget could refresh itself with.
-        if let xpub {
+        // nothing the widget could refresh itself with. A read-only wallet hands the
+        // widget its address instead (the widget reads either kind).
+        if let xpub = xpub ?? (watchAddress == nil ? nil : address) {
             let recent = txs.filter { $0.amount > 0 }.prefix(3).map {
                 WidgetTx(received: $0.direction == .received,
                          amount: NSDecimalNumber(decimal: $0.amount).doubleValue,
@@ -901,9 +1034,14 @@ final class WalletStore: ObservableObject {
     }
 
     private func cacheMainAddress(_ a: String, network net: WalletNetwork) {
-        guard let i = wallets.firstIndex(where: { $0.id == activeWalletID }),
-              wallets[i].addresses[net.rawValue] != a else { return }
+        guard let i = wallets.firstIndex(where: { $0.id == activeWalletID }), !wallets[i].isWatchOnly else { return }
+        // A read-only wallet watching this very address is superseded by the full wallet
+        // just restored here (e.g. from its 转账 → 用助记词恢复钱包).
+        let superseded = wallets.filter { $0.watchAddress == a }.map(\.id)
+        guard wallets[i].addresses[net.rawValue] != a || !superseded.isEmpty else { return }
         wallets[i].addresses[net.rawValue] = a
+        for id in superseded { discardLocalData(of: id) }
+        wallets.removeAll { superseded.contains($0.id) }
         saveWallets()
     }
 
@@ -950,6 +1088,7 @@ final class WalletStore: ObservableObject {
         invalidateChainLoads()
         parkOverlay()
         mnemonic = nil
+        watchAddress = nil
         lastError = nil   // a stale send/switch error must not show up on the unlock screen
         clearChainState()
         phase = .locked
@@ -969,28 +1108,29 @@ final class WalletStore: ObservableObject {
     /// be deleted from the Keychain (it would otherwise reappear on the next launch).
     @discardableResult
     func removeWallet(id: String) -> Bool {
-        guard wallets.contains(where: { $0.id == id }) else { return false }
-        guard Keychain.delete(account: mnemonicAccount(for: id)) else {
-            lastError = Loc("无法从钥匙串删除助记词，钱包未移除")
-            return false
+        guard let record = wallets.first(where: { $0.id == id }) else { return false }
+        // A read-only wallet has no seed to delete.
+        if !record.isWatchOnly {
+            guard Keychain.delete(account: mnemonicAccount(for: id)) else {
+                lastError = Loc("无法从钥匙串删除助记词，钱包未移除")
+                return false
+            }
         }
         let wasActive = id == activeWalletID
         if wasActive {
             invalidateChainLoads()
             clearChainState()
             mnemonic = nil
+            watchAddress = nil
             WidgetBridge.clearWallet()
         }
-        // Behind any FFI call already queued for this wallet's db, so none of them can
-        // re-create it after the delete.
-        let dbDir = walletDataURL(for: id)
-        Task { await WalletDBQueue.shared.run { try? FileManager.default.removeItem(at: dbDir) } }
-        ChangeChainCache.remove(prefix: changeKeyPrefix(for: id))
-        for net in WalletNetwork.allCases {
-            UserDefaults.standard.removeObject(forKey: balanceCacheKey(for: id, network: net))
+        if !record.isWatchOnly {
+            // Behind any FFI call already queued for this wallet's db, so none of them can
+            // re-create it after the delete.
+            let dbDir = walletDataURL(for: id)
+            Task { await WalletDBQueue.shared.run { try? FileManager.default.removeItem(at: dbDir) } }
         }
-        for n in WalletNetwork.allCases { parkedOverlays[overlayKey(id, n)] = nil }
-        NockWalletStore.shared.forgetWallet(id)   // the same seed's NOCK side
+        discardLocalData(of: id)
         if id == Self.legacyWalletID { UserDefaults.standard.removeObject(forKey: nameKey) }
         wallets.removeAll { $0.id == id }
         lastError = nil
@@ -1004,9 +1144,16 @@ final class WalletStore: ObservableObject {
             phase = .noWallet
             return true
         }
-        // Open the first remaining wallet whose seed reads; if none can be read right now
-        // (locked keychain, denied prompt), keep them all and wait on the unlock screen.
+        // Open the first remaining wallet whose seed reads (a read-only one always opens); if
+        // none can be read right now (locked keychain, denied prompt), keep them all and wait
+        // on the unlock screen.
         for w in wallets {
+            if let watch = w.watchAddress {
+                activeWalletID = w.id
+                saveWallets()
+                openWatch(watch)
+                return true
+            }
             if let m = Keychain.get(account: mnemonicAccount(for: w.id)) {
                 activeWalletID = w.id
                 saveWallets()
@@ -1019,6 +1166,17 @@ final class WalletStore: ObservableObject {
         lastError = Loc("无法读取钥匙串中的助记词，请重试解锁")
         phase = .locked
         return true
+    }
+
+    /// A wallet's caches on this device besides its seed and wallet db: change-chain data,
+    /// last balances, parked optimistic state and its NOCK side.
+    private func discardLocalData(of id: String) {
+        ChangeChainCache.remove(prefix: changeKeyPrefix(for: id))
+        for net in WalletNetwork.allCases {
+            UserDefaults.standard.removeObject(forKey: balanceCacheKey(for: id, network: net))
+            parkedOverlays[overlayKey(id, net)] = nil
+        }
+        NockWalletStore.shared.forgetWallet(id)   // the same seed's NOCK side
     }
 
     /// Forget the open wallet's derived keys and chain data (lock, wallet/network switch, removal).
@@ -1063,5 +1221,9 @@ final class WalletStore: ObservableObject {
 
     func isCurrentChainLoad(_ token: UUID, mnemonic: String, network: WalletNetwork) -> Bool {
         chainLoadToken == token && self.mnemonic == mnemonic && self.network == network && phase == .unlocked
+    }
+
+    private func isCurrentWatchLoad(_ token: UUID, address: String, network: WalletNetwork) -> Bool {
+        chainLoadToken == token && watchAddress == address && self.network == network && phase == .unlocked
     }
 }

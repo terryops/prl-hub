@@ -1311,3 +1311,14 @@
 "用 %@ 登录网页版，账号里的监控和提醒会自动同步过去。" = "Connectez-vous à la version web avec %@ : les suivis et alertes de votre compte s'y synchronisent automatiquement.";
 "在浏览器打开" = "Ouvrir dans le navigateur";
 "分享" = "Partager";
+
+/* Read-only wallet */
+"只读" = "Lecture seule";
+"只读钱包" = "Portefeuille en lecture seule";
+"添加只读钱包" = "Ajouter un portefeuille en lecture seule";
+"只填一个地址，就能查看它的余额和交易记录。不需要助记词，也不能转账。" = "Saisissez simplement une adresse pour voir son solde et ses transactions. Aucune phrase de récupération n'est nécessaire, mais il est impossible d'envoyer.";
+"只读钱包不能转账" = "Un portefeuille en lecture seule ne peut pas envoyer";
+"只读钱包只保存地址，没有私钥。要从这个地址转账，请用它所属钱包的助记词恢复。" = "Un portefeuille en lecture seule ne conserve que l'adresse, pas sa clé privée. Pour envoyer depuis cette adresse, restaurez le portefeuille auquel elle appartient avec sa phrase de récupération.";
+"这个只读钱包的地址不属于 %@ 网络" = "L'adresse de ce portefeuille en lecture seule n'appartient pas au réseau %@";
+"移除只读钱包" = "Supprimer le portefeuille en lecture seule";
+"只从本机删除这个地址，不影响链上资产，之后可以再添加。" = "Seule cette adresse est supprimée de l'appareil. Rien ne change sur la chaîne, et vous pourrez la rajouter à tout moment.";

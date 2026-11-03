@@ -203,15 +203,18 @@ private struct WalletSettingsSection: View {
                 NavigationLink {
                     ContactsView()
                 } label: { Label(Loc("地址簿"), systemImage: "person.crop.circle") }
-                NavigationLink {
-                    RevealSeedView(store: wallet)
-                } label: { Label(Loc("查看助记词"), systemImage: "key.horizontal") }
-                NavigationLink {
-                    RecoverChangeView(store: wallet)
-                } label: { Label(Loc("找回搁浅的找零"), systemImage: "arrow.uturn.down.circle") }
+                // A read-only wallet has no seed: nothing to reveal, recover or derive NOCK from.
+                if !wallet.isWatchOnly {
+                    NavigationLink {
+                        RevealSeedView(store: wallet)
+                    } label: { Label(Loc("查看助记词"), systemImage: "key.horizontal") }
+                    NavigationLink {
+                        RecoverChangeView(store: wallet)
+                    } label: { Label(Loc("找回搁浅的找零"), systemImage: "arrow.uturn.down.circle") }
+                }
                 // Brings back the wallet page's NOCK line once closed there. A wallet that
                 // uses NOCK shows its strip regardless, so the switch only appears for one that doesn't.
-                if !nock.inUse {
+                if !nock.inUse && !wallet.isWatchOnly {
                     Toggle(isOn: Binding(get: { !nockLinkHidden }, set: { nockLinkHidden = !$0 })) {
                         Label(Loc("在钱包页显示 NOCK 钱包"), systemImage: "hexagon")
                     }
@@ -220,7 +223,7 @@ private struct WalletSettingsSection: View {
                     Label(Loc("锁定钱包"), systemImage: "lock").foregroundStyle(.primary)
                 }
                 Button(role: .destructive) { confirmingReset = true } label: {
-                    Label(Loc("移除钱包（需助记词恢复）"), systemImage: "trash")
+                    Label(wallet.isWatchOnly ? Loc("移除只读钱包") : Loc("移除钱包（需助记词恢复）"), systemImage: "trash")
                 }
             }
             .pearlListRowSurface()
@@ -233,7 +236,9 @@ private struct WalletSettingsSection: View {
                 }
                 Button(Loc("取消"), role: .cancel) {}
             } message: {
-                Text(Loc("助记词将从本机删除且无法恢复。请确认你已安全备份助记词，否则资产将永久丢失。"))
+                Text(wallet.isWatchOnly
+                     ? Loc("只从本机删除这个地址，不影响链上资产，之后可以再添加。")
+                     : Loc("助记词将从本机删除且无法恢复。请确认你已安全备份助记词，否则资产将永久丢失。"))
             }
             .alert(Loc("移除失败"), isPresented: Binding(
                 get: { resetError != nil }, set: { if !$0 { resetError = nil } })) {
