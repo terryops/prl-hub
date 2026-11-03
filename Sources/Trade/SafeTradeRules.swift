@@ -177,8 +177,8 @@ struct SafeTradeMarketRules: Decodable, Equatable {
 /// How far a market order may fill from the last price, in percent, set on the order form.
 /// SafeTrade's web client sends every market order with `max_price` = last ± this (a ceiling
 /// for a buy, a floor for a sell; 15% unless changed) and the exchange refuses one that would
-/// fill past it (`market.order.market_price_exceeded`). A market order sent without one came
-/// back `price_less_than_min_price` (2026-10-31), so there is no "off".
+/// fill past it (`market.order.market_price_exceeded`). The exchange requires it on a market
+/// order (`market.order.missing_max_price`, 2026-11-01), so there is no "off".
 enum TradeSlippage {
     static let storageKey = "safetrade.slippagePercent"
     static let defaultPercent = 15.0

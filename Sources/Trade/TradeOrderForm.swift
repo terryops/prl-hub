@@ -87,7 +87,7 @@ struct OrderFormView: View {
     private var canOrder: Bool {
         store.hasCredentials && !store.placing && store.unverifiedOrder == nil && parsed && volNum > 0
             && (ordType == "market" || priceNum > 0) && ruleProblem == nil && !insufficient
-            && (ordType == "limit" || (marketAvg != nil && !capExceeded))
+            && (ordType == "limit" || (marketAvg != nil && marketCap != nil && !capExceeded))
     }
     private var confirmMessage: String {
         let head = (side == "buy" ? Loc("买入") : Loc("卖出")) + Loc(" %@ PEARL", volume)

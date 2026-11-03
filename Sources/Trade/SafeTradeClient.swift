@@ -460,8 +460,12 @@ extension SafeTradeError {
     private static func orderMessage(forKey key: String) -> String? {
         let t = Set(SafeTradeAuthProblem.tokens(key))
         if t.contains("insufficient") && t.contains("balance") { return Loc("SafeTrade 可用余额不足") }
+        // A required field didn't arrive (`missing_max_price`): ours to fix, so keep the raw
+        // key on screen rather than a price message that sends the user after the wrong cause.
+        if t.contains("missing") { return nil }
         // `market_price_exceeded`: the fill would pass the market order's price cap.
-        if t.contains("liquidity") || (t.contains("price") && t.contains("exceeded")) {
+        // `market_insufficient`: not enough on the book to fill it.
+        if t.contains("liquidity") || t.contains("insufficient") || (t.contains("price") && t.contains("exceeded")) {
             return Loc("盘口深度不够，市价单成交不了这么多，请减少数量或改用限价单")
         }
         if t.contains("round") && t.contains("price") { return Loc("价格的小数位太多") }
@@ -569,7 +573,7 @@ struct SafeTradeClient {
 
     /// `path` is a full `/api/v2/...` path (namespaces differ per resource).
     private func send(_ path: String, method: String = "GET",
-                      query: [URLQueryItem] = [], form: [String: String]? = nil, json: [String: Any]? = nil,
+                      query: [URLQueryItem] = [], json: [String: Any]? = nil,
                       auth: Auth = .none) async throws -> Data {
         let credentials: (key: String, secret: String)?
         // A build without the account feature never signs a request (App Review 3.1.5(iii)):
@@ -590,12 +594,6 @@ struct SafeTradeClient {
         req.httpMethod = method
         req.timeoutInterval = 20
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let form {
-            req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-            var body = URLComponents()
-            body.queryItems = form.map { URLQueryItem(name: $0.key, value: $0.value) }
-            req.httpBody = body.percentEncodedQuery?.data(using: .utf8)
-        }
         if let json {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = try JSONSerialization.data(withJSONObject: json)
@@ -864,16 +862,24 @@ struct SafeTradeClient {
         }
     }
 
+    /// The order body, sent as JSON with string values like SafeTrade's web client. A form
+    /// body loses `max_price`: the exchange answers `market.order.missing_max_price` to a
+    /// form-encoded market order that has it (checked live 2026-11-01).
+    static func orderBody(market: String, side: String, amount: String,
+                          price: String?, maxPrice: String?, type: String) -> [String: String] {
+        var body = ["market": SafeTradeMarket.normalized(market), "side": side, "amount": amount, "type": type]
+        if type == "limit", let price { body["price"] = price }
+        if type == "market", let maxPrice { body["max_price"] = maxPrice }
+        return body
+    }
+
     /// `maxPrice` is a market order's price cap (see `SafeTradeMarketRules.marketPriceCap`).
     func placeOrder(market: String, side: String, amount: String,
                     price: String?, maxPrice: String? = nil, type: String) async throws -> STOrder {
-        let market = SafeTradeMarket.normalized(market)
-        var form = ["market": market, "side": side, "amount": amount, "type": type]
-        if type == "limit", let price { form["price"] = price }
-        if type == "market", let maxPrice { form["max_price"] = maxPrice }
+        let body = Self.orderBody(market: market, side: side, amount: amount, price: price, maxPrice: maxPrice, type: type)
         let data: Data
         do {
-            data = try await send("/api/v2/trade/market/orders", method: "POST", form: form, auth: .stored)
+            data = try await send("/api/v2/trade/market/orders", method: "POST", json: body, auth: .stored)
         } catch let e as URLError where Self.isAmbiguousPostFailure(e) {
             // The POST body may have reached the exchange and BOOKED the order before
             // the response was lost (timeout / connection dropped / TLS mid-flight).

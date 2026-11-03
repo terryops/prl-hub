@@ -92,6 +92,30 @@ struct SafeTradeErrorTests {
         }
         #expect(SafeTradeError.message(forKey: "market.order.something_new") == nil)
         #expect(SafeTradeError.message(forKey: "account.withdraw.invalid_otp_code") != nil)
+        // Not enough on the book (SafeTrade's current key) reads like the old liquidity one.
+        #expect(SafeTradeError.message(forKey: "market.order.market_insufficient")
+                == SafeTradeError.message(forKey: "market.order.insufficient_market_liquidity"))
+        #expect(SafeTradeError.message(forKey: "market.account.insufficient_balance") == Loc("SafeTrade 可用余额不足"))
+        // A field the exchange didn't get is not a price problem: the raw key stays visible.
+        #expect(SafeTradeError.message(forKey: "market.order.missing_max_price") == nil)
+        #expect(SafeTradeError.http(422, #"{"errors":["market.order.missing_max_price"]}"#).errorDescription?
+                    .contains("missing_max_price") == true)
+    }
+
+    /// Orders go out as JSON with string values, as SafeTrade's web client sends them: the
+    /// exchange drops `max_price` from a form body (`missing_max_price`, live 2026-11-01).
+    @Test func orderBodyMatchesWebClient() throws {
+        let market = SafeTradeClient.orderBody(market: "pearlusdt", side: "sell", amount: "71.2606",
+                                               price: "1.5", maxPrice: "1.22", type: "market")
+        #expect(market == ["market": "pearlusdt", "side": "sell", "type": "market", "amount": "71.2606", "max_price": "1.22"])
+        let limit = SafeTradeClient.orderBody(market: "pearlusdt", side: "buy", amount: "10",
+                                              price: "1.43", maxPrice: "1.6", type: "limit")
+        #expect(limit == ["market": "pearlusdt", "side": "buy", "type": "limit", "amount": "10", "price": "1.43"])
+        // Strings survive the JSON encoding as strings (no 1.22 → 1.2199999).
+        let json = try JSONSerialization.data(withJSONObject: market)
+        let back = try JSONSerialization.jsonObject(with: json) as? [String: Any]
+        #expect(back?["max_price"] as? String == "1.22")
+        #expect(back?["amount"] as? String == "71.2606")
     }
 
     @Test func ambiguousPostOutcomes() {
