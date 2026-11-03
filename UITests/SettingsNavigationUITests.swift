@@ -44,6 +44,12 @@ import XCTest
         app.navigationBars.buttons.firstMatch.tap()
     }
 
+    /// An ⓘ popover closes on a tap outside it; the dismiss region is the system's own.
+    private func dismissPopover(in app: XCUIApplication) {
+        let dismiss = app.otherElements["PopoverDismissRegion"]
+        if dismiss.exists { dismiss.tap() } else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95)).tap() }
+    }
+
     private func capture(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
@@ -60,7 +66,12 @@ import XCTest
         back(in: app)
 
         open("settings-wallet", title: "钱包与安全", in: app)
-        XCTAssertTrue(app.staticTexts["助记词加密存于钥匙串；查看助记词与转账需 Face ID / Touch ID 验证。"].exists)
+        // The explanation lives behind the ⓘ by the 安全 header now: tap it, read it, close it.
+        app.buttons["安全"].tap()
+        XCTAssertTrue(app.staticTexts["助记词加密存于钥匙串；查看助记词与转账需 Face ID / Touch ID 验证。"].waitForExistence(timeout: 3))
+        capture("settings-wallet-info-tip")
+        dismissPopover(in: app)
+        XCTAssertTrue(app.buttons["安全性说明"].exists)
         back(in: app)
 
         open("settings-pro", title: "Pro 会员", in: app)
@@ -70,8 +81,11 @@ import XCTest
         let account = app.buttons["pro-sync-account"]
         for _ in 0..<5 where !account.isHittable { app.swipeUp() }
         XCTAssertTrue(account.isHittable)
-        XCTAssertTrue(app.staticTexts["用邮箱登录，同步矿机、挖矿配置、监控、公开地址、通讯录、提醒和偏好设置。助记词、私钥和钱包密码不会上传。"].exists)
+        app.buttons["跨设备数据同步"].tap()
+        let syncInfo = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "助记词、私钥和钱包密码不会上传。")).firstMatch
+        XCTAssertTrue(syncInfo.waitForExistence(timeout: 3))
         capture("settings-pro-sync-details")
+        dismissPopover(in: app)
         account.tap()
         XCTAssertTrue(app.navigationBars["邮箱账号"].waitForExistence(timeout: 5))
         back(in: app)

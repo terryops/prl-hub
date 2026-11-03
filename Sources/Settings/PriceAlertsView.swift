@@ -39,8 +39,6 @@ struct PriceAlertsView: View {
                 } else {
                     ProPaywallCard(pro: pro)
                 }
-                PearlInfoRow(Loc("价格提醒只需要本机的推送令牌和提醒条件，不涉及钱包地址或余额。"), systemImage: "lock.shield")
-                    .padding(.horizontal, Pearl.Space.xs)
             }
             .padding(Pearl.Space.screen)
             .frame(maxWidth: 560)
@@ -79,7 +77,15 @@ struct PriceAlertsView: View {
         VStack(alignment: .leading, spacing: Pearl.Space.md) {
             HStack(alignment: .center, spacing: Pearl.Space.md) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(Loc("PRL 提醒参考价")).font(.caption).foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Text(Loc("PRL 提醒参考价")).font(.caption).foregroundStyle(.secondary)
+                        // The worker prices off SafeTrade (same as the wallet) and only falls
+                        // back to the three-exchange median while its SafeTrade relay is down.
+                        PearlInfoTip(quote?.source == "median"
+                                     ? Loc("每分钟更新 · CoinEx、BigONE、WhatToMine 行情中位数")
+                                     : Loc("每分钟更新 · SafeTrade 行情"),
+                                     title: Loc("PRL 提醒参考价"))
+                    }
                     Text(refPrice.map(PriceAlertFormat.usd) ?? "—")
                         .font(.system(size: 34, weight: .bold, design: .rounded))
                         .monospacedDigit()
@@ -93,11 +99,6 @@ struct PriceAlertsView: View {
                 changeCell(Loc("1 小时"), quote?.change1h)
                 changeCell(Loc("24 小时"), quote?.change24h)
             }
-            // The worker prices off SafeTrade (same as the wallet) and only falls
-            // back to the three-exchange median while its SafeTrade relay is down.
-            Text(quote?.source == "median" ? Loc("每分钟更新 · CoinEx、BigONE、WhatToMine 行情中位数")
-                                           : Loc("每分钟更新 · SafeTrade 行情"))
-                .font(.caption2).foregroundStyle(.secondary)
         }
         .pearlCard()
     }
@@ -119,24 +120,18 @@ struct PriceAlertsView: View {
     private var rulesCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
-                Text(Loc("我的提醒")).font(.headline)
+                HStack(spacing: 4) {
+                    Text(Loc("我的提醒")).font(.headline)
+                    PearlInfoTip(Loc("价格提醒只需要本机的推送令牌和提醒条件，不涉及钱包地址或余额。"),
+                                 title: Loc("我的提醒"))
+                }
                 Spacer()
                 AlertSyncStatus(store: store, active: !store.rules.isEmpty)
             }
             .padding(.bottom, Pearl.Space.sm)
 
-            if store.rules.isEmpty {
-                VStack(spacing: 6) {
-                    Image(systemName: "bell.and.waves.left.and.right")
-                        .font(.title2).foregroundStyle(Pearl.accent.opacity(0.7))
-                    Text(Loc("还没有提醒。添加后，即使没有打开 App 也会收到通知。"))
-                        .font(.subheadline).foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, Pearl.Space.md)
-            } else {
+            // Empty: the 添加提醒 button right below is the next step.
+            if !store.rules.isEmpty {
                 ForEach(Array(store.rules.enumerated()), id: \.element.id) { i, rule in
                     if i > 0 { Divider().padding(.leading, 34 + Pearl.Space.sm) }
                     ruleRow(rule)

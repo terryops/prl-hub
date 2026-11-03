@@ -11,11 +11,11 @@ struct PushHereCard: View {
     var body: some View {
         HStack(spacing: Pearl.Space.md) {
             PearlIconBadge(systemImage: "desktopcomputer", size: 36)
-            VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
                 Text(Loc("在这台 Mac 上推送")).font(.headline)
-                Text(store.pushHere ? Loc("提醒触发时，这台 Mac 也会弹出通知。")
-                                    : Loc("这台 Mac 不弹通知。提醒仍会通过 iCloud 同步，在你的其他设备上推送。"))
-                    .pearlExplanation()
+                PearlInfoTip(store.pushHere ? Loc("提醒触发时，这台 Mac 也会弹出通知。")
+                                            : Loc("这台 Mac 不弹通知。提醒仍会通过 iCloud 同步，在你的其他设备上推送。"),
+                             title: Loc("在这台 Mac 上推送"))
             }
             Spacer(minLength: 0)
             Toggle(Loc("在这台 Mac 上推送"), isOn: Binding(get: { store.pushHere }, set: { store.setPushHere($0) }))
@@ -40,13 +40,13 @@ struct PushWindowCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Pearl.Space.md) {
+            // The segmented choice and the two times say the window; the ⓘ says what
+            // happens to an alert that fires outside it.
             HStack(spacing: Pearl.Space.md) {
                 PearlIconBadge(systemImage: "moon.zzz.fill", size: 36)
-                VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
                     Text(Loc("推送时段")).font(.headline)
-                    Text(summary)
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    PearlInfoTip(summary, title: Loc("推送时段"))
                 }
                 Spacer(minLength: 0)
             }

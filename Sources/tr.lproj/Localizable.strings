@@ -1322,3 +1322,21 @@
 "这个只读钱包的地址不属于 %@ 网络" = "Bu salt okunur cüzdanın adresi %@ ağına ait değil";
 "移除只读钱包" = "Salt okunur cüzdanı kaldır";
 "只从本机删除这个地址，不影响链上资产，之后可以再添加。" = "Yalnızca bu adres cihazdan silinir. Zincirdeki varlıklar etkilenmez, adresi daha sonra yeniden ekleyebilirsiniz.";
+
+"说明" = "Bilgi";
+"联网取价" = "Canlı fiyatlama";
+"自动汇率" = "Otomatik kur";
+"自身算力计入全网" = "Kendi hashrate'ini ağa dahil et";
+"先在「我的监控」添加矿池，再一键同步矿机" = "Önce İzleme'de bir havuz ekleyin, ardından madencilerinizi tek dokunuşla eşitleyin";
+"删除设备" = "Cihazı Sil";
+"数量" = "Adet";
+"每天挖矿时长" = "Günlük Saat";
+"未设芯片" = "Çip seçilmedi";
+"划算" = "Değer";
+"不划算" = "Değmez";
+"盈亏平衡租金" = "Başabaş kira";
+"回报" = "Getiri";
+"保本币价" = "Başabaş fiyat";
+"保本全网算力" = "Başabaş ağ hashrate'i";
+"扣抽水后" = "Havuz ücreti sonrası";
+"功耗" = "Güç";

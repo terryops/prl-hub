@@ -54,28 +54,32 @@ struct PoolView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Pearl.Space.lg) {
-                    HStack(spacing: Pearl.Space.sm) {
-                        PearlSectionHeader(Loc("我的监控"), systemImage: "square.stack.3d.up.fill")
-                        if !store.watches.isEmpty { MonitorLayoutPicker(layout: $layout) }
-                        Button { draft = WatchDraft() } label: {
-                            Label(Loc("添加"), systemImage: "plus")
-                        }.font(.callout)
-                    }
-
                     if store.watches.isEmpty {
-                        VStack(spacing: Pearl.Space.sm) {
-                            PearlEmptyState(systemImage: "square.stack.3d.up",
-                                            title: Loc("添加挖矿监控"),
-                                            message: Loc("点「添加」，选择矿池并填入你的 Pearl 收款地址。可添加多个地址 / 多个矿池。"),
-                                            showsMascot: true)
-                            // Says plainly what this screen is: a reader of pool APIs. The
-                            // device does no mining of any kind (App Store 3.1.5(ii)).
-                            Text(Loc("Pearl Hub 本身不挖矿，仅读取矿池公开数据。"))
-                                .pearlExplanation()
-                                .multilineTextAlignment(.center)
-                                .frame(maxWidth: .infinity)
+                        PearlEmptyState(systemImage: "square.stack.3d.up",
+                                        title: Loc("添加挖矿监控")) {
+                            VStack(spacing: Pearl.Space.md) {
+                                Button { draft = WatchDraft() } label: {
+                                    Label(Loc("添加"), systemImage: "plus")
+                                }
+                                .buttonStyle(.borderedProminent).tint(Pearl.plate)
+                                .controlSize(.large)
+                                // Says plainly what this screen is: a reader of pool APIs. The
+                                // device does no mining of any kind (App Store 3.1.5(ii)).
+                                Text(Loc("Pearl Hub 本身不挖矿，仅读取矿池公开数据。"))
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                     } else {
+                        // No section title: the navigation title already says 我的监控.
+                        HStack(spacing: Pearl.Space.sm) {
+                            MonitorLayoutPicker(layout: $layout)
+                            Spacer(minLength: 0)
+                            Button { draft = WatchDraft() } label: {
+                                Label(Loc("添加"), systemImage: "plus")
+                            }.font(.callout)
+                        }
                         if showsAlertHint {
                             OfflineAlertHintCard(onOpen: { alertHintDismissed = true; showingOfflineAlerts = true },
                                                  onDismiss: { alertHintDismissed = true })
@@ -231,56 +235,48 @@ private struct WatchSheet: View {
     /// F2Pool is the one pool a user can't just paste an address into — the link has to be
     /// generated, and generated with the right coin + permissions, so the sheet walks them
     /// through it rather than leaving a dead end. Permission "收益数据（不含付款信息）" hides the
-    /// payout table we sum for 累计已付, hence the caveat.
+    /// payout table we sum for 累计已付, hence the ⓘ on that step.
     @ViewBuilder
     private var readOnlyPageGuide: some View {
         Section(Loc("如何获取只读页链接")) {
             VStack(alignment: .leading, spacing: 8) {
                 guideStep(1, Loc("登录 f2pool 网站，点右上角头像 →「账户设置」。"))
                 guideStep(2, Loc("左侧选「只读页面」，点「生成」。"))
-                guideStep(3, Loc("币种勾选 PRL；权限勾选「算力与矿机列表」和「收益数据（含付款信息）」。"))
-                guideStep(4, Loc("生成后复制链接，粘贴到上面即可。"))
+                guideStep(3, Loc("币种勾选 PRL；权限勾选「算力与矿机列表」和「收益数据（含付款信息）」。"),
+                          info: Loc("权限若只给「不含付款信息」，其余都能看，但「累计已付」会显示 0。"))
             }
             .padding(.vertical, 2)
-            Text(Loc("权限若只给「不含付款信息」，其余都能看，但「累计已付」会显示 0。"))
-                .pearlExplanation()
-            Text(Loc("链接是只读的，不能动用资金，且可随时在 F2Pool 撤销。"))
-                .pearlExplanation()
             if let u = URL(string: "https://f2pool.zendesk.com/hc/en-us/articles/360058722231") {
                 Link(Loc("查看 F2Pool 官方图文教程"), destination: u).font(.caption)
             }
         }
     }
 
-    private func guideStep(_ n: Int, _ text: String) -> some View {
+    private func guideStep(_ n: Int, _ text: String, info: String? = nil) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("\(n)")
                 .font(.caption2.monospacedDigit().bold())
                 .foregroundStyle(Pearl.onAccent)
                 .frame(width: 16, height: 16)
                 .background(Circle().fill(Pearl.plate))
-            Text(text).pearlExplanation()
+            Text(text).font(.subheadline).fixedSize(horizontal: false, vertical: true)
+            if let info { PearlInfoTip(info) }
         }
     }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section(Loc("矿池")) {
+                // No section title: the picker's own label already says 矿池.
+                Section {
                     // .menu rather than .segmented — with 4+ pools the long names
                     // overflow a segmented control on iPhone.
                     Picker(Loc("矿池"), selection: $newPool) {
                         ForEach(PoolKind.allCases) { Text($0.label).tag($0) }
                     }
                     .pickerStyle(.menu)
-                    Text(newPool.isAddressBased
-                         ? (editingID == nil
-                            ? Loc("选择矿池后，填入你的 Pearl 收款地址即可查询。")
-                            : Loc("更换矿池后将按新矿池重新查询该地址的挖矿数据。"))
-                         : Loc("F2Pool 不支持按地址查询，请粘贴账户的只读页链接。"))
-                        .pearlExplanation()
                 }
-                Section(newPool.isAddressBased ? Loc("挖矿地址") : Loc("只读页链接")) {
+                Section {
                     // Explicit row label + prompt: in a macOS grouped Form the
                     // TextField TITLE renders as the leading label, so a
                     // placeholder-as-title reads as row content with no visible
@@ -315,6 +311,13 @@ private struct WatchSheet: View {
                         if let s = NSPasteboard.general.string(forType: .string) { newAddr = s }
                         #endif
                     }.font(.caption)
+                } header: {
+                    HStack(spacing: 4) {
+                        Text(newPool.isAddressBased ? Loc("挖矿地址") : Loc("只读页链接"))
+                        if !newPool.isAddressBased {
+                            PearlInfoTip(Loc("链接是只读的，不能动用资金，且可随时在 F2Pool 撤销。"))
+                        }
+                    }
                 }
                 if !newPool.isAddressBased { readOnlyPageGuide }
                 // Alias LAST and de-emphasized — it's the only optional field.
@@ -328,8 +331,6 @@ private struct WatchSheet: View {
                         #if os(iOS)
                         .autocorrectionDisabled()
                         #endif
-                    Text(Loc("不填则直接显示矿池名称。"))
-                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
             .formStyle(.grouped)
@@ -533,15 +534,12 @@ struct WatchCard: View {
 
             if !watch.isEnabled {
                 // Paused: no stats, and crucially NO spinner — `data` is nil for a paused watch
-                // (the store drops it), and the loading branch below would spin forever.
-                VStack(alignment: .leading, spacing: Pearl.Space.sm) {
-                    Label(Loc("已暂停，不再获取数据"), systemImage: "pause.circle")
-                        .font(.callout).foregroundStyle(.secondary)
-                    Button { onSetEnabled(true) } label: {
-                        Label(Loc("恢复监控"), systemImage: "play.fill").font(.caption)
-                    }
-                    .buttonStyle(.bordered).controlSize(.small)
+                // (the store drops it), and the loading branch below would spin forever. The
+                // 已暂停 tag beside the name says what state it's in; this is the way out.
+                Button { onSetEnabled(true) } label: {
+                    Label(Loc("恢复监控"), systemImage: "play.fill").font(.caption)
                 }
+                .buttonStyle(.bordered).controlSize(.small)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, Pearl.Space.xs)
             } else if let d = data {
@@ -763,8 +761,7 @@ struct WatchCard: View {
                 Text(f(daily / ph, 2) + " PRL/P")
                     .font(.caption.monospacedDigit()).foregroundStyle(Pearl.teal)
                     .lineLimit(1).minimumScaleFactor(0.6)
-                Spacer(minLength: Pearl.Space.xs)
-                Text(Loc("实测效率")).font(.caption2).foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             }
         }
     }

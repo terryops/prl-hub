@@ -23,8 +23,7 @@ struct SafeTradeSettingsSection: View {
     }
 
     var body: some View {
-        Section(Loc("交易（SafeTrade）")) {
-            LabeledContent(Loc("交易所"), value: "safetrade.com")
+        Section {
             // Two mutually-exclusive modes: once keys are saved, show only their masked
             // status + 清除密钥; clearing flips back to the input fields.
             if let masked {
@@ -43,7 +42,15 @@ struct SafeTradeSettingsSection: View {
             Button { showingGuide = true } label: {
                 Label(Loc("如何获取 API 密钥"), systemImage: "questionmark.circle")
             }
-            PearlInfoRow(Loc("API 密钥存于 iCloud 钥匙串（端到端加密，仅你可见），在各设备间同步；助记词不同步，仅存于本机钥匙串。"), systemImage: "key.icloud")
+        } header: {
+            // The page is already titled 交易（SafeTrade）: the section names what it holds.
+            // Where the keys are kept is in the ⓘ (in the header, not a row: a tip inside a
+            // Form row would share the row's tap with its button).
+            HStack(spacing: 4) {
+                Text(Loc("SafeTrade API 密钥"))
+                PearlInfoTip(Loc("API 密钥存于 iCloud 钥匙串（端到端加密，仅你可见），在各设备间同步；助记词不同步，仅存于本机钥匙串。"),
+                             title: Loc("SafeTrade API 密钥"))
+            }
         }
         .sheet(isPresented: $showingGuide) { SafeTradeKeyGuide() }
         .onAppear { masked = Self.readMasked() }

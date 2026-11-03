@@ -86,14 +86,13 @@ struct DonateView: View {
         VStack(spacing: Pearl.Space.lg) {
             VStack(spacing: Pearl.Space.sm) {
                 PearlIconBadge(systemImage: "heart.fill", gradient: Pearl.sunrise, size: 56)
-                Text(Loc("喜欢 Pearl Hub？请开发者喝杯咖啡"))
-                    .font(.headline).multilineTextAlignment(.center)
-                PearlBadge(text: Loc("开源项目 · GPL-3.0"),
-                           systemImage: "chevron.left.forwardslash.chevron.right", tint: Pearl.accent)
-                Text(Loc("Pearl Hub 是开源项目，全部代码公开在 GitHub，没有广告和追踪。基础功能一直免费，捐赠和高级版的收入用来支付服务器和节点费用、维持更新。"))
-                    .pearlExplanation()
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+                // What the money is for sits behind the ⓘ; the presets below carry the page.
+                HStack(spacing: 4) {
+                    Text(Loc("喜欢 Pearl Hub？请开发者喝杯咖啡"))
+                        .font(.headline).multilineTextAlignment(.center)
+                    PearlInfoTip(Loc("Pearl Hub 是开源项目，全部代码公开在 GitHub，没有广告和追踪。基础功能一直免费，捐赠和高级版的收入用来支付服务器和节点费用、维持更新。"),
+                                 title: Loc("支持开发者"))
+                }
                 Link(destination: AppLinks.github) {
                     Label(Loc("在 GitHub 查看源码"), systemImage: "arrow.up.right.square")
                 }
@@ -149,15 +148,14 @@ struct DonateView: View {
 
             VStack(spacing: Pearl.Space.xxs) {
                 Text(Loc("可用余额 %@ PRL", store.balance.available.formatted(.number.precision(.fractionLength(0...8)).locale(LocBundleHolder.shared.locale))))
-                Text(Loc("开发者地址 %@", shortAddr(Donation.address)))
-                    .font(.caption.monospaced())
+                HStack(spacing: 4) {
+                    Text(Loc("开发者地址 %@", shortAddr(Donation.address)))
+                        .font(.caption.monospaced())
+                    // The next step (确认捐赠) shows the full address, the fee and the total.
+                    PearlInfoTip(Loc("捐赠会从当前钱包直接转到开发者地址，在本机签名并广播，手续费从余额扣除。"))
+                }
             }
             .font(.caption).foregroundStyle(.secondary)
-
-            Text(Loc("捐赠会从当前钱包直接转到开发者地址，在本机签名并广播，手续费从余额扣除。"))
-                .pearlExplanation()
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
 
             if preparing {
                 ProgressView(Loc("正在构建交易…"))

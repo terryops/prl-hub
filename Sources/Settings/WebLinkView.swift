@@ -14,11 +14,8 @@ struct WebLinkView: View {
                 management
             } else {
                 if let offer = link.offer { signedInElsewhere(offer) }
-                Section {
-                    whatSyncs
-                    proOnly
-                }
-                .pearlListRowSurface()
+                Section { syncSummary }
+                    .pearlListRowSurface()
                 signIn
             }
         }
@@ -34,9 +31,21 @@ struct WebLinkView: View {
     /// been signed out uses it by itself; this is for one that has, or was offline then.
     private func signedInElsewhere(_ offer: DeviceTicket) -> some View {
         Section {
-            PearlInfoRow(offer.email.map { Loc("%@ 已在你的其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。", $0) }
-                            ?? Loc("你的账号已在其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。"),
-                         title: Loc("其他设备已登录"), systemImage: "laptopcomputer.and.iphone")
+            // Which account, and the one button; no code and nothing lost is in the ⓘ.
+            HStack(spacing: Pearl.Space.sm) {
+                SettingsGlyph(systemImage: "laptopcomputer.and.iphone")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(Loc("其他设备已登录")).font(.headline)
+                    if let email = offer.email {
+                        Text(verbatim: email).font(.subheadline).foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.middle)
+                    }
+                }
+                Spacer(minLength: Pearl.Space.sm)
+                PearlInfoTip(offer.email.map { Loc("%@ 已在你的其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。", $0) }
+                                ?? Loc("你的账号已在其他设备上登录。这台设备可以直接登录，不用收验证码，现有配置会保留。"),
+                             title: Loc("其他设备已登录"))
+            }
             Button(Loc("直接登录")) { Task { await link.join(automatic: false) } }
                 .buttonStyle(.pearl)
                 .frame(maxWidth: 420)
@@ -50,29 +59,24 @@ struct WebLinkView: View {
     private var signIn: some View {
         Section {
             // The usual way in is the one button; starting from the account's settings
-            // alone is the alternative, so it is a quieter row beneath it.
-            VStack(alignment: .leading, spacing: Pearl.Space.xs) {
-                Button(Loc("用邮箱登录")) { Task { await link.login(importLocal: true) } }
-                    .buttonStyle(.pearl)
-                    .frame(maxWidth: 420)
-                Text(Loc("这台设备上现有的配置会保留，并加入你的账号。"))
-                    .pearlExplanation()
-            }
-            .padding(.vertical, Pearl.Space.xxs)
-            Button { Task { await link.login(importLocal: false) } } label: {
-                VStack(alignment: .leading, spacing: 2) {
+            // alone is the alternative, so it is a quieter row beneath it. What each does to
+            // this device's settings: the hint on the first, the ⓘ beside the second.
+            Button(Loc("用邮箱登录")) { Task { await link.login(importLocal: true) } }
+                .buttonStyle(.pearl)
+                .frame(maxWidth: 420)
+                .accessibilityHint(Loc("这台设备上现有的配置会保留，并加入你的账号。"))
+                .padding(.vertical, Pearl.Space.xxs)
+            HStack(spacing: 4) {
+                Button { Task { await link.login(importLocal: false) } } label: {
                     Text(Loc("登录后只用账号里的配置")).font(.subheadline).foregroundStyle(Pearl.accent)
-                    // The alternative stays quiet: small grey print, unlike the points above.
-                    Text(Loc("这台设备现有的配置会先收起来，退出登录后恢复。"))
-                        .font(.footnote).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .contentShape(Rectangle())
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .accessibilityHint(Loc("这台设备现有的配置会先收起来，退出登录后恢复。"))
+                PearlInfoTip(Loc("这台设备现有的配置会先收起来，退出登录后恢复。"),
+                             title: Loc("登录后只用账号里的配置"))
+                Spacer(minLength: 0)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Loc("登录后只用账号里的配置"))
-            .accessibilityHint(Loc("这台设备现有的配置会先收起来，退出登录后恢复。"))
             if link.signingIn {
                 HStack(spacing: Pearl.Space.xs) {
                     ProgressView().controlSize(.small)
@@ -130,19 +134,22 @@ struct WebLinkView: View {
 
     private var syncing: some View {
         Section {
-            Button { Task { await link.sync() } } label: {
-                action(Loc("立即同步"), systemImage: "arrow.clockwise")
+            HStack(spacing: Pearl.Space.xs) {
+                Button { Task { await link.sync() } } label: {
+                    action(Loc("立即同步"), systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.plain)
+                .disabled(link.state == .syncing || link.accountPro != true)
+                // Why the button is off: sync is a Pro feature.
+                if link.accountPro != true { PearlBadge(text: Loc("高级版"), tint: Pearl.accent) }
+                syncTip(proOnly: link.accountPro != true)
             }
-            .buttonStyle(.plain)
-            .disabled(link.state == .syncing || link.accountPro != true)
-            whatSyncs
-            if link.accountPro != true { proOnly }
         }
         .pearlListRowSurface()
     }
 
     private var membership: some View {
-        Section(Loc("高级版")) {
+        Section {
             if let pro = link.accountPro {
                 HStack(spacing: Pearl.Space.sm) {
                     SettingsGlyph(systemImage: "sparkles")
@@ -156,8 +163,12 @@ struct WebLinkView: View {
             }
             .buttonStyle(.plain)
             .disabled(link.signingIn)
-            PearlInfoRow(Loc("在其他设备或网页版登录同一邮箱，App Store 购买的高级版也能使用。"),
-                         title: Loc("同一邮箱共享购买"), systemImage: "person.2")
+        } header: {
+            HStack(spacing: 4) {
+                Text(Loc("高级版"))
+                PearlInfoTip(Loc("在其他设备或网页版登录同一邮箱，App Store 购买的高级版也能使用。"),
+                             title: Loc("同一邮箱共享购买"))
+            }
         }
         .pearlListRowSurface()
     }
@@ -191,16 +202,25 @@ struct WebLinkView: View {
 
     // MARK: Shared rows
 
-    /// What an account carries between devices, and what never leaves this one.
-    @ViewBuilder private var whatSyncs: some View {
-        PearlInfoRow(Loc("同步矿机、挖矿配置、监控、公开地址、通讯录、提醒和偏好设置。"),
-                     title: Loc("跨设备数据同步"), systemImage: "arrow.triangle.2.circlepath")
-        PearlInfoRow(Loc("助记词、私钥和钱包密码不会上传。"),
-                     title: Loc("密钥留在本机"), systemImage: "lock.shield")
+    /// Before signing in: what the account is for, and that it takes Pro.
+    private var syncSummary: some View {
+        HStack(spacing: Pearl.Space.sm) {
+            SettingsGlyph(systemImage: "arrow.triangle.2.circlepath")
+            Text(Loc("跨设备数据同步"))
+            Spacer(minLength: Pearl.Space.sm)
+            PearlBadge(text: Loc("高级版"), tint: Pearl.accent)
+            syncTip(proOnly: true)
+        }
     }
 
-    private var proOnly: some View {
-        PearlInfoRow(Loc("免费账号的数据仅保存在本机。"), title: Loc("同步需要 Pro"), systemImage: "sparkles")
+    /// What an account carries between devices, what never leaves this one, and — without
+    /// Pro — that nothing syncs yet.
+    private func syncTip(proOnly: Bool) -> some View {
+        var text = Loc("同步矿机、挖矿配置、监控、公开地址、通讯录、提醒和偏好设置。")
+            + "\n" + Loc("助记词、私钥和钱包密码不会上传。")
+        // The 高级版 badge beside it says sync takes Pro; this says what that means meanwhile.
+        if proOnly { text += "\n\n" + Loc("免费账号的数据仅保存在本机。") }
+        return PearlInfoTip(text, title: Loc("跨设备数据同步"))
     }
 
     /// A row that does something: the glyph column of the settings list, then its title.

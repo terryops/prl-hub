@@ -35,25 +35,10 @@ struct WelcomeView: View {
                 PearlHero(minHeight: 190) {
                     VStack(spacing: Pearl.Space.sm) {
                         PearlLogo(size: 72, showsWordmark: false)
-                            .overlay(alignment: .bottomTrailing) {
-                                PearlMascot(size: 40).offset(x: 20, y: 8)
-                            }
-                            .padding(.trailing, 16)
-                            .padding(.bottom, 8)
                         Text(Loc("$Pearl Hub"))
                             .font(.largeTitle.bold())
                             .foregroundStyle(Pearl.onHero)
-                        Text(Loc("自托管 · 私钥与签名留在本机（钥匙串 / 安全隔区）"))
-                            .font(.callout)
-                            .foregroundStyle(Pearl.onHero.opacity(0.9))
-                            .multilineTextAlignment(.center)
                     }
-                }
-
-                VStack(spacing: Pearl.Space.md) {
-                    feature("lock.shield", Loc("安全存储"), Loc("助记词加密存于本机钥匙串，永不上传服务器"), nil)
-                    feature("arrow.left.arrow.right", Loc("便捷收发"), Loc("链上同步与广播交给远程节点"), Pearl.mint)
-                    feature("chart.line.uptrend.xyaxis", Loc("行情与算力"), Loc("内置 PRL 挖矿监控"), Pearl.sunrise)
                 }
 
                 if !store.frameworkOK {
@@ -82,14 +67,8 @@ struct WelcomeView: View {
                     .buttonStyle(.bordered).controlSize(.large)
                     .disabled(!store.frameworkOK)
 
-                    NavigationLink {
-                        WatchWalletView(store: store)
-                    } label: {
-                        WatchWalletOption()
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("watch-wallet-option")
-                    .padding(.top, Pearl.Space.sm)
+                    WatchWalletOption { WatchWalletView(store: store) }
+                        .padding(.top, Pearl.Space.xs)
                 }
                 .padding(.top, Pearl.Space.xs)
 
@@ -107,18 +86,6 @@ struct WelcomeView: View {
         }
         .navigationTitle(Loc("欢迎"))
     }
-
-    @ViewBuilder private func feature(_ icon: String, _ title: String, _ sub: String, _ gradient: LinearGradient?) -> some View {
-        HStack(spacing: Pearl.Space.md) {
-            PearlIconBadge(systemImage: icon, gradient: gradient, size: 44)
-            VStack(alignment: .leading, spacing: Pearl.Space.xxs) {
-                Text(title).font(.headline)
-                Text(sub).pearlExplanation()
-            }
-            Spacer()
-        }
-        .pearlCard(padding: Pearl.Space.md)
-    }
 }
 
 // MARK: - Unlock (wallet exists, locked)
@@ -135,7 +102,6 @@ struct UnlockView: View {
             }
             VStack(spacing: Pearl.Space.xs) {
                 Text(Loc("%@ 已锁定", store.walletName)).font(.title.bold())
-                Text(Loc("点按解锁继续")).font(.callout).foregroundStyle(.secondary)
                 if let err = store.lastError {
                     Label(err, systemImage: "exclamationmark.triangle")
                         .font(.footnote).foregroundStyle(.orange)

@@ -11,6 +11,7 @@ struct TradeView: View {
 
     @State private var orderToCancel: STOrder?
     @State private var showingKeyGuide = TradeView.shotKeyGuide  // 如何获取 API 密钥
+    @State private var showingKeySetup = false                  // the key fields (设置 → 交易) in a sheet
     @State private var withdrawing: WithdrawCurrency? = TradeView.shotWithdraw
     @State private var depositing: WithdrawCurrency? = TradeView.shotDeposit
     @State private var sideColumnWidth: CGFloat = 20   // measured width of the 买/卖 column
@@ -105,6 +106,22 @@ struct TradeView: View {
             .sheet(item: $withdrawing) { WithdrawView(trade: store, currency: $0.id).environmentObject(contacts) }
             .sheet(item: $depositing) { DepositView(trade: store, currency: $0.id).environmentObject(contacts) }
             .sheet(isPresented: $showingKeyGuide) { SafeTradeKeyGuide() }
+            // The same page as 设置 → 交易（SafeTrade）, so the missing-key card can open it
+            // directly. Closing it picks up whatever was saved.
+            .sheet(isPresented: $showingKeySetup, onDismiss: { Task { await store.refresh() } }) {
+                NavigationStack {
+                    TradeSettingsView()
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button(Loc("完成")) { showingKeySetup = false }
+                            }
+                            .noGlassBackground()
+                        }
+                }
+                #if os(macOS)
+                .frame(minWidth: 460, minHeight: 420)
+                #endif
+            }
             .sheet(isPresented: $upsell.showing, onDismiss: {
                 if ProStore.shared.isPro { openAlerts = true }
             }) { ProUpsellSheet() }
@@ -205,17 +222,21 @@ struct TradeView: View {
         if let issue = store.ipIssue { UntrustedIPCard(issue: issue) }
     }
 
+    /// No keys yet: the button opens the key fields themselves, so nothing has to
+    /// say where they live; the guide is the way to get a key in the first place.
     private var credWarning: some View {
-        HStack(alignment: .top, spacing: Pearl.Space.md) {
+        HStack(spacing: Pearl.Space.md) {
             PearlIconBadge(systemImage: "exclamationmark.triangle.fill", gradient: Pearl.sunrise, size: 40)
-            VStack(alignment: .leading, spacing: Pearl.Space.xs) {
-                Label(Loc("未配置 SafeTrade API 密钥"), systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
-                    .labelStyle(.titleOnly).font(.subheadline.weight(.semibold))
-                Text(Loc("前往「设置 → 交易（SafeTrade）」填入 API Key / Secret 后即可下单。"))
-                    .pearlExplanation()
+            VStack(alignment: .leading, spacing: Pearl.Space.xxs) {
+                Text(Loc("未配置 SafeTrade API 密钥"))
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
                 Button(Loc("如何获取 API 密钥")) { showingKeyGuide = true }
                     .buttonStyle(.borderless).font(.caption.weight(.semibold)).tint(Pearl.accent)
             }
+            Spacer(minLength: Pearl.Space.sm)
+            Button(Loc("添加")) { showingKeySetup = true }
+                .buttonStyle(.borderedProminent).tint(Pearl.plate)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)

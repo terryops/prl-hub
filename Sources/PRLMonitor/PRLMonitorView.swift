@@ -23,8 +23,6 @@ struct PRLMonitorView: View {
     // 参数（测算输入）不再占一个胶囊：改从导航栏右上角以 sheet 弹出。胶囊条因此
     // 从 5 → 4（长翻译不再挤），参数仍归挖矿 tab、与仪表盘相邻——调完一关即见卡片变化。
     @State private var showingParams = false
-    // First-run hint: point newcomers at the add-pools → sync-devices flow.
-    @AppStorage("prlmonitor.introSeen") private var introSeen = false
 
     enum Section: String, CaseIterable, Identifiable {
         case dashboard = "概览", pools = "矿池", devices = "我的设备", catalog = "显卡对比"
@@ -43,10 +41,9 @@ struct PRLMonitorView: View {
 
                 Divider()
 
-                if !introSeen { introBanner }
-
                 switch section {
-                case .dashboard: DashboardSection(store: store)
+                case .dashboard:
+                    DashboardSection(store: store) { withAnimation(.snappy) { section = .devices } }
                 case .pools:     PoolsOverviewSection()
                 case .devices:   DevicesSection(store: store)
                 case .catalog:   CatalogSection(store: store)
@@ -58,6 +55,20 @@ struct PRLMonitorView: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
+                // App Review has misread this tab as on-device mining (3.1.5(ii)); the
+                // statement stays reachable on this screen, one tap away. Both items opt
+                // out of the system's glass capsule (user preference), as in 钱包.
+                #if os(iOS)
+                ToolbarItem(placement: .topBarLeading) {
+                    PearlInfoTip(Loc("Pearl Hub 本身不挖矿，仅读取矿池公开数据。"))
+                }
+                .noGlassBackground()
+                #else
+                ToolbarItem(placement: .navigation) {
+                    PearlInfoTip(Loc("Pearl Hub 本身不挖矿，仅读取矿池公开数据。"))
+                }
+                .noGlassBackground()
+                #endif
                 // 参数入口。用 slider.horizontal.3 而非齿轮：内容就是一组滑块，
                 // 也避免与底部「设置」tab 的 gearshape 撞图标（两个齿轮会让人分不清）。
                 ToolbarItem(placement: .primaryAction) {
@@ -66,6 +77,7 @@ struct PRLMonitorView: View {
                     }
                     .accessibilityLabel(Loc("参数"))
                 }
+                .noGlassBackground()
             }
             .sheet(isPresented: $showingParams) {
                 NavigationStack {
@@ -98,32 +110,6 @@ struct PRLMonitorView: View {
         // and the daily rate refresh (no-op while the user pinned a manual rate).
         .onChange(of: currency.secondaryPref) { _, _ in store.syncFx() }
         .onChange(of: currency.lastUpdated) { _, _ in store.syncFx() }
-    }
-
-    /// Dismissible first-run tip: you add pools/addresses in 我的监控, then one-tap
-    /// sync them into devices from 我的设备 → 从矿池同步.
-    private var introBanner: some View {
-        HStack(alignment: .top, spacing: Pearl.Space.sm) {
-            Image(systemName: "lightbulb.fill").foregroundStyle(Pearl.gold)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(Loc("新手提示")).font(.callout.weight(.semibold))
-                Text(Loc("先到「我的监控」添加你的矿池和挖矿地址；再回到「我的设备」点『从矿池同步』，即可一键把矿机同步成设备。"))
-                    .pearlExplanation()
-                Text(Loc("Pearl Hub 本身不挖矿，仅读取矿池公开数据。"))
-                    .pearlExplanation()
-            }
-            Spacer(minLength: 0)
-            Button { withAnimation(.snappy) { introSeen = true } } label: {
-                Image(systemName: "xmark.circle.fill").font(.body).foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Loc("知道了"))
-        }
-        .padding(Pearl.Space.md)
-        .background(Pearl.gold.opacity(0.10), in: RoundedRectangle(cornerRadius: Pearl.Radius.md, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Pearl.Radius.md, style: .continuous).strokeBorder(Pearl.gold.opacity(0.25), lineWidth: 1))
-        .padding(.horizontal, Pearl.Space.md)
-        .padding(.vertical, Pearl.Space.sm)
     }
 }
 
@@ -173,6 +159,7 @@ private struct SectionTabBar: View {
 // MARK: - 通用组件
 
 struct StatCard: View {
+    /// `sub` carries a unit / source / data qualifier; "" = no line at all.
     let title: String, value: String, sub: String
     var color: Color = .primary
     var body: some View {
@@ -180,7 +167,9 @@ struct StatCard: View {
             Text(title).font(.subheadline).foregroundColor(.secondary)
             Text(value).font(.system(.title2, design: .rounded).weight(.bold))
                 .foregroundColor(color).monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
-            Text(sub).font(.caption).foregroundColor(.secondary)
+            if !sub.isEmpty {
+                Text(sub).font(.caption).foregroundColor(.secondary)
+            }
         }
         .padding(Pearl.Space.md)
         // Fill the grid row's height so cards side by side line up even when one

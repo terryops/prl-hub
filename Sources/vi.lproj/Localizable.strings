@@ -1322,3 +1322,21 @@
 "这个只读钱包的地址不属于 %@ 网络" = "Địa chỉ của ví chỉ đọc này không thuộc mạng %@";
 "移除只读钱包" = "Xóa ví chỉ đọc";
 "只从本机删除这个地址，不影响链上资产，之后可以再添加。" = "Chỉ xóa địa chỉ này khỏi máy, không ảnh hưởng tài sản trên chuỗi, bạn có thể thêm lại sau.";
+
+"说明" = "Thông tin";
+"联网取价" = "Lấy giá trực tuyến";
+"自动汇率" = "Tỷ giá tự động";
+"自身算力计入全网" = "Tính hashrate của bạn vào toàn mạng";
+"先在「我的监控」添加矿池，再一键同步矿机" = "Thêm pool trong Theo dõi trước, rồi đồng bộ máy đào chỉ với một chạm";
+"删除设备" = "Xóa thiết bị";
+"数量" = "Số lượng";
+"每天挖矿时长" = "Số giờ mỗi ngày";
+"未设芯片" = "Chưa đặt chip";
+"划算" = "Đáng thuê";
+"不划算" = "Không đáng";
+"盈亏平衡租金" = "Giá thuê hòa vốn";
+"回报" = "Lợi nhuận";
+"保本币价" = "Giá hòa vốn";
+"保本全网算力" = "Hashrate mạng hòa vốn";
+"扣抽水后" = "Sau phí pool";
+"功耗" = "Công suất";

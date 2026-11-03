@@ -25,10 +25,12 @@ enum PriceAlertFormat {
         }
     }
 
+    /// What the title doesn't already say: the direction of 到达, the window of a move,
+    /// how often, and when it last fired. ("涨到 $X" needs no "到价提醒" under it.)
     static func subtitle(_ r: PriceAlertRule) -> String {
-        let what: String
+        let what: String?
         switch r.kind {
-        case .above, .below: what = Loc("到价提醒")
+        case .above, .below: what = nil
         case .reach: what = Loc("涨破或跌破")
         case .move:
             switch r.window {
@@ -37,7 +39,8 @@ enum PriceAlertFormat {
             default:   what = Loc("24 小时内")
             }
         }
-        let detail = what + " · " + (r.isRepeating ? Loc("持续提醒") : Loc("仅提醒一次"))
+        let frequency = r.isRepeating ? Loc("持续提醒") : Loc("仅提醒一次")
+        let detail = what.map { $0 + " · " + frequency } ?? frequency
         guard let t = r.lastPushed else { return detail }
         return detail + " · " + Loc("上次提醒：%@", RelTime(t))
     }

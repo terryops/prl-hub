@@ -18,20 +18,12 @@ struct WebVersionView: View {
     var body: some View {
         SettingsPage(Loc("网页版")) {
             Section {
-                PearlInfoRow(Loc("在任何电脑的浏览器里看矿机监控、行情、矿池对比和收益计算，不用安装。"),
-                             title: Loc("电脑上也能看"), systemImage: "desktopcomputer")
-                // Only an account that syncs (Pro) finds its monitors there already.
-                if link.isLinked, link.accountPro == true, let email = link.email {
-                    PearlInfoRow(Loc("用 %@ 登录网页版，账号里的监控和提醒会自动同步过去。", email),
-                                 title: Loc("用同一邮箱登录"), systemImage: "arrow.triangle.2.circlepath")
-                }
-            }
-            .pearlListRowSurface()
-            Section {
                 HStack(spacing: Pearl.Space.sm) {
                     Text(verbatim: "pearlhub.net")
                         .font(.title3.monospaced().weight(.semibold))
                         .textSelection(.enabled)
+                    PearlInfoTip(Loc("在任何电脑的浏览器里看矿机监控、行情、矿池对比和收益计算，不用安装。"),
+                                 title: Loc("电脑上也能看"))
                     Spacer(minLength: Pearl.Space.sm)
                     Button(copied ? Loc("已复制") : Loc("复制")) {
                         copyToPasteboard(WebVersion.url.absoluteString)
@@ -50,6 +42,22 @@ struct WebVersionView: View {
                 .buttonStyle(.plain)
             }
             .pearlListRowSurface()
+            // Only an account that syncs (Pro) finds its monitors there already: which email
+            // to sign in with is the one thing to know before going.
+            if link.isLinked, link.accountPro == true, let email = link.email {
+                Section {
+                    LabeledContent {
+                        Text(verbatim: email).lineLimit(1).truncationMode(.middle)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(Loc("用同一邮箱登录"))
+                            PearlInfoTip(Loc("用 %@ 登录网页版，账号里的监控和提醒会自动同步过去。", email),
+                                         title: Loc("用同一邮箱登录"))
+                        }
+                    }
+                }
+                .pearlListRowSurface()
+            }
         }
     }
 
@@ -77,13 +85,12 @@ struct WebVersionHintCard: View {
             Button(action: onOpen) {
                 HStack(spacing: Pearl.Space.md) {
                     PearlIconBadge(systemImage: "desktopcomputer", size: 40)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(Loc("电脑上也能看")).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+                    // Name + address: the card is the way to the address, nothing to read.
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(Loc("网页版")).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
                             .lineLimit(1).minimumScaleFactor(0.8)
-                        Text(Loc("打开 pearlhub.net，监控、币价和提醒都在。"))
-                            .pearlExplanation()
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
+                        Text(verbatim: "pearlhub.net")
+                            .font(.caption.monospaced()).foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right")

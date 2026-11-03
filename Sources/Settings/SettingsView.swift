@@ -117,28 +117,21 @@ struct SettingsGlyph: View {
     }
 }
 
-/// Shared menu treatment; controls and long explanations live on the destination pages.
+/// Shared menu treatment: glyph + title. The row's value (status, count) sits on the
+/// trailing side; what a feature is and how it works lives on its own page.
 private struct SettingsMenuLabel: View {
     let title: String
     let systemImage: String
-    var detail: String? = nil
 
-    init(_ title: String, systemImage: String, detail: String? = nil) {
+    init(_ title: String, systemImage: String) {
         self.title = title
         self.systemImage = systemImage
-        self.detail = detail
     }
 
     var body: some View {
         HStack(spacing: Pearl.Space.sm) {
             SettingsGlyph(systemImage: systemImage)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                if let detail {
-                    Text(detail).font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+            Text(title)
         }
         .padding(.vertical, 2)
     }
@@ -204,8 +197,7 @@ private struct ProSettingsSection: View {
                 LabeledContent {
                     Text(pro.isPro ? Loc("已开通") : Loc("未开通"))
                 } label: {
-                    SettingsMenuLabel(Loc("会员权益"), systemImage: "sparkles",
-                                      detail: Loc("跨设备数据同步"))
+                    SettingsMenuLabel(Loc("会员权益"), systemImage: "sparkles")
                 }
             }
             .accessibilityIdentifier("settings-pro")

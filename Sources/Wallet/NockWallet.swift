@@ -44,30 +44,35 @@ struct NockInlineLink: View {
     static let hiddenKey = "nock.linkHidden"
     @AppStorage(hiddenKey) private var hidden = false
     @State private var confirmingClose = false
-    /// The NOCK badge, shrunk to the line's text size.
-    @ScaledMetric(relativeTo: .caption) private var badge: CGFloat = 17
+    @ScaledMetric(relativeTo: .subheadline) private var closeSize: CGFloat = 16
 
     var body: some View {
-        HStack(spacing: 5) {
-            NavigationLink {
-                NockWalletView(nock: .shared)
-            } label: {
-                HStack(spacing: 5) {
-                    NockBadge(size: badge)
-                    Text(Loc("NOCK 钱包")).foregroundStyle(Pearl.accent)
-                    Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
-                }
-                .contentShape(Rectangle())
+        NavigationLink {
+            NockWalletView(nock: .shared)
+        } label: {
+            // The row keeps a slot before its chevron for the × laid over it, so every
+            // chevron in the card lines up.
+            WalletShortcutRow(systemImage: "hexagon", title: Loc("NOCK 钱包"), divider: true) {
+                Color.clear.frame(width: closeSize + 8, height: 1)
             }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .combine)
-            Text(verbatim: "·").foregroundStyle(.tertiary).accessibilityHidden(true)
-            Button(Loc("关闭")) { confirmingClose = true }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
         }
-        .font(.caption)
-        .frame(maxWidth: .infinity)
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .overlay(alignment: .trailing) {
+            Button { confirmingClose = true } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: closeSize))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.secondary)
+                    .padding(6)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(Loc("关闭"))
+            // Clear of the chevron (caption2 glyph + the row's spacing).
+            .padding(.trailing, 12)
+            .padding(.top, 1)   // the row's hairline sits above its centre line
+        }
         .alert(Loc("关闭 NOCK 钱包入口？"), isPresented: $confirmingClose) {
             Button(Loc("关闭")) { withAnimation(.snappy) { hidden = true } }
             Button(Loc("取消"), role: .cancel) {}
@@ -190,20 +195,15 @@ struct NockWalletView: View {
 
                 recent
 
-                // A page footer in caption grey, not a PearlInfoRow: anything bigger was the
-                // loudest text on this deliberately quiet page.
-                VStack(spacing: 2) {
+                // One quiet caption line on this deliberately quiet page; the detail sits in the ⓘ.
+                HStack(spacing: 4) {
                     Label(Loc("和 PRL 共用助记词"), systemImage: "key.horizontal")
                         .font(.caption.weight(.medium))
-                    Text(Loc("用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。"))
-                        .font(.caption2)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(.secondary)
+                    PearlInfoTip(Loc("用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。"),
+                                 title: Loc("和 PRL 共用助记词"))
                 }
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
-                .padding(.horizontal, Pearl.Space.md)
-                .accessibilityElement(children: .combine)
             }
             .padding(Pearl.Space.screen)
             .frame(maxWidth: 560)
@@ -463,7 +463,8 @@ struct NockReceiveView: View {
                             .overlay(RoundedRectangle(cornerRadius: Pearl.Radius.md, style: .continuous)
                                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1))
                     }
-                    PearlSectionHeader(Loc("NOCK 收款地址 · Nockchain 主网"), systemImage: "qrcode")
+                    PearlSectionHeader(Loc("NOCK 收款地址 · Nockchain 主网"), systemImage: "qrcode",
+                                       info: Loc("这个地址只收 NOCK，别往这里转 PRL。"))
                     Text(addr).font(.callout.monospaced()).multilineTextAlignment(.center).textSelection(.enabled)
                         .frame(maxWidth: .infinity)
                         .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.sm)
@@ -475,9 +476,6 @@ struct NockReceiveView: View {
                         Label(copied ? Loc("已复制") : Loc("复制地址"), systemImage: copied ? "checkmark" : "doc.on.doc")
                     }
                     .buttonStyle(.pearl)
-
-                    Text(Loc("这个地址只收 NOCK，别往这里转 PRL。"))
-                        .pearlExplanation().multilineTextAlignment(.center)
                 } else {
                     ProgressView(Loc("派生地址…")).frame(maxHeight: 240)
                 }
@@ -585,8 +583,6 @@ struct NockSendView: View {
                     Label(result, systemImage: resultIsWarning ? "exclamationmark.triangle" : "xmark.octagon")
                         .font(.callout).foregroundStyle(resultIsWarning ? .orange : .red).textSelection(.enabled)
                 }
-                PearlInfoRow(Loc("交易在本机签名（私钥不离开设备），经 Nockchain 公共节点广播。手续费按交易大小计算，确认前会显示。"),
-                             systemImage: "lock.shield")
             }
             .padding(Pearl.Space.screen).frame(maxWidth: 520).frame(maxWidth: .infinity)
             .animation(.snappy, value: result)
@@ -746,8 +742,7 @@ struct NockActivityView: View {
         Group {
             if nock.history.isEmpty {
                 if nock.backendReady {
-                    PearlEmptyState(systemImage: "clock.arrow.circlepath", title: Loc("暂无交易记录"),
-                                    message: Loc("你的收发记录会显示在这里"))
+                    PearlEmptyState(systemImage: "clock.arrow.circlepath", title: Loc("暂无交易记录"))
                 } else {
                     VStack(spacing: Pearl.Space.md) {
                         if let problem = nock.syncError {
@@ -763,25 +758,20 @@ struct NockActivityView: View {
                 }
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: Pearl.Space.md) {
-                        LazyVStack(spacing: 0) {
-                            ForEach(nock.history) { tx in
-                                NavigationLink { NockTxDetailView(nock: nock, txID: tx.id) } label: {
-                                    NockTxRow(tx: tx, confirmations: nock.confirmations(tx))
-                                        .padding(.vertical, Pearl.Space.sm)
-                                        .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                if tx.id != nock.history.last?.id {
-                                    Divider().padding(.leading, 36 + Pearl.Space.sm)
-                                }
+                    LazyVStack(spacing: 0) {
+                        ForEach(nock.history) { tx in
+                            NavigationLink { NockTxDetailView(nock: nock, txID: tx.id) } label: {
+                                NockTxRow(tx: tx, confirmations: nock.confirmations(tx))
+                                    .padding(.vertical, Pearl.Space.sm)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            if tx.id != nock.history.last?.id {
+                                Divider().padding(.leading, 36 + Pearl.Space.sm)
                             }
                         }
-                        .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
-                        Text(Loc("记录从区块浏览器 nockscan.com 读取，换设备或重装后也能看到。"))
-                            .pearlExplanation(.footnote)
-                            .padding(.horizontal, Pearl.Space.xs)
                     }
+                    .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
                     .padding(Pearl.Space.screen)
                     .frame(maxWidth: 620)
                     .frame(maxWidth: .infinity)

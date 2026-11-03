@@ -1,72 +1,36 @@
 import SwiftUI
 
-// MARK: - 我的设备（自适应卡片，替换原版固定列宽表格）
+// MARK: - 我的设备
+//
+// Read first, edit on tap: a summary card (daily net profit up front), then one card of
+// rows — a device per row with what it is and what it earns. Every control (chip, count,
+// owned / rented, hours, rent, delete) lives in the device's own editor sheet, so the
+// list isn't a wall of steppers and the page has a single red action, inside the editor.
 
 struct DevicesSection: View {
     @ObservedObject var store: PRLStore
     @State private var askSync = false
     @State private var askNoWatch = false
-    @State private var cardHeight: CGFloat = 0
+    @State private var editing: DeviceEditTarget?
+
     var body: some View {
         let fl = store.fleet()
-        let c = store.cfg
         ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: Pearl.Space.lg) {
-                HStack(alignment: .center, spacing: Pearl.Space.sm) {
-                    PearlSectionHeader(Loc("我的设备"), systemImage: "cpu", subtitle: Loc("%@ 台 · %@ 卡", "\(store.devices.count)", "\(fl.cards)"))
-                    Spacer(minLength: Pearl.Space.xs)
-                    // tray.and.arrow.down = "import", not the circular arrows that
-                    // read as refresh. Tapping ASKS first (reuses the askSync alert)
-                    // instead of silently rebuilding the synced devices.
-                    Button {
-                        if store.poolWatchCount > 0 { askSync = true } else { askNoWatch = true }
-                    } label: {
-                        if store.syncing { ProgressView().controlSize(.small) }
-                        else { Image(systemName: "tray.and.arrow.down") }
-                    }
-                    .buttonStyle(.bordered).controlSize(.large).disabled(store.syncing)
-                    .help(Loc("从矿池同步：按 24h 算力把矿机同步成设备")).accessibilityLabel(Loc("从矿池同步"))
-                    Button {
-                        store.devices.append(Device(name: Loc("新设备"), gpu: "RTX 5080", count: 1))
-                    } label: { Image(systemName: "plus") }
-                        .buttonStyle(.bordered).controlSize(.large)
-                        .help(Loc("添加设备")).accessibilityLabel(Loc("添加设备"))
+                if store.devices.isEmpty {
+                    emptyState
+                } else {
+                    summary(fl)
+                    listHeader
+                    deviceList(fl)
                 }
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: Pearl.Space.xl) {
-                        summ(Loc("设备"), Loc("%@ 台", "\(store.devices.count)"))
-                        summ(Loc("显卡"), Loc("%@ 张 自%@/租%@", "\(fl.cards)", "\(fl.ownCards)", "\(fl.rentedCards)"))
-                        summ(Loc("算力"), formatHashrate(fl.pearl * 1e12))
-                        summ(Loc("日净利"), store.localSymbol + f(fl.netDay * c.fx, 1), profitColor(fl.netDay))
-                        if fl.rentDay > 0 { summ(Loc("日租金"), store.localSymbol + f(fl.rentDay * c.fx, 1), .orange) }
-                        summ(Loc("自有功耗"), f(fl.watts, 0) + " W")
-                    }
-                    .padding(.vertical, Pearl.Space.xs)
-                }
-                .pearlCard(padding: Pearl.Space.lg, radius: Pearl.Radius.md)
-
-                let effPU = store.effPerUnit(myHashPearl: fl.pearl)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: Pearl.Space.lg)], spacing: Pearl.Space.lg) {
-                    ForEach($store.devices) { $dev in
-                        DeviceRow(store: store, dev: $dev, effPU: effPU, minBodyHeight: cardHeight)
-                    }
-                }
-                .onPreferenceChange(DeviceCardHeightKey.self) { cardHeight = $0 }
-
-                HStack(alignment: .top, spacing: Pearl.Space.sm) {
-                    PearlIconBadge(systemImage: "info.circle", size: 30)
-                    Text(store.sym(Loc("提示：自动保存。每台可选『自有』(付电费+计硬件成本) 或『租用』(按 ¥/小时 付租，全包价不另计电费/功率)。『可用h』= 每天实际挖矿小时，按比例缩放出币/电费/租金。租金单价可在此逐台调，默认值在【显卡对比】选中卡后设。")))
-                        .font(.subheadline).fixedSize(horizontal: false, vertical: true)
-                }
-                .pearlCard(padding: Pearl.Space.lg, radius: Pearl.Radius.md)
-
                 // Anchor the very bottom so adding a device can scroll to it.
                 Color.clear.frame(height: 1).id("devices-bottom")
             }
             .padding(Pearl.Space.screen)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: 720)
+            .frame(maxWidth: .infinity)
         }
         // When a device is added, jump to the bottom so the new row is visible.
         .onChange(of: store.devices.count) { old, new in
@@ -96,176 +60,381 @@ struct DevicesSection: View {
         } message: {
             Text(Loc("先到「我的监控」添加你的矿池和挖矿地址；再回到「我的设备」点『从矿池同步』，即可一键把矿机同步成设备。"))
         }
+        .sheet(item: $editing) { target in
+            DeviceEditor(store: store, id: target.id)
+        }
         }
     }
 
-    @ViewBuilder func summ(_ k: String, _ v: String, _ color: Color = .primary) -> some View {
-        VStack(alignment: .leading, spacing: Pearl.Space.xxs) {
-            Text(k).font(.subheadline).foregroundColor(.secondary)
-            Text(v).font(.title3.bold()).foregroundColor(color).monospacedDigit().fixedSize()
-        }
+    /// Sync asks first (askSync); with no pool watches it says where to add one (askNoWatch).
+    private func requestSync() {
+        if store.poolWatchCount > 0 { askSync = true } else { askNoWatch = true }
     }
-}
 
-/// Tallest device-card height across the grid, so the others stretch to match
-/// (equal-height cards → their 日净利 footers line up). Reduces to the max.
-private struct DeviceCardHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
+    /// A new device goes straight into its editor: picking its card is the next step anyway.
+    private func addDevice() {
+        let dev = Device(name: Loc("新设备"), gpu: "RTX 5080", count: 1)
+        store.devices.append(dev)
+        editing = DeviceEditTarget(id: dev.id)
     }
-}
 
-struct DeviceRow: View {
-    @ObservedObject var store: PRLStore
-    @Binding var dev: Device
-    var effPU: Double
-    /// Tallest card height in the grid (measured by the parent); 0 = size to own content.
-    var minBodyHeight: CGFloat = 0
-    @State private var editingName = false
-    @FocusState private var nameFocused: Bool
-    var body: some View {
-        let e = store.deviceEcon(dev, perUnit: effPU)
-        let net = e.net * Double(dev.count) * store.cfg.fx
-        let watts = store.devWatts(dev) * Double(dev.count)
-        VStack(alignment: .leading, spacing: Pearl.Space.sm) {
-            HStack(spacing: Pearl.Space.sm) {
-                if editingName {
-                    TextField(Loc("名称"), text: $dev.name)
-                        .textFieldStyle(.roundedBorder)
-                        .focused($nameFocused)
-                        .onSubmit { editingName = false }
-                    #if os(iOS)
-                        .autocorrectionDisabled()
-                    #endif
-                    Button { editingName = false; nameFocused = false } label: {
-                        Image(systemName: "checkmark.circle.fill")
-                    }
-                    .buttonStyle(.borderless).foregroundColor(.green)
-                    .help(Loc("完成")).accessibilityLabel(Loc("完成修改名称"))
-                } else {
-                    // 已存设备：名字以 label 显示，点击（铅笔）才变成文本框可改。
-                    Button {
-                        editingName = true
-                        Task { @MainActor in
-                            try? await Task.sleep(for: .milliseconds(50))
-                            nameFocused = true
-                        }
-                    } label: {
-                        HStack(spacing: Pearl.Space.xxs) {
-                            Text(dev.name).font(.headline).foregroundColor(.primary)
-                            Image(systemName: "pencil").font(.caption).foregroundColor(.secondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .help(Loc("点击修改名称")).accessibilityLabel(Loc("修改名称"))
-                    Spacer(minLength: Pearl.Space.xs)
-                }
-                if dev.rented {
-                    PearlBadge(text: Loc("租用"), systemImage: "key.fill", tint: .orange)
-                }
-                Button(role: .destructive) {
-                    store.devices.removeAll { $0.id == dev.id }
-                } label: { Image(systemName: "trash") }
-                    .buttonStyle(.borderless)
+    // MARK: Empty
+
+    /// No devices yet: the two ways to get some. Before any pool watch exists, one line says
+    /// where syncing gets its miners from.
+    private var emptyState: some View {
+        VStack(spacing: Pearl.Space.md) {
+            Image(systemName: "cpu")
+                .font(.system(size: 44, weight: .semibold))
+                .foregroundStyle(Pearl.accent)
+                .padding(.bottom, Pearl.Space.xs)
+                .accessibilityHidden(true)
+            if store.poolWatchCount == 0 {
+                Text(Loc("先在「我的监控」添加矿池，再一键同步矿机"))
+                    .font(.subheadline).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2).minimumScaleFactor(0.85)
             }
-            if dev.synced {
-                HStack {
-                    Image(systemName: "link").foregroundColor(.green)
-                    Text(Loc("24h ") + formatHashrate((dev.customPearl ?? 0) * 1e12))
-                        .font(.callout.monospacedDigit())
-                    Spacer()
-                    Picker(Loc("芯片"), selection: $dev.gpu) {
-                        Text(Loc("未设")).tag("")
-                        ForEach(GPUS) { Text($0.name).tag($0.name) }
-                    }.pickerStyle(.menu).labelsHidden()
+            Button(action: requestSync) {
+                HStack(spacing: Pearl.Space.xs) {
+                    if store.syncing { ProgressView().controlSize(.small) }
+                    else { Image(systemName: "tray.and.arrow.down") }
+                    Text(Loc("从矿池同步"))
                 }
-                if let g = gpu(dev.gpu) {
-                    Text(Loc("≈ %@× %@（矿池实测算力 ÷ 该芯片算力，用于估租金/成本）", f(store.devCards(dev), 2), g.name))
-                        .font(.caption2).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            .buttonStyle(.pearl)
+            .disabled(store.syncing)
+            .help(Loc("从矿池同步：按 24h 算力把矿机同步成设备"))
+            Button(action: addDevice) {
+                Label(Loc("添加设备"), systemImage: "plus")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered).controlSize(.large)
+        }
+        .frame(maxWidth: 420)
+        .frame(maxWidth: .infinity)
+        .pearlCard(padding: Pearl.Space.lg, radius: Pearl.Radius.md)
+    }
+
+    // MARK: Summary
+
+    /// The figure that matters first — what the fleet nets a day — then the rest in one row.
+    private func summary(_ fl: Fleet) -> some View {
+        let fx = store.cfg.fx
+        return VStack(alignment: .leading, spacing: Pearl.Space.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(Loc("日净利")).font(.subheadline).foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(money(fl.netDay * fx, 1))
+                        .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                        .foregroundStyle(profitColor(fl.netDay))
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                    Text(Loc("/天")).font(.subheadline).foregroundStyle(.secondary)
+                }
+            }
+            Divider()
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: Pearl.Space.md, alignment: .leading)],
+                      alignment: .leading, spacing: Pearl.Space.sm) {
+                stat(Loc("算力"), formatHashrate(fl.pearl * 1e12))
+                stat(Loc("显卡"), Loc("%@ 张", "\(fl.cards)"))
+                if fl.watts > 0 { stat(Loc("自有功耗"), f(fl.watts, 0) + " W") }
+                if fl.rentDay > 0 { stat(Loc("日租金"), money(fl.rentDay * fx, 1)) }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .pearlCard(padding: Pearl.Space.lg, radius: Pearl.Radius.md)
+    }
+
+    private func stat(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(value).font(.headline).monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.75)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    // MARK: List
+
+    /// How many, then the two ways to add more — sync (the usual one) and by hand.
+    private var listHeader: some View {
+        HStack(spacing: Pearl.Space.md) {
+            Text(Loc("%@ 台", "\(store.devices.count)"))
+                .font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            Spacer(minLength: Pearl.Space.xs)
+            Button(action: requestSync) {
+                HStack(spacing: 4) {
+                    if store.syncing { ProgressView().controlSize(.mini) }
+                    else { Image(systemName: "tray.and.arrow.down") }
+                    Text(Loc("从矿池同步"))
+                }
+            }
+            .disabled(store.syncing)
+            .help(Loc("从矿池同步：按 24h 算力把矿机同步成设备"))
+            Button(action: addDevice) { Label(Loc("添加"), systemImage: "plus") }
+                .accessibilityLabel(Loc("添加设备"))
+        }
+        .buttonStyle(.borderless)
+        .font(.subheadline.weight(.medium))
+        .tint(Pearl.accent)
+        .lineLimit(1)
+    }
+
+    private func deviceList(_ fl: Fleet) -> some View {
+        let effPU = store.effPerUnit(myHashPearl: fl.pearl)
+        return VStack(spacing: 0) {
+            ForEach(store.devices) { dev in
+                if dev.id != store.devices.first?.id {
+                    Divider().padding(.leading, Pearl.Space.md)
+                }
+                Button { editing = DeviceEditTarget(id: dev.id) } label: {
+                    DeviceListRow(store: store, dev: dev, effPU: effPU)
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                    Button { editing = DeviceEditTarget(id: dev.id) } label: { Label(Loc("编辑"), systemImage: "pencil") }
+                    Button(role: .destructive) { store.devices.removeAll { $0.id == dev.id } } label: {
+                        Label(Loc("删除"), systemImage: "trash")
+                    }
+                }
+            }
+        }
+        .pearlCard(padding: 0, radius: Pearl.Radius.md)
+    }
+
+    private func money(_ v: Double, _ digits: Int) -> String {
+        (v < 0 ? "-" : "") + store.localSymbol + f(abs(v), digits)
+    }
+}
+
+/// Which device the editor sheet is open on.
+private struct DeviceEditTarget: Identifiable { let id: UUID }
+
+// MARK: - Row
+
+/// One device in the list: name (and 租用), what it runs on, and its daily net.
+private struct DeviceListRow: View {
+    @ObservedObject var store: PRLStore
+    let dev: Device
+    let effPU: Double
+
+    var body: some View {
+        let net = store.deviceEcon(dev, perUnit: effPU).net * Double(dev.count) * store.cfg.fx
+        HStack(spacing: Pearl.Space.sm) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(dev.name).font(.body.weight(.semibold)).lineLimit(1)
+                    if dev.rented { PearlBadge(text: Loc("租用"), tint: .orange) }
+                }
+                detail
+            }
+            Spacer(minLength: Pearl.Space.sm)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text((net < 0 ? "-" : "") + store.localSymbol + f(abs(net), 1))
+                    .font(.body.weight(.semibold)).monospacedDigit()
+                    .foregroundStyle(profitColor(net))
+                Text(Loc("/天")).font(.caption2).foregroundStyle(.tertiary)
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, Pearl.Space.md)
+        .padding(.vertical, Pearl.Space.sm)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Synced rigs: their measured hashrate and the chip behind the cost figures (orange
+    /// when none is set). Hand-added ones: card × count. Either way, hours if not all day.
+    @ViewBuilder private var detail: some View {
+        HStack(spacing: 4) {
+            if dev.synced {
+                Image(systemName: "link").foregroundStyle(.green).font(.caption2)
+                Text(formatHashrate((dev.customPearl ?? 0) * 1e12))
+                Text(verbatim: "·")
+                if dev.gpu.isEmpty {
+                    Text(Loc("未设芯片")).foregroundStyle(.orange)
                 } else {
-                    Text(Loc("未设芯片 → 电费按能效估算，租金 / 硬件成本无法计算"))
-                        .font(.caption2).foregroundColor(.orange)
+                    Text(dev.gpu)
                 }
             } else {
-                HStack {
-                    Picker(Loc("显卡"), selection: $dev.gpu) { ForEach(GPUS) { Text($0.name).tag($0.name) } }
-                        .pickerStyle(.menu).labelsHidden()
-                    Spacer()
-                    Stepper(value: $dev.count, in: 1...256) { Text(Loc("× %@", "\(dev.count)")).font(.body.monospacedDigit()) }
-                        .fixedSize()
-                }
+                Text(dev.gpu)
+                Text(Loc("× %@", "\(dev.count)"))
             }
-            HStack(spacing: Pearl.Space.sm) {
-                Picker(Loc("类型"), selection: $dev.rented) { Text(Loc("自有")).tag(false); Text(Loc("租用")).tag(true) }
-                    .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 150)
-                Spacer()
-                Stepper(value: $dev.hoursPerDay, in: 0...24, step: 1) { Text(f(dev.hoursPerDay, 0) + "h").font(.body.monospacedDigit()) }
-                    .fixedSize()
-            }
-            if dev.rented {
-                HStack(spacing: Pearl.Space.xs) {
-                    Text(Loc("租金")).font(.callout).foregroundColor(.secondary)
-                    if dev.rentDaily != nil {
-                        Button { dev.rentDaily = nil } label: { Text(Loc("用默认")).font(.caption2) }
-                            .buttonStyle(.borderless)
-                    }
-                    Spacer(minLength: Pearl.Space.xs)
-                    // 手动录入按小时租金（可直接键入数字，或用步进器微调）；内部仍存日租
-                    // （=时×24），收益按「可用h」缩放。橙色 = 已手动覆盖默认值。
-                    let hourlyBinding = Binding(get: { store.devRent(dev) / 24 },
-                                                set: { dev.rentDaily = max(0, $0) * 24; dev.rentCurrency = nil; dev.rentFX = nil })
-                    Text(store.localSymbol).font(.body.monospacedDigit()).foregroundColor(.secondary)
-                    TextField("0", value: hourlyBinding,
-                              format: .number.precision(.fractionLength(0...2)))
-                        .labelsHidden()
-                        .multilineTextAlignment(.trailing)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.body.monospacedDigit())
-                        .foregroundColor(dev.rentDaily != nil ? .orange : .primary)
-                        .frame(width: 58)
-                        #if os(iOS)
-                        .keyboardType(.decimalPad)
-                        #endif
-                        .accessibilityLabel(Loc("租金") + " " + store.localSymbol + Loc("/小时"))
-                    Text(Loc("/小时")).font(.callout).foregroundColor(.secondary)
-                    Stepper(value: hourlyBinding, in: 0...100000, step: 0.5) { EmptyView() }
-                        .labelsHidden().fixedSize()
-                }
-            }
-            Spacer(minLength: 0)   // pin 日净利 to the card bottom so equal-height
-                                   // cards line their footers up across a row
-            Divider()
-            HStack {
-                Text(store.sym(Loc("日净利 ¥")) + f(net, 1)).font(.body.monospacedDigit().bold())
-                    .foregroundColor(profitColor(net))
-                Spacer()
-                // 租用云设备为全包价，不显示功率；自有设备才显示功耗。
-                if !dev.rented {
-                    Text(f(watts, 0) + " W").font(.body.monospacedDigit()).foregroundColor(.secondary)
-                }
+            if dev.hoursPerDay < 24 {
+                Text(verbatim: "· " + f(dev.hoursPerDay, 0) + "h")
             }
         }
-        // Equal-height cards: stretch to the grid's tallest (minBodyHeight) and
-        // report our own natural/grown height back up via the preference.
-        .frame(maxWidth: .infinity, minHeight: minBodyHeight, alignment: .topLeading)
-        .background(GeometryReader { g in
-            Color.clear.preference(key: DeviceCardHeightKey.self, value: g.size.height)
-        })
-        .modifier(DeviceRowSurface(rented: dev.rented))
+        .font(.caption).foregroundStyle(.secondary)
+        .monospacedDigit()
+        .lineLimit(1)
     }
 }
 
-// 卡片表面：自有用标准玻璃卡；租用沿用橙色强调（玻璃卡 + 橙色描边/渐变）。
-private struct DeviceRowSurface: ViewModifier {
-    let rented: Bool
-    func body(content: Content) -> some View {
-        if rented {
-            content
-                .pearlAccentCard(padding: Pearl.Space.lg, radius: Pearl.Radius.md, gradient: Pearl.sunrise)
-        } else {
-            content
-                .pearlCard(padding: Pearl.Space.lg, radius: Pearl.Radius.md)
+// MARK: - Editor
+
+/// Everything about one device, as a form: what it is, how it runs, what it nets — and
+/// the only delete on the page.
+private struct DeviceEditor: View {
+    @ObservedObject var store: PRLStore
+    let id: UUID
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmingDelete = false
+    /// The device as last seen, so the sheet can still draw while it closes after a delete.
+    @State private var last: Device?
+
+    private var dev: Binding<Device> {
+        Binding(
+            get: { store.devices.first { $0.id == id } ?? last ?? Device(name: "", gpu: "", count: 1) },
+            set: { nv in
+                if let i = store.devices.firstIndex(where: { $0.id == id }) { store.devices[i] = nv }
+            })
+    }
+
+    var body: some View {
+        let d = dev.wrappedValue
+        let effPU = store.effPerUnit(myHashPearl: store.fleet().pearl)
+        let net = store.deviceEcon(d, perUnit: effPU).net * Double(d.count) * store.cfg.fx
+        NavigationStack {
+            Form {
+                Section {
+                    LabeledContent(Loc("名称")) {
+                        TextField(Loc("名称"), text: dev.name)
+                            .labelsHidden()
+                            .multilineTextAlignment(.trailing)
+                            #if os(iOS)
+                            .autocorrectionDisabled()
+                            #endif
+                    }
+                }
+
+                Section {
+                    if d.synced {
+                        LabeledContent(Loc("算力"), value: "24h " + formatHashrate((d.customPearl ?? 0) * 1e12))
+                        // The ⓘ sits in the row's label, outside the menu picker it explains.
+                        LabeledContent {
+                            Picker(Loc("芯片"), selection: dev.gpu) {
+                                Text(Loc("未设")).tag("")
+                                ForEach(GPUS) { Text($0.name).tag($0.name) }
+                            }
+                            .labelsHidden()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(Loc("芯片"))
+                                if let g = gpu(d.gpu) {
+                                    PearlInfoTip(Loc("≈ %@× %@（矿池实测算力 ÷ 该芯片算力，用于估租金/成本）", f(store.devCards(d), 2), g.name),
+                                                 title: Loc("芯片"))
+                                } else {
+                                    PearlInfoTip(Loc("未设芯片 → 电费按能效估算，租金 / 硬件成本无法计算"),
+                                                 title: Loc("芯片"), tint: .orange)
+                                }
+                            }
+                        }
+                    } else {
+                        Picker(Loc("显卡"), selection: dev.gpu) {
+                            ForEach(GPUS) { Text($0.name).tag($0.name) }
+                        }
+                        Stepper(value: dev.count, in: 1...256) {
+                            LabeledContent(Loc("数量"), value: "\(d.count)")
+                        }
+                    }
+                }
+
+                Section {
+                    LabeledContent {
+                        Picker(Loc("类型"), selection: dev.rented) {
+                            Text(Loc("自有")).tag(false)
+                            Text(Loc("租用")).tag(true)
+                        }
+                        .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 180)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(Loc("类型"))
+                            PearlInfoTip(store.sym(Loc("提示：自动保存。每台可选『自有』(付电费+计硬件成本) 或『租用』(按 ¥/小时 付租，全包价不另计电费/功率)。『可用h』= 每天实际挖矿小时，按比例缩放出币/电费/租金。租金单价可在此逐台调，默认值在【显卡对比】选中卡后设。")),
+                                         title: Loc("类型"))
+                        }
+                    }
+                    Stepper(value: dev.hoursPerDay, in: 0...24, step: 1) {
+                        LabeledContent(Loc("每天挖矿时长"), value: f(d.hoursPerDay, 0) + "h")
+                    }
+                    if d.rented { rentRow(d) }
+                }
+
+                Section {
+                    LabeledContent(Loc("日净利")) {
+                        Text((net < 0 ? "-" : "") + store.localSymbol + f(abs(net), 1))
+                            .monospacedDigit().foregroundStyle(profitColor(net))
+                    }
+                    if !d.rented {
+                        LabeledContent(Loc("自有功耗"),
+                                       value: f(store.devWatts(d) * Double(d.count), 0) + " W")
+                    }
+                }
+
+                Section {
+                    Button(Loc("删除设备"), role: .destructive) { confirmingDelete = true }
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle(d.name)
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(Loc("完成")) { dismiss() }
+                }
+                .noGlassBackground()
+            }
+            .confirmationDialog(Loc("删除设备"), isPresented: $confirmingDelete, titleVisibility: .visible) {
+                Button(Loc("删除"), role: .destructive) {
+                    last = d
+                    store.devices.removeAll { $0.id == id }
+                    dismiss()
+                }
+                Button(Loc("取消"), role: .cancel) {}
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 420, minHeight: 460)
+        #endif
+        .onAppear { last = store.devices.first { $0.id == id } }
+    }
+
+    /// Hourly rent, typed or stepped (stored as daily = hourly × 24; earnings scale with
+    /// the hours above). Orange = overriding the chip's default; 用默认 puts it back.
+    private func rentRow(_ d: Device) -> some View {
+        let hourly = Binding(get: { store.devRent(dev.wrappedValue) / 24 },
+                             set: { nv in
+                                 var v = dev.wrappedValue
+                                 v.rentDaily = max(0, nv) * 24; v.rentCurrency = nil; v.rentFX = nil
+                                 dev.wrappedValue = v
+                             })
+        return HStack(spacing: Pearl.Space.xs) {
+            Text(Loc("租金"))
+            if d.rentDaily != nil {
+                Button { dev.wrappedValue.rentDaily = nil } label: { Text(Loc("用默认")).font(.caption) }
+                    .buttonStyle(.borderless)
+            }
+            Spacer(minLength: Pearl.Space.xs)
+            Text(store.localSymbol).foregroundStyle(.secondary)
+            TextField("0", value: hourly, format: .number.precision(.fractionLength(0...2)))
+                .labelsHidden()
+                .multilineTextAlignment(.trailing)
+                .textFieldStyle(.roundedBorder)
+                .monospacedDigit()
+                .foregroundStyle(d.rentDaily != nil ? .orange : .primary)
+                .frame(width: 64)
+                #if os(iOS)
+                .keyboardType(.decimalPad)
+                #endif
+                .accessibilityLabel(Loc("租金") + " " + store.localSymbol + Loc("/小时"))
+            Text(Loc("/小时")).foregroundStyle(.secondary)
+            Stepper(value: hourly, in: 0...100000, step: 0.5) { EmptyView() }
+                .labelsHidden().fixedSize()
         }
     }
 }

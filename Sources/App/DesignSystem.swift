@@ -338,10 +338,10 @@ struct PearlIconBadge: View {
 
 // MARK: - Info row (a statement worth reading, on its own line)
 
-/// Something the reader should not miss — what is stored, what never leaves the device,
-/// what a feature needs — as its own row: accent glyph on the settings rows' column, then
-/// the sentence in the body colour. Small grey print is for what accompanies something
-/// else (a subtitle, a timestamp); a sentence standing alone in it goes unread.
+/// Something the reader must not miss — the consequence of an irreversible action, a
+/// safety warning — as its own row: accent glyph on the settings rows' column, then the
+/// sentence in the body colour. Anything merely helpful goes in a `PearlInfoTip` instead;
+/// a page should not need a paragraph to be understood.
 ///
 /// `title` is the point itself in a few bold words, for a row whose sentence takes a
 /// moment to read: the eye gets the point from the title and the rest from the sentence.
@@ -386,19 +386,73 @@ extension View {
     }
 }
 
+// MARK: - Info tip (ⓘ that holds the explanation)
+
+/// The place for a sentence that would otherwise sit on the page explaining something:
+/// a small ⓘ beside the thing it explains. iPhone/iPad: tap → a small popover. Mac: hover
+/// shows it as a tooltip, click → the same popover. VoiceOver reads it as the hint.
+///
+/// Layout, hierarchy and the button's own words should carry the page; this is for what's
+/// still worth knowing once they do. Consequences of a destructive / irreversible action
+/// (send, delete, pay) stay on the page — never hide those in here.
+struct PearlInfoTip: View {
+    let text: String
+    var title: String? = nil
+    var tint: Color = .secondary
+    @State private var shown = false
+
+    init(_ text: String, title: String? = nil, tint: Color = .secondary) {
+        self.text = text; self.title = title; self.tint = tint
+    }
+
+    var body: some View {
+        Button { shown.toggle() } label: {
+            Image(systemName: "info.circle")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(tint)
+                // A comfortable hit target without pushing the row taller.
+                .padding(6)
+                .contentShape(Rectangle())
+                .padding(-6)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel(title ?? Loc("说明"))
+        .accessibilityHint(text)
+        #if os(macOS)
+        .help(text)
+        #endif
+        // No arrow edge: the system puts it above or below, wherever it fits.
+        .popover(isPresented: $shown) {
+            VStack(alignment: .leading, spacing: 6) {
+                if let title {
+                    Text(title).font(.headline)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text(text).font(.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(Pearl.Space.md)
+            .frame(idealWidth: 300, maxWidth: 340, alignment: .leading)
+            .presentationCompactAdaptation(.popover)
+        }
+    }
+}
+
 // MARK: - Section header (icon chip + title + optional subtitle)
 
 struct PearlSectionHeader: View {
     let title: String
     var systemImage: String? = nil
     var subtitle: String? = nil
+    /// Shown as a `PearlInfoTip` beside the title instead of a line under it.
+    var info: String? = nil
     var gradient: LinearGradient? = nil   // nil: the palette's badge (see PearlIconBadge)
     var trailing: AnyView? = nil
 
     init(_ title: String, systemImage: String? = nil, subtitle: String? = nil,
-         gradient: LinearGradient? = nil) {
+         info: String? = nil, gradient: LinearGradient? = nil) {
         self.title = title; self.systemImage = systemImage
-        self.subtitle = subtitle; self.gradient = gradient
+        self.subtitle = subtitle; self.info = info; self.gradient = gradient
     }
 
     var body: some View {
@@ -407,7 +461,10 @@ struct PearlSectionHeader: View {
                 PearlIconBadge(systemImage: systemImage, gradient: gradient, size: 30)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline)
+                HStack(spacing: 4) {
+                    Text(title).font(.headline)
+                    if let info { PearlInfoTip(info, title: title) }
+                }
                 if let subtitle {
                     Text(subtitle).font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

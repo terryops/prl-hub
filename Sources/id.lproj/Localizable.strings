@@ -1322,3 +1322,21 @@
 "这个只读钱包的地址不属于 %@ 网络" = "Alamat dompet hanya baca ini bukan dari jaringan %@";
 "移除只读钱包" = "Hapus dompet hanya baca";
 "只从本机删除这个地址，不影响链上资产，之后可以再添加。" = "Hanya alamat ini yang dihapus dari perangkat. Aset on-chain tidak terpengaruh, dan Anda bisa menambahkannya lagi nanti.";
+
+"说明" = "Info";
+"联网取价" = "Harga langsung";
+"自动汇率" = "Kurs otomatis";
+"自身算力计入全网" = "Hitung hashrate sendiri ke jaringan";
+"先在「我的监控」添加矿池，再一键同步矿机" = "Tambahkan pool di Monitor dulu, lalu sinkronkan penambang sekali ketuk";
+"删除设备" = "Hapus Perangkat";
+"数量" = "Jumlah";
+"每天挖矿时长" = "Jam per Hari";
+"未设芯片" = "Chip belum diatur";
+"划算" = "Layak";
+"不划算" = "Tidak layak";
+"盈亏平衡租金" = "Sewa impas";
+"回报" = "Imbal hasil";
+"保本币价" = "Harga impas";
+"保本全网算力" = "Hashrate jaringan impas";
+"扣抽水后" = "Setelah biaya pool";
+"功耗" = "Daya";

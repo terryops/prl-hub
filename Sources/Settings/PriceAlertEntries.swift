@@ -2,21 +2,16 @@ import SwiftUI
 
 // MARK: - 交易 tab promo
 
-/// One-line status for the price-alert entries: a pitch before Pro, else how many
-/// alerts are live.
-@MainActor
-func priceAlertSubtitle(_ store: PriceAlertStore, isPro: Bool) -> String {
-    let on = store.rules.filter(\.isOn).count
-    if !isPro { return Loc("涨破、跌破或急涨急跌时推送通知") }
-    return on > 0 ? Loc("%d 条提醒生效中", on) : Loc("添加到价或涨跌幅提醒")
-}
-
-/// Card under the Trade chart that advertises / opens 价格提醒.
+/// Card under the Trade chart that opens 价格提醒: its name, the 高级版 badge before Pro,
+/// and how many alerts are live once there are some — no pitch line.
 struct PriceAlertPromoCard: View {
     @ObservedObject private var store = PriceAlertStore.shared
     @ObservedObject private var pro = ProStore.shared
 
-    private var subtitle: String { priceAlertSubtitle(store, isPro: pro.isPro) }
+    private var status: String? {
+        let on = store.rules.filter(\.isOn).count
+        return pro.isPro && on > 0 ? Loc("%d 条提醒生效中", on) : nil
+    }
 
     var body: some View {
         NavigationLink {
@@ -29,7 +24,9 @@ struct PriceAlertPromoCard: View {
                         Text(Loc("价格提醒")).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
                         if !pro.isPro { PearlBadge(text: Loc("高级版"), systemImage: "sparkles") }
                     }
-                    Text(subtitle).pearlExplanation()
+                    if let status {
+                        Text(status).font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
@@ -43,27 +40,22 @@ struct PriceAlertPromoCard: View {
 }
 
 /// The same entry as PriceAlertPromoCard, as one quiet line of small text with no
-/// card, for the wallet screen, where a card would compete with the balance.
+/// card, for the wallet screen, where a card would compete with the balance. Like the
+/// other lines there (桌面小组件, NOCK): icon + name + chevron, plus the live count.
 struct PriceAlertInlineLink: View {
     @ObservedObject private var store = PriceAlertStore.shared
     @ObservedObject private var pro = ProStore.shared
 
-    private var subtitle: String { priceAlertSubtitle(store, isPro: pro.isPro) }
+    private var status: String? {
+        let on = store.rules.filter(\.isOn).count
+        return pro.isPro && on > 0 ? Loc("%d 条提醒生效中", on) : nil
+    }
 
     var body: some View {
         NavigationLink {
             PriceAlertsView()
         } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "bell.badge").foregroundStyle(Pearl.accent)
-                Text(Loc("价格提醒")).foregroundStyle(Pearl.accent)
-                Text(verbatim: "·").foregroundStyle(.tertiary)
-                Text(subtitle).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
-                Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
-            }
-            .font(.caption)
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
+            WalletShortcutRow(systemImage: "bell.badge", title: Loc("价格提醒"), status: status)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)

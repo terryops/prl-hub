@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Address book — list, add, edit, delete saved payees. Styled like the rest of
-/// the app (section header + frosted card rows), not a bare system List.
+/// the app (frosted card rows), not a bare system List.
 struct ContactsView: View {
     @EnvironmentObject private var contacts: ContactsStore
     @State private var editing: ContactDraft?
@@ -10,16 +10,11 @@ struct ContactsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Pearl.Space.lg) {
-                PearlSectionHeader(Loc("地址簿"), systemImage: "person.2.fill",
-                                   subtitle: contacts.contacts.isEmpty
-                                       ? Loc("保存常用收款地址，转账时一键选择。")
-                                       : Loc("%@ 位联系人 · 转账时一键选择", "\(contacts.contacts.count)"))
                 if contacts.contacts.isEmpty {
                     PearlEmptyState(systemImage: "person.crop.circle.badge.plus",
-                                    title: Loc("暂无联系人"),
-                                    message: Loc("保存常用收款地址，转账时一键选择。")) {
+                                    title: Loc("暂无联系人")) {
                         Button { editing = ContactDraft() } label: {
-                            Label(Loc("添加"), systemImage: "plus")
+                            Label(Loc("新增联系人"), systemImage: "plus")
                         }
                         .buttonStyle(.borderedProminent).tint(Pearl.plate)
                     }

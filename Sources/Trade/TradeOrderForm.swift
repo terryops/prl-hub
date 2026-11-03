@@ -80,11 +80,10 @@ struct OrderFormView: View {
 
     var body: some View {
         VStack(spacing: Pearl.Space.md) {
-            HStack {
-                Text(Loc("下单")).font(.headline)
-                Spacer()
-                Text(SafeTradeMarket.pairName).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-            }
+            // The pair is on the market card already, and the segments and field units
+            // name both coins.
+            Text(Loc("下单")).font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
             // Full-width, label-less segments: the pickers' own titles ("方向" /
             // "类型") crowded the row on the Mac and said nothing the segments don't.
             Picker(Loc("方向"), selection: $side) {
@@ -107,6 +106,7 @@ struct OrderFormView: View {
                     }
                     TextField("0.0", text: $price).textFieldStyle(.roundedBorder)
                         .font(.body.monospacedDigit())
+                        .accessibilityLabel(Loc("价格 (USDT)"))
                         .focused($focusedField, equals: .price)
                         #if os(iOS)
                         .keyboardType(.decimalPad)
@@ -125,6 +125,7 @@ struct OrderFormView: View {
                 }
                 TextField("0.0", text: $volume).textFieldStyle(.roundedBorder)
                     .font(.body.monospacedDigit())
+                    .accessibilityLabel(Loc("数量 (PEARL)"))
                     .focused($focusedField, equals: .volume)
                     #if os(iOS)
                     .keyboardType(.decimalPad)

@@ -142,7 +142,14 @@ struct AppIconPicker: View {
     var body: some View {
         let current = AppIconChoice(stored: stored)
         VStack(alignment: .leading, spacing: Pearl.Space.sm) {
-            Text(Loc("应用图标"))
+            // The page is titled 应用图标 already; on a Mac the title carries what a swap can't do.
+            #if os(macOS)
+            HStack(spacing: 4) {
+                Text(Loc("应用图标"))
+                PearlInfoTip(Loc("在 Mac 上只更换程序坞里运行中的图标，访达和启动台仍显示默认图标。"),
+                             title: Loc("应用图标"))
+            }
+            #endif
             HStack(alignment: .top, spacing: Pearl.Space.xs) {
                 ForEach(AppIconChoice.allCases) { choice in
                     Button {
@@ -171,8 +178,5 @@ struct AppIconPicker: View {
             }
         }
         .padding(.vertical, Pearl.Space.xxs)
-        #if os(macOS)
-        PearlInfoRow(Loc("在 Mac 上只更换程序坞里运行中的图标，访达和启动台仍显示默认图标。"), systemImage: "dock.rectangle")
-        #endif
     }
 }

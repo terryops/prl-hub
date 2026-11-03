@@ -75,14 +75,8 @@ struct AddWalletView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Pearl.Space.lg) {
-                    VStack(spacing: Pearl.Space.sm) {
-                        PearlIconBadge(systemImage: "wallet.pass", size: 56)
-                        Text(Loc("每个钱包单独保存助记词，可随时在钱包页左上角切换。"))
-                            .pearlExplanation()
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.vertical, Pearl.Space.sm)
+                    PearlIconBadge(systemImage: "wallet.pass", size: 56)
+                        .padding(.vertical, Pearl.Space.sm)
 
                     NavigationLink {
                         CreateWalletView(store: store) { dismiss() }
@@ -103,14 +97,7 @@ struct AddWalletView: View {
 
                     // Same as the web's wallet page: just an address, no seed. Needs no Go
                     // framework, so it stays available when the two above can't be used.
-                    NavigationLink {
-                        WatchWalletView(store: store) { dismiss() }
-                    } label: {
-                        WatchWalletOption()
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("watch-wallet-option")
-                    .padding(.top, Pearl.Space.sm)
+                    WatchWalletOption { WatchWalletView(store: store) { dismiss() } }
                 }
                 .padding(Pearl.Space.screen)
                 .frame(maxWidth: 460)
@@ -167,8 +154,6 @@ struct ManageWalletsView: View {
                             Button(role: .destructive) { removing = w } label: { Label(Loc("删除"), systemImage: "trash") }
                         }
                 }
-            } footer: {
-                Text(Loc("助记词只保存在本机钥匙串。删除钱包前，请确认已备份它的助记词。"))
             }
         }
         .pearlListBackground()
@@ -250,20 +235,25 @@ struct ManageWalletsView: View {
 
 // MARK: - Read-only wallet
 
-/// The read-only choice on 添加钱包 and the welcome screen: what it is, in one card.
-struct WatchWalletOption: View {
+/// The read-only choice on 添加钱包 and the welcome screen: a quiet link under the two
+/// seed buttons, with what it is in the ⓘ beside it (kept outside the link so a tap on
+/// the ⓘ doesn't also open the page).
+struct WatchWalletOption<Destination: View>: View {
+    @ViewBuilder let destination: () -> Destination
+
     var body: some View {
-        HStack(spacing: Pearl.Space.sm) {
-            PearlInfoRow(Loc("只填一个地址，就能查看它的余额和交易记录。不需要助记词，也不能转账。"),
-                         title: Loc("添加只读钱包"), systemImage: "eye")
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
-                .accessibilityHidden(true)
+        HStack(spacing: 4) {
+            NavigationLink { destination() } label: {
+                Label(Loc("添加只读钱包"), systemImage: "eye")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Pearl.accent)
+            .accessibilityIdentifier("watch-wallet-option")
+            PearlInfoTip(Loc("只填一个地址，就能查看它的余额和交易记录。不需要助记词，也不能转账。"),
+                         title: Loc("只读钱包"))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-        .pearlCard(padding: Pearl.Space.md)
-        .accessibilityElement(children: .combine)
+        .font(.callout.weight(.medium))
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -290,9 +280,6 @@ struct WatchWalletView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Pearl.Space.lg) {
-                PearlInfoRow(Loc("只填一个地址，就能查看它的余额和交易记录。不需要助记词，也不能转账。"),
-                             title: Loc("只读钱包"), systemImage: "eye")
-
                 VStack(alignment: .leading, spacing: Pearl.Space.md) {
                     PearlSectionHeader(Loc("钱包名称"), systemImage: "wallet.pass")
                     TextField(store.suggestedWatchName(), text: $name).textFieldStyle(.roundedBorder)
@@ -301,7 +288,8 @@ struct WatchWalletView: View {
 
                 VStack(alignment: .leading, spacing: Pearl.Space.md) {
                     HStack {
-                        PearlSectionHeader(Loc("地址"), systemImage: "eye")
+                        PearlSectionHeader(Loc("地址"), systemImage: "eye",
+                                           info: Loc("只填一个地址，就能查看它的余额和交易记录。不需要助记词，也不能转账。"))
                         Spacer()
                         Button(Loc("粘贴")) {
                             #if os(iOS)

@@ -126,13 +126,15 @@ struct AlertEditorSheet: View {
                         }
                         .accessibilityIdentifier("price-alert-condition")
                     } footer: {
+                        // What saving this does — the direction is inferred from the current
+                        // price, so it is said back. Nothing until there is a price to judge.
                         if let r = priceRule {
                             switch r.kind {
                             case .above: Text(Loc("价格涨到 %@ 时通知你", PriceAlertFormat.usd(r.value)))
                             case .reach: Text(Loc("价格涨破或跌破 %@ 时都会通知你", PriceAlertFormat.usd(r.value)))
                             default:     Text(Loc("价格跌到 %@ 时通知你", PriceAlertFormat.usd(r.value)))
                             }
-                        } else {
+                        } else if !priceText.trimmingCharacters(in: .whitespaces).isEmpty {
                             Text(Loc("输入一个与当前价格不同的目标价。"))
                         }
                     }
@@ -143,7 +145,7 @@ struct AlertEditorSheet: View {
                             Text(Loc("1 小时")).tag(3600)
                             Text(Loc("24 小时")).tag(86400)
                         }
-                        LabeledContent(Loc("涨跌幅")) {
+                        LabeledContent {
                             HStack(spacing: 4) {
                                 TextField("", text: $pctText, prompt: Text(Loc("涨跌幅（%）")))
                                     .labelsHidden()
@@ -154,24 +156,38 @@ struct AlertEditorSheet: View {
                                     #endif
                                 Text("%").foregroundStyle(.secondary)
                             }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(Loc("涨跌幅"))
+                                PearlInfoTip(Loc("涨或跌超过这个幅度都会通知你。"), title: Loc("涨跌幅"))
+                            }
                         }
                     } footer: {
-                        Text(moveRule == nil
-                             ? Loc("请输入 0.5 到 1000 之间的百分比。")
-                             : Loc("涨或跌超过这个幅度都会通知你。"))
+                        if moveRule == nil {
+                            Text(Loc("请输入 0.5 到 1000 之间的百分比。"))
+                        }
                     }
                 }
 
                 Section {
-                    Picker(Loc("提醒频率"), selection: $repeats) {
-                        Text(Loc("仅提醒一次")).tag(false)
-                        Text(Loc("持续提醒")).tag(true)
+                    // The ⓘ sits beside the label, so the picker itself goes unlabelled on
+                    // screen (VoiceOver still reads its label).
+                    LabeledContent {
+                        Picker(Loc("提醒频率"), selection: $repeats) {
+                            Text(Loc("仅提醒一次")).tag(false)
+                            Text(Loc("持续提醒")).tag(true)
+                        }
+                        .labelsHidden()
+                        .accessibilityIdentifier("price-alert-frequency")
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(Loc("提醒频率"))
+                            PearlInfoTip(repeats
+                                         ? Loc("触发后保持开启。条件重置后，再次满足时继续提醒，并设有冷却间隔。")
+                                         : Loc("触发后自动关闭，可手动重新开启。"),
+                                         title: repeats ? Loc("持续提醒") : Loc("仅提醒一次"))
+                        }
                     }
-                    .accessibilityIdentifier("price-alert-frequency")
-                } footer: {
-                    Text(repeats
-                         ? Loc("触发后保持开启。条件重置后，再次满足时继续提醒，并设有冷却间隔。")
-                         : Loc("触发后自动关闭，可手动重新开启。"))
                 }
 
                 if let existing {

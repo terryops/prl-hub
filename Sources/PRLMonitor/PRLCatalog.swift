@@ -1,8 +1,13 @@
 import SwiftUI
 
-// MARK: - 显卡对比（自适应 master-detail，替换 macOS-only 的 HSplitView）
-//   regular(iPad/Mac)：左列表 + 右详情并排
-//   compact(iPhone)：列表，点选下钻到详情页
+// MARK: - 显卡对比
+//   regular (iPad / Mac): the table on the left, the selected card's detail beside it
+//   compact (iPhone): the table; a tap drills into the detail
+//
+// The table is one card with its column titles written once (显卡 · 自有 · 租用, per day),
+// a row per GPU — its name and specs, then the two daily figures in aligned columns.
+// Only gains are coloured: a loss is the grey of a figure that doesn't pay, not a column
+// of red. The detail is a plain form: what owning it nets, then what renting it nets.
 
 struct CatalogSection: View {
     @ObservedObject var store: PRLStore
@@ -14,169 +19,160 @@ struct CatalogSection: View {
         // first successful fetch (live mode), show a placeholder instead of
         // ranking cards by stale defaults.
         let ready = !store.live || store.liveReady
-        VStack(spacing: 0) {
-            HStack {
-                Text(Loc("排序")).font(.subheadline).foregroundColor(.secondary)
-                    .lineLimit(1).minimumScaleFactor(0.7)
-                Picker(Loc("排序"), selection: $store.sortKey) {
-                    ForEach(SortKey.allCases) { Text(Loc($0.rawValue)).tag($0) }
-                }
-                .pickerStyle(.menu).labelsHidden()
-                // Its own width: left to the row, the label is given the width of another
-                // option and a longer one wraps ("Nach / Nettogewinn / (eigen)").
-                .fixedSize()
-                Spacer()
-            }
-            .padding(.horizontal).padding(.vertical, 8)
-            Divider()
-
+        Group {
             if !ready {
                 PearlEmptyState(systemImage: "antenna.radiowaves.left.and.right",
-                    title: Loc("等待联网行情…"),
-                    message: Loc("拿到最新币价 / 全网算力后，再显示各显卡的收益对比"))
+                    title: Loc("等待联网行情…"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if hsc == .compact {
-                List {
-                    ForEach(store.calcs(), id: \.g.name) { k in
-                        Button { pushed = k.g.name } label: {
-                            GPURow(store: store, k: k, selected: false, showChevron: true)
-                        }
-                        .buttonStyle(.plain)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                        .listRowBackground(Color.clear)
+                table(compact: true)
+                    .navigationDestination(item: $pushed) { name in
+                        GPUDetailView(store: store, name: name)
                     }
-                }
-                .listStyle(.plain)
-                .pearlListBackground()
-                .navigationDestination(item: $pushed) { name in
-                    GPUDetailView(store: store, name: name)
-                }
             } else {
                 HStack(spacing: 0) {
-                    ScrollView {
-                        LazyVStack(spacing: Pearl.Space.xs) {
-                            ForEach(store.calcs(), id: \.g.name) { k in
-                                GPURow(store: store, k: k, selected: store.selected == k.g.name)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture { store.selected = k.g.name }
-                            }
-                        }
-                        .padding(Pearl.Space.screen)
-                    }
-                    .frame(minWidth: 360)
+                    table(compact: false)
+                        .frame(minWidth: 360)
                     Divider()
                     GPUDetailView(store: store, name: store.selected)
-                        .frame(width: 360)
+                        .frame(width: 380)
                 }
             }
         }
     }
+
+    private func table(compact: Bool) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Pearl.Space.sm) {
+                // The menu's own wording ("按自有净利") says what it does.
+                Picker(Loc("排序"), selection: $store.sortKey) {
+                    ForEach(SortKey.allCases) { Text(Loc($0.rawValue)).tag($0) }
+                }
+                .pickerStyle(.menu).labelsHidden()
+                .fixedSize()
+
+                VStack(spacing: 0) {
+                    GPUTableHeader(rent: store.rentEnabled)
+                    ForEach(store.calcs(), id: \.g.name) { k in
+                        Divider().padding(.leading, Pearl.Space.md)
+                        Button {
+                            if compact { pushed = k.g.name } else { store.selected = k.g.name }
+                        } label: {
+                            GPURow(store: store, k: k,
+                                   selected: !compact && store.selected == k.g.name,
+                                   showChevron: compact)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .pearlCard(padding: 0, radius: Pearl.Radius.md)
+            }
+            .padding(Pearl.Space.screen)
+            .frame(maxWidth: 720)
+            .frame(maxWidth: .infinity)
+        }
+    }
 }
 
-/// 列表行：自适应，紧凑屏只显示关键列。
+/// The figure columns' width, shared by the header and the rows so they line up.
+private let gpuFigureWidth: CGFloat = 64
+
+/// Column titles, once for the whole table.
+private struct GPUTableHeader: View {
+    let rent: Bool
+    var body: some View {
+        HStack(spacing: Pearl.Space.xs) {
+            Text(Loc("显卡"))
+            Spacer(minLength: Pearl.Space.xs)
+            Text(Loc("自有") + Loc("/天")).frame(width: gpuFigureWidth, alignment: .trailing)
+            if rent {
+                Text(Loc("租用") + Loc("/天")).frame(width: gpuFigureWidth, alignment: .trailing)
+            }
+            // Room for the rows' chevron.
+            Color.clear.frame(width: 8, height: 1)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .lineLimit(1).minimumScaleFactor(0.8)
+        .padding(.horizontal, Pearl.Space.md)
+        .padding(.vertical, Pearl.Space.xs + 2)
+        .accessibilityHidden(true)
+    }
+}
+
+/// A GPU in the table: name and specs, then what it nets a day owned (and rented).
 struct GPURow: View {
     @ObservedObject var store: PRLStore
     let k: Calc
     let selected: Bool
     var showChevron: Bool = false
+
     var body: some View {
         let c = store.cfg
-        let rentNet = store.rentNetUSD(k) * c.fx
-        let positive = k.ownNet > 0
-        HStack(spacing: Pearl.Space.sm) {
-            PearlIconBadge(systemImage: "memorychip",
-                gradient: selected ? Pearl.brandVivid : (positive ? Pearl.positive : Pearl.negative),
-                glyph: selected ? Pearl.onHero : nil,
-                size: 36)
+        let own = k.ownNet * c.fx
+        let rent = store.rentNetUSD(k) * c.fx
+        HStack(spacing: Pearl.Space.xs) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(k.g.name).font(.body.bold())
+                Text(k.g.name).font(.body.weight(.semibold))
+                    .lineLimit(1).minimumScaleFactor(0.85)
+                Text(formatHashrate(k.g.pearl * 1e12) + " · " + f(k.g.watts, 0) + " W")
+                    .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                    .lineLimit(1)
             }
             Spacer(minLength: Pearl.Space.xs)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(store.sym(Loc("自有 ¥")) + f(k.ownNet * c.fx, 1)).font(.callout.monospacedDigit().bold())
-                    .foregroundColor(positive ? .green : .red)
-                if store.rentEnabled {
-                    Text(store.sym(Loc("租净 ¥")) + f(rentNet, 1)).font(.caption.monospacedDigit())
-                        .foregroundColor(profitColor(rentNet))
-                } else {
-                    Text(formatHashrate(k.g.pearl * 1e12) + " · " + f(k.dailyPRL, 1) + "/d").font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                }
-            }
-            // Chevron lives INSIDE the card (not as the List's detached accessory)
-            // so the row reads as one cohesive tappable card.
-            if showChevron {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(.secondary)
-                    .padding(.leading, 2)
-            }
+            figure(own, weight: .semibold)
+            if store.rentEnabled { figure(rent, weight: .regular) }
+            Image(systemName: "chevron.right")
+                .font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+                .frame(width: 8)
+                .opacity(showChevron ? 1 : 0)
+                .accessibilityHidden(true)
         }
-        .padding(.vertical, Pearl.Space.sm).padding(.horizontal, Pearl.Space.sm)
-        .background(
-            RoundedRectangle(cornerRadius: Pearl.Radius.sm, style: .continuous)
-                .fill(selected ? Pearl.accent.opacity(0.22)
-                      : (positive ? Pearl.teal.opacity(0.10) : Pearl.rose.opacity(0.12)))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Pearl.Radius.sm, style: .continuous)
-                .strokeBorder(selected ? Pearl.accent.opacity(0.55)
-                              : (positive ? Pearl.teal.opacity(0.30) : Pearl.rose.opacity(0.30)),
-                              lineWidth: 1)
-        )
+        .padding(.horizontal, Pearl.Space.md)
+        .padding(.vertical, Pearl.Space.sm)
+        .background(selected ? Pearl.accent.opacity(0.12) : .clear)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(k.g.name)
+        .accessibilityValue(spoken(own: own, rent: rent))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func spoken(own: Double, rent: Double) -> String {
+        var parts = [Loc("自有净利") + " " + money(own)]
+        if store.rentEnabled { parts.append(Loc("租净利") + " " + money(rent)) }
+        return parts.joined(separator: ", ")
+    }
+
+    /// A daily figure: green when it pays, grey when it doesn't.
+    private func figure(_ v: Double, weight: Font.Weight) -> some View {
+        Text(money(v))
+            .font(.callout.weight(weight)).monospacedDigit()
+            .foregroundStyle(v > 0 ? AnyShapeStyle(Color.green) : AnyShapeStyle(.secondary))
+            .lineLimit(1).minimumScaleFactor(0.7)
+            .frame(width: gpuFigureWidth, alignment: .trailing)
+    }
+
+    private func money(_ v: Double) -> String {
+        (v < 0 ? "-" : "") + store.localSymbol + f(abs(v), 1)
     }
 }
+
+// MARK: - Detail
 
 struct GPUDetailView: View {
     @ObservedObject var store: PRLStore
     let name: String?
+    @Environment(\.horizontalSizeClass) private var hsc
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Pearl.Space.lg) {
-                if let name, let g = gpu(name) {
-                    let c = store.cfg; let k = compute(g, c)
-                    HStack(spacing: Pearl.Space.sm) {
-                        PearlIconBadge(systemImage: "memorychip", gradient: Pearl.brandVivid, glyph: Pearl.onHero, size: 44)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(g.name).font(.title.bold())
-                        }
-                    }
-                    VStack(alignment: .leading, spacing: Pearl.Space.xs) {
-                        info(Loc("算力"), formatHashrate(g.pearl * 1e12) + " · " + f(g.watts, 0) + "W · $" + f(g.price, 0))
-                        info(Loc("日产"), f(k.dailyPRL, 2) + " PRL")
-                        info(Loc("毛收入"), "$" + f(k.grossRev, 2) + Loc("/天"))
-                        info(Loc("扣抽水"), store.localSymbol + f(k.netRev * c.fx, 1) + Loc("/天"))
-                        info(Loc("电费"), store.localSymbol + f(k.power * c.fx, 1) + Loc("/天"))
-                        info(Loc("自有净利"), store.localSymbol + f(k.ownNet * c.fx, 1) + Loc("/天"), profitColor(k.ownNet))
-                        info(Loc("30天净"), store.localSymbol + f(k.net30 * c.fx, 0), profitColor(k.net30))
-                        info(Loc("90天净"), store.localSymbol + f(k.net90 * c.fx, 0), profitColor(k.net90))
-                        if c.diffGrowthMonthly != 0 {
-                            Text(Loc("↑ 已按难度月增 %@%% 衰减；在【参数】可调", f(c.diffGrowthMonthly,0)))
-                                .pearlExplanation(.footnote)
-                        }
-                    }
-                    .pearlCard()
-                    let beDay = store.beRentDayUSD(k); let beHr = beDay / 24
-                    VStack(alignment: .leading, spacing: Pearl.Space.xs) {
-                        Text(store.rentCoversPower ? Loc("★ 盈亏平衡租金（含电）") : Loc("★ 盈亏平衡租金（不含电）")).font(.headline)
-                        Text(store.localSymbol + f(beHr * c.fx, 2) + "/h · $" + f(beHr, 3) + "/h")
-                            .font(.system(.title3, design: .rounded).weight(.bold)).foregroundColor(.teal)
-                            .lineLimit(1).minimumScaleFactor(0.5)
-                        Text("= " + store.localSymbol + f(beDay * c.fx, 1) + Loc("/天 · $") + f(beDay, 2) + Loc("/天"))
-                            .font(.callout).foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .pearlAccentCard(gradient: Pearl.mint)
-                    if store.rentEnabled { rentBlock(c, k) }
-                } else {
-                    PearlEmptyState(systemImage: "hand.point.left",
-                        title: Loc("← 选一张显卡"),
-                        message: Loc("从左侧列表挑一张显卡，查看收益与盈亏平衡分析"))
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, Pearl.Space.xl)
-                }
+        Group {
+            if let name, let g = gpu(name) {
+                form(g)
+            } else {
+                PearlEmptyState(systemImage: "hand.point.left", title: Loc("← 选一张显卡"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .padding(Pearl.Space.screen).frame(maxWidth: .infinity, alignment: .leading)
         }
         #if os(iOS)
         .navigationTitle(name ?? Loc("显卡"))
@@ -184,15 +180,58 @@ struct GPUDetailView: View {
         #endif
     }
 
-    @ViewBuilder func info(_ k: String, _ v: String, _ color: Color = .primary) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(k).font(.callout).foregroundColor(.secondary).frame(width: 76, alignment: .leading)
-            Text(v).font(.callout).foregroundColor(color).monospacedDigit()
-            Spacer()
+    private func form(_ g: GPU) -> some View {
+        let c = store.cfg
+        let k = compute(g, c)
+        return Form {
+            Section {
+                // Beside the table there is no navigation title to name the card.
+                if hsc != .compact {
+                    Text(g.name).font(.title2.bold())
+                }
+                LabeledContent(Loc("算力"), value: formatHashrate(g.pearl * 1e12))
+                LabeledContent(Loc("功耗"), value: f(g.watts, 0) + " W")
+                LabeledContent(Loc("价格"), value: "$" + f(g.price, 0))
+            }
+            .pearlListRowSurface()
+
+            Section(Loc("自有")) {
+                LabeledContent(Loc("自有净利")) {
+                    Text(local(k.ownNet * c.fx, 1) + Loc("/天"))
+                        .font(.headline).monospacedDigit().foregroundStyle(profitColor(k.ownNet))
+                }
+                row(Loc("日产"), f(k.dailyPRL, 2) + " PRL")
+                row(Loc("毛收入"), local(k.grossRev * c.fx, 1) + Loc("/天"))
+                row(Loc("扣抽水后"), local(k.netRev * c.fx, 1) + Loc("/天"))
+                row(Loc("电费"), local(k.power * c.fx, 1) + Loc("/天"))
+                LabeledContent {
+                    Text(local(k.net30 * c.fx, 0)).monospacedDigit().foregroundStyle(profitColor(k.net30))
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(Loc("30天净"))
+                        // The 30/90-day figures already decay with the monthly growth set in 参数.
+                        if c.diffGrowthMonthly != 0 {
+                            PearlInfoTip(Loc("难度月增 %@%% → 出币逐日衰减", f(c.diffGrowthMonthly, 0)),
+                                         title: Loc("30天净"))
+                        }
+                    }
+                }
+                LabeledContent(Loc("90天净")) {
+                    Text(local(k.net90 * c.fx, 0)).monospacedDigit().foregroundStyle(profitColor(k.net90))
+                }
+            }
+            .pearlListRowSurface()
+
+            rentSection(c, k)
+                .pearlListRowSurface()
         }
+        .formStyle(.grouped)
+        .pearlListBackground()
     }
 
-    @ViewBuilder func rentBlock(_ c: Config, _ k: Calc) -> some View {
+    /// Renting: the price it breaks even at, always; with 租用 on, this card's rent and
+    /// what it leaves — and how far price or network hashrate can move before it doesn't.
+    @ViewBuilder private func rentSection(_ c: Config, _ k: Calc) -> some View {
         let name = k.g.name
         let rentDay = store.rent(for: name)
         let r = rentDay / c.fx
@@ -202,25 +241,50 @@ struct GPUDetailView: View {
         let roi = cost > 0 ? net / cost * 100 : 0
         let bePrice = k.dailyPRL > 0 ? cost / (k.dailyPRL * (1 - c.poolFee)) : 0
         let beNet = cost > 0 ? c.nethashEH * (k.netRev / cost) : 0
-        VStack(alignment: .leading, spacing: Pearl.Space.sm) {
+        let beHr = store.beRentDayUSD(k) / 24
+        Section {
+            LabeledContent(Loc("盈亏平衡租金")) {
+                Text(local(beHr * c.fx, 2) + Loc("/小时"))
+                    .font(.headline).monospacedDigit().foregroundStyle(Pearl.accent)
+            }
+            if store.rentEnabled {
+                Stepper(value: Binding(get: { store.rentHour(for: name) }, set: { store.setRentHour(name, $0) }),
+                        in: 0...125, step: 0.5) {
+                    LabeledContent(Loc("租金")) {
+                        VStack(alignment: .trailing, spacing: 1) {
+                            Text(local(rentDay / 24, 2) + Loc("/小时")).monospacedDigit()
+                            Text("≈ " + local(rentDay, 0) + Loc("/天"))
+                                .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                        }
+                    }
+                }
+                Toggle(Loc("租金含电费"), isOn: $store.rentCoversPower)
+                LabeledContent(Loc("租净利")) {
+                    Text(local(net * c.fx, 1) + Loc("/天"))
+                        .font(.headline).monospacedDigit().foregroundStyle(profitColor(net))
+                }
+                row(Loc("回报"), f(roi, 0) + "%")
+                row(Loc("保本币价"), "$" + f(bePrice, 3))
+                row(Loc("保本全网算力"), f(beNet, 1) + " EH/s")
+            }
+        } header: {
             HStack {
-                Text(Loc("租用分析（本卡）")).font(.headline)
+                Text(Loc("租用"))
                 Spacer()
-                Text(net > 0 ? Loc("✅ 划算") : Loc("❌ 不划算")).font(.callout.bold())
-                    .padding(.horizontal, Pearl.Space.sm).padding(.vertical, Pearl.Space.xxs)
-                    .background(net > 0 ? Color.green.opacity(0.2) : Color.red.opacity(0.2), in: Capsule())
-                    .foregroundColor(profitColor(net))
+                if store.rentEnabled {
+                    Text(net > 0 ? Loc("划算") : Loc("不划算"))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(net > 0 ? Color.green : Color.secondary)
+                }
             }
-            Stepper(value: Binding(get: { store.rentHour(for: name) }, set: { store.setRentHour(name, $0) }), in: 0...125, step: 0.5) {
-                Text(store.sym(Loc("本卡租金 ¥")) + f(rentDay / 24, 2) + Loc("/小时")).font(.callout.monospacedDigit())
-            }
-            info(Loc("折合"), store.localSymbol + f(rentDay, 0) + Loc("/天 · $") + f(rentDay / c.fx, 2) + Loc("/天"))
-            Toggle(Loc("租金含电费"), isOn: $store.rentCoversPower).font(.callout).toggleStyle(.switch).tint(Pearl.switchOn)
-            info(Loc("租净利"), store.localSymbol + f(net * c.fx, 1) + Loc("/天 · 回报 ") + f(roi, 0) + "%", profitColor(net))
-            info(Loc("安全垫"), Loc("币价 $") + f(bePrice, 3) + Loc(" 归零"))
-            info("", Loc("全网 ") + f(beNet, 1) + Loc(" EH/s 归零"))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .pearlCard()
+    }
+
+    private func row(_ label: String, _ value: String) -> some View {
+        LabeledContent(label) { Text(value).monospacedDigit() }
+    }
+
+    private func local(_ v: Double, _ digits: Int) -> String {
+        (v < 0 ? "-" : "") + store.localSymbol + f(abs(v), digits)
     }
 }

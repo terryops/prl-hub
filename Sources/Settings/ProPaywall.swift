@@ -16,8 +16,6 @@ struct ProPaywallCard: View {
             VStack(spacing: Pearl.Space.xs) {
                 PearlIconBadge(systemImage: "sparkles", size: 52)
                 Text(Loc("Pearl Hub 高级版")).font(.title3.weight(.bold))
-                Text(Loc("价格一到，第一时间通知你"))
-                    .font(.subheadline).foregroundStyle(.secondary)
             }
 
             ProFeatureList()
@@ -81,7 +79,6 @@ struct ProFeatureList: View {
             feature("arrow.triangle.2.circlepath", Loc("数据同步：登录同一邮箱，在网页、iPhone、iPad 和 Mac 间同步配置"))
             feature("scope", Loc("到价提醒：涨破或跌破你设定的价格"))
             feature("waveform.path.ecg", Loc("涨跌幅提醒：5 分钟、1 小时或 24 小时"))
-            feature("bell.badge", Loc("没打开 App 也能收到通知"))
             feature("wifi.exclamationmark", Loc("掉线提醒：矿机离线 10 分钟以上就通知你"))
             if PriceLiveActivity.supported {
                 feature("lock.iphone", Loc("锁屏盯盘：锁屏和灵动岛实时显示价格"))

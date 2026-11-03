@@ -120,20 +120,6 @@ struct PearlLogo: View {
     }
 }
 
-/// The original pearl miner lives on as a small decorative companion, independent
-/// of the selected app icon. Its transparent artwork stays clear of the main branding.
-struct PearlMascot: View {
-    var size: CGFloat = 44
-    var body: some View {
-        Image("AppLogoMark")
-            .resizable().interpolation(.high).scaledToFit()
-            .frame(width: size, height: size)
-            .shadow(color: Pearl.shadow.opacity(0.18), radius: size * 0.10, y: size * 0.04)
-            .accessibilityHidden(true)
-            .allowsHitTesting(false)
-    }
-}
-
 // MARK: - Glow orb (soft radial light)
 
 /// A soft circular glow — the building block for ambient backgrounds.
@@ -261,18 +247,15 @@ struct PearlEmptyState<Action: View>: View {
     let title: String
     var message: String? = nil
     var gradient: LinearGradient = Pearl.brand
-    var showsMascot = false
     @ViewBuilder var action: () -> Action
 
     init(systemImage: String, title: String, message: String? = nil,
          gradient: LinearGradient = Pearl.brand,
-         showsMascot: Bool = false,
          @ViewBuilder action: @escaping () -> Action = { EmptyView() }) {
         self.systemImage = systemImage
         self.title = title
         self.message = message
         self.gradient = gradient
-        self.showsMascot = showsMascot
         self.action = action
     }
 
@@ -285,9 +268,6 @@ struct PearlEmptyState<Action: View>: View {
                 Image(systemName: systemImage)
                     .font(.system(size: 50, weight: .semibold))
                     .foregroundStyle(gradient)
-                if showsMascot {
-                    PearlMascot(size: 48).offset(x: 50, y: 40)
-                }
             }
             VStack(spacing: 6) {
                 Text(title).font(.title3.weight(.semibold))

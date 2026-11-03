@@ -23,6 +23,7 @@ struct PresetAddressesView: View {
                         #if os(macOS)
                         Button(role: .destructive) { book.remove(p.id) } label: { Image(systemName: "trash") }
                             .buttonStyle(.borderless)
+                            .help(Loc("删除")).accessibilityLabel(Loc("删除"))
                         #endif
                     }
                 }

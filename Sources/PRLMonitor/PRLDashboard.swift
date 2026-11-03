@@ -5,6 +5,8 @@ import Charts
 
 struct DashboardSection: View {
     @ObservedObject var store: PRLStore
+    /// Opens 我的设备 — offered while there are no devices yet, so the zeros below lead somewhere.
+    var onAddDevice: (() -> Void)? = nil
     @State private var trendMetric: MarketTrendCard.Metric? = nil   // nil = 趋势图收起；点卡片展开
     var body: some View {
         let c = store.cfg
@@ -17,14 +19,16 @@ struct DashboardSection: View {
                 // 行情头部 + 刷新（单行紧凑：状态文字截断而非换行，避免在 iPhone 上撑高）
                 marketHeader(c)
 
+                // Loading / manual state is told once, by the 行情 header — the cards carry
+                // only units and data (source, trend).
                 StatGrid {
                     trendCard(.price) {
                         StatCard(title: Loc("PRL 币价"), value: ready ? "$" + f(c.price, 2) : "—",
-                                 sub: store.live ? (ready ? Loc("SafeTrade 实时") : Loc("联网中…")) : Loc("手动"), color: .orange)
+                                 sub: store.live && ready ? Loc("SafeTrade 实时") : "", color: .orange)
                     }
                     trendCard(.hashrate) {
                         StatCard(title: Loc("全网算力"), value: ready ? f(c.nethashEH, 2) + " EH/s" : "—",
-                                 sub: !ready ? Loc("联网中…") : (c.hasDiffTrend ? Loc("近7天 %@ · 24h %@", pctSigned(c.diffChange(vs: c.diff7)), pctSigned(c.diffChange(vs: c.diff24))) : "Pearl matmul"),
+                                 sub: ready && c.hasDiffTrend ? Loc("近7天 %@ · 24h %@", pctSigned(c.diffChange(vs: c.diff7)), pctSigned(c.diffChange(vs: c.diff24))) : "",
                                  color: ready && c.hasDiffTrend && c.diffChange(vs: c.diff7) > 0 ? .orange : .primary)
                     }
                     trendCard(.perUnit) {
@@ -35,7 +39,7 @@ struct DashboardSection: View {
                     }
                     trendCard(.difficulty) {
                         StatCard(title: Loc("难度"), value: ready ? f(c.diffNow / 1e6, 2) + "M" : "—",
-                                 sub: !ready ? Loc("联网中…") : Loc("挖矿难度"),
+                                 sub: "",
                                  color: ready && c.hasDiffTrend && c.diffChange(vs: c.diff7) > 0 ? .orange : .primary)
                     }
                 }
@@ -49,11 +53,20 @@ struct DashboardSection: View {
                 NetworkChartCard()
 
                 Divider()
-                PearlSectionHeader(Loc("每天的情况 · 我的全部设备"), systemImage: "rectangle.stack.fill",
-                                   subtitle: Loc("%@ 台设备 · 共 %@ 张卡（自有 %@ · 租用 %@）· 总算力 %@", "\(store.devices.count)", "\(fl.cards)", "\(fl.ownCards)", "\(fl.rentedCards)", formatHashrate(fl.pearl * 1e12)))
+                HStack(spacing: Pearl.Space.sm) {
+                    PearlSectionHeader(Loc("我的设备"), systemImage: "rectangle.stack.fill",
+                                       subtitle: store.devices.isEmpty ? nil
+                                           : Loc("%@ 台设备 · 共 %@ 张卡（自有 %@ · 租用 %@）· 总算力 %@", "\(store.devices.count)", "\(fl.cards)", "\(fl.ownCards)", "\(fl.rentedCards)", formatHashrate(fl.pearl * 1e12)))
+                    if store.devices.isEmpty, let onAddDevice {
+                        Button(action: onAddDevice) {
+                            Label(Loc("添加设备"), systemImage: "plus")
+                        }
+                        .buttonStyle(.bordered).controlSize(.small).fixedSize()
+                    }
+                }
 
                 VStack(alignment: .leading, spacing: Pearl.Space.xs) {
-                    cardTitle(Loc("日净利 · 设备估算"), Loc("按你的设备算力和电费估算"))
+                    cardTitle(Loc("日净利 · 设备估算"), info: Loc("按你的设备算力和电费估算"))
                     if ready {
                         Text(store.localSymbol + " " + f(fl.netDay * c.fx, 1)).font(.system(.largeTitle, design: .rounded).weight(.heavy))
                             .foregroundColor(profitColor(fl.netDay)).monospacedDigit()
@@ -79,7 +92,7 @@ struct DashboardSection: View {
                     let inc7: Double?  = got7.isEmpty ? nil : sum7 / 7.0
                     let cost  = fl.powerDay + fl.rentDay   // 设备电费 + 租金 (USD/天)
                     VStack(alignment: .leading, spacing: Pearl.Space.sm) {
-                        cardTitle(Loc("日净利 · 链上实收"), Loc("矿池实际到账（已排除自己地址间的互转）− 电费/租金"))
+                        cardTitle(Loc("日净利 · 链上实收"), info: Loc("矿池实际到账（已排除自己地址间的互转）− 电费/租金"))
                         // Equal-height pair: each box stretches to the taller one.
                         HStack(alignment: .top, spacing: Pearl.Space.sm) {
                             actualBox(Loc("近 24h"), inc24, c.price, cost, c.fx)
@@ -183,12 +196,11 @@ struct DashboardSection: View {
         }
     }
 
-    /// Card heading: a short title on one line, with what it means as a caption
-    /// beneath — rather than one long title that wraps.
-    @ViewBuilder private func cardTitle(_ title: String, _ caption: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+    /// Card heading: a short title on one line; how the figure is worked out sits in its ⓘ.
+    @ViewBuilder private func cardTitle(_ title: String, info: String) -> some View {
+        HStack(spacing: 4) {
             Text(title).font(.headline).foregroundColor(.secondary).lineLimit(1).minimumScaleFactor(0.8)
-            Text(caption).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+            PearlInfoTip(info, title: title)
         }
     }
 
@@ -225,28 +237,42 @@ struct DiffProjection: View {
         let netPearl = c.nethashEH * 1e6
         let share = (netPearl + fl.pearl) > 0 ? fl.pearl / (netPearl + fl.pearl) : 0
         let dilution = netPearl > 0 ? netPearl / (netPearl + fl.pearl) : 1
+        // Where the monthly growth comes from (auto from the 7-day trend, or set by hand)
+        // sits in the header's ⓘ; the subtitle keeps the assumption actually in use.
+        let growthSource: String? = store.live
+            ? (c.hasDiffTrend ? Loc("月增长已按近7天趋势自动估算") : nil)
+            : Loc("仅供参考，月增长可在【参数】手动设")
         return VStack(alignment: .leading, spacing: Pearl.Space.sm) {
             PearlSectionHeader(Loc("难度趋势预测"), systemImage: "chart.line.uptrend.xyaxis",
                                subtitle: c.diffGrowthMonthly == 0 ? Loc("难度恒定 · 线性外推")
-                                                                  : Loc("难度月增 %@%% → 出币逐日衰减", f(c.diffGrowthMonthly,0)))
+                                                                  : Loc("难度月增 %@%% → 出币逐日衰减", f(c.diffGrowthMonthly,0)),
+                               info: growthSource)
             StatGrid {
-                StatCard(title: Loc("30 天净利"), value: ready ? store.localSymbol+f(p.net30*c.fx,0) : "—", sub: Loc("难度衰减后"), color: ready && p.net30 > 0 ? .green : (ready ? .red : .secondary))
-                StatCard(title: Loc("90 天净利"), value: ready ? store.localSymbol+f(p.net90*c.fx,0) : "—", sub: Loc("难度衰减后"), color: ready && p.net90 > 0 ? .green : (ready ? .red : .secondary))
+                StatCard(title: Loc("30 天净利"), value: ready ? store.localSymbol+f(p.net30*c.fx,0) : "—", sub: "", color: ready && p.net30 > 0 ? .green : (ready ? .red : .secondary))
+                StatCard(title: Loc("90 天净利"), value: ready ? store.localSymbol+f(p.net90*c.fx,0) : "—", sub: "", color: ready && p.net90 > 0 ? .green : (ready ? .red : .secondary))
             }
             if ready && c.hasDiffTrend {
                 let d7 = c.diffChange(vs: c.diff7), d3 = c.diffChange(vs: c.diff3), d24 = c.diffChange(vs: c.diff24)
-                let trendHint = store.live ? Loc("月增长已按近7天趋势自动估算")
-                                           : Loc("仅供参考，月增长可在【参数】手动设")
-                PearlInfoRow(Loc("实时难度 %@M · 近7天 %@ · 近3天 %@ · 近24h %@　（%@）", f(c.diffNow/1e6,2), pctSigned(d7), pctSigned(d3), pctSigned(d24), trendHint),
-                             systemImage: "chart.line.uptrend.xyaxis",
-                             tint: d7.isFinite && d7 > 0 ? .orange : Pearl.accent)
+                dataLine(Loc("实时难度：当前 %@M · 近7天 %@ · 近3天 %@ · 近24h %@", f(c.diffNow/1e6,2), pctSigned(d7), pctSigned(d3), pctSigned(d24)),
+                         systemImage: "chart.line.uptrend.xyaxis",
+                         tint: d7.isFinite && d7 > 0 ? .orange : Pearl.accent)
             }
             if store.selfDilution {
-                PearlInfoRow(Loc("已计入自身算力稀释：你占全网 %@%% · 单卡出币 ×%@", f(share*100,3), f(dilution,3)),
-                             systemImage: "person.2.fill")
+                dataLine(Loc("已计入自身算力稀释：你占全网 %@%% · 单卡出币 ×%@", f(share*100,3), f(dilution,3)),
+                         systemImage: "person.2.fill", tint: Pearl.accent)
             }
         }
         .pearlCard()
+    }
+
+    /// A line of figures under the forecast — data, so small and quiet, not a callout.
+    private func dataLine(_ text: String, systemImage: String, tint: Color) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Pearl.Space.xs) {
+            Image(systemName: systemImage).font(.caption).foregroundStyle(tint)
+                .accessibilityHidden(true)
+            Text(text).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 

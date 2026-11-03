@@ -25,8 +25,18 @@ struct WalletSecuritySettingsView: View {
     var body: some View {
         SettingsPage(Loc("钱包与安全")) {
             WalletSettingsSection()
-            Section(Loc("安全")) {
-                PearlInfoRow(Loc("助记词加密存于钥匙串；查看助记词与转账需 Face ID / Touch ID 验证。"), systemImage: "key.fill")
+            // The full account of what is kept where is one tap away; the gist is in the ⓘ.
+            // (Also what this page shows while the wallet is locked or absent.)
+            Section {
+                NavigationLink {
+                    SecurityInfoView()
+                } label: { Label(Loc("安全性说明"), systemImage: "checkmark.shield") }
+            } header: {
+                HStack(spacing: 4) {
+                    Text(Loc("安全"))
+                    PearlInfoTip(Loc("助记词加密存于钥匙串；查看助记词与转账需 Face ID / Touch ID 验证。"),
+                                 title: Loc("安全"))
+                }
             }
             .pearlListRowSurface()
         }
@@ -39,7 +49,7 @@ struct AppearanceSettingsView: View {
 
     var body: some View {
         SettingsPage(Loc("主题与配色")) {
-            Section(Loc("外观")) {
+            Section {
                 Picker(Loc("主题"), selection: $appearance) {
                     Text(Loc("跟随系统")).tag("system")
                     Text(Loc("浅色")).tag("light")
@@ -77,7 +87,7 @@ struct LanguageSettingsView: View {
 
     var body: some View {
         SettingsPage(Loc("界面语言")) {
-            Section(Loc("语言")) {
+            Section {
                 Picker(Loc("界面语言"), selection: Binding(
                     get: { loc.language },
                     set: { loc.setLanguage($0) })) {
@@ -96,7 +106,7 @@ struct CurrencySettingsView: View {
 
     var body: some View {
         SettingsPage(Loc("货币")) {
-            Section(Loc("货币")) {
+            Section {
                 LabeledContent(Loc("主货币"), value: "USD · " + Loc("美元"))
                 Picker(Loc("副货币"), selection: Binding(
                     get: { currency.secondaryPref },
@@ -111,7 +121,15 @@ struct CurrencySettingsView: View {
                     LabeledContent(Loc("当前副货币"), value: "\(s.localizedName) · \(s.code)")
                 }
                 if let line = currency.rateLine() {
-                    LabeledContent(Loc("当前汇率"), value: line)
+                    LabeledContent {
+                        Text(line)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(Loc("当前汇率"))
+                            PearlInfoTip(Loc("汇率以美元为基准，每天自动更新一次；离线时使用最近一次缓存。"),
+                                         title: Loc("当前汇率"))
+                        }
+                    }
                 }
                 if let at = currency.lastUpdated {
                     LabeledContent(Loc("汇率更新于"),
@@ -119,8 +137,6 @@ struct CurrencySettingsView: View {
                                                         .locale(LocBundleHolder.shared.locale)))
                 }
                 Button(Loc("立即刷新汇率")) { Task { await currency.refresh() } }
-                PearlInfoRow(Loc("汇率以美元为基准，每天自动更新一次；离线时使用最近一次缓存。"),
-                             systemImage: "clock.arrow.circlepath")
             }
             .pearlListRowSurface()
         }
@@ -153,7 +169,7 @@ struct AboutSettingsView: View {
 
     var body: some View {
         SettingsPage(Loc("关于")) {
-            Section(Loc("关于")) {
+            Section {
                 LabeledContent(Loc("应用"), value: "Pearl Hub")
                 LabeledContent(Loc("版本"), value: appVersion)
                 // Opens the App Store review sheet directly. The in-app prompt (see
@@ -166,8 +182,9 @@ struct AboutSettingsView: View {
                 }
                 LabeledContent(Loc("开发者"), value: "Cyber Corner")
                 Link(destination: AppLinks.telegram) {
-                    Label(Loc("加入 Telegram 频道 @prl_hub，获取更新公告与帮助"), systemImage: "paperplane.fill")
+                    Label { Text(verbatim: "Telegram @prl_hub") } icon: { Image(systemName: "paperplane.fill") }
                 }
+                .accessibilityHint(Loc("加入 Telegram 频道 @prl_hub，获取更新公告与帮助"))
                 Link(destination: AppLinks.github) {
                     Label(Loc("GitHub 开源代码"), systemImage: "chevron.left.forwardslash.chevron.right")
                 }
@@ -255,7 +272,7 @@ private struct NetworkSettingsSection: View {
     @EnvironmentObject private var wallet: WalletStore
 
     var body: some View {
-        Section(Loc("网络")) {
+        Section {
             Picker(Loc("Pearl 网络"), selection: Binding(
                 get: { wallet.network },
                 set: { wallet.changeNetwork($0) })) {

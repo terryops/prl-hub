@@ -297,18 +297,17 @@ struct WithdrawView: View {
     /// USDT chain picker: one tile per open chain with its fee and minimum, so the
     /// choice is visible at a glance. Deliberately starts with nothing selected: the
     /// receiving side must support the chain, and only the user knows which one it does.
+    /// The wrong-chain warning is in the ⓘ here; the confirm sheet states it on the page.
     @ViewBuilder private var networkPicker: some View {
         VStack(alignment: .leading, spacing: Pearl.Space.xs) {
-            Text(Loc("网络")).font(.subheadline).foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                Text(Loc("网络")).font(.subheadline).foregroundStyle(.secondary)
+                PearlInfoTip(Loc("请确认收款方支持这条链，选错网络资金可能找不回。"), title: Loc("网络"))
+            }
             LazyVGrid(columns: [GridItem(.flexible(), spacing: Pearl.Space.sm),
                                 GridItem(.flexible(), spacing: Pearl.Space.sm)],
                       spacing: Pearl.Space.sm) {
                 ForEach(store.openNetworks) { n in networkTile(n) }
-            }
-            if store.network != nil {
-                Text(Loc("请确认收款方支持这条链，选错网络资金可能找不回。"))
-                    .font(.caption).foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -372,8 +371,11 @@ struct WithdrawView: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                HStack {
+                HStack(spacing: 4) {
                     Text(Loc("收款地址")).font(.subheadline).foregroundStyle(.secondary)
+                    // Why the SafeTrade address book offers nothing here — it doesn't
+                    // stop a typed address, so it needn't sit under the field.
+                    if let note = store.bookNote { PearlInfoTip(note, tint: .orange) }
                     Spacer()
                     presetsMenu
                 }
@@ -381,6 +383,7 @@ struct WithdrawView: View {
                     .textFieldStyle(.roundedBorder)
                     .font(.caption.monospaced())
                     .autocorrectionDisabled()
+                    .accessibilityLabel(Loc("收款地址"))
                     .focused($focused)
                     #if os(iOS)
                     .textInputAutocapitalization(.never)
@@ -393,11 +396,6 @@ struct WithdrawView: View {
                 } else if canSavePreset {
                     Button(isPearl ? Loc("加入通讯录") : Loc("保存为常用地址")) { presetName = ""; naming = true }
                         .buttonStyle(.borderless).font(.caption.weight(.medium)).tint(Pearl.accent)
-                }
-                if let note = store.bookNote {
-                    Text(note).font(.caption).foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
                 }
             }
 
@@ -412,6 +410,7 @@ struct WithdrawView: View {
                 }
                 TextField("0.0", text: $amount).textFieldStyle(.roundedBorder)
                     .font(.body.monospacedDigit())
+                    .accessibilityLabel(Loc("数量 (%@)", unit))
                     .focused($focused)
                     #if os(iOS)
                     .keyboardType(.decimalPad)
@@ -435,7 +434,14 @@ struct WithdrawView: View {
 
     private var codesCard: some View {
         VStack(alignment: .leading, spacing: Pearl.Space.md) {
-            Text(Loc("安全验证")).font(.headline)
+            // SafeTrade keys may only withdraw with Enable Withdraw; the key's Trusted
+            // IPs list gates every call it makes, withdrawals included. A refused key
+            // gets its own error with the fix, so this is background, in the ⓘ.
+            HStack(spacing: 4) {
+                Text(Loc("安全验证")).font(.headline)
+                PearlInfoTip(Loc("API 密钥需在 SafeTrade 开启 Enable Withdraw；它的 Trusted IPs 白名单对所有请求都生效，不只是提现。"),
+                             title: Loc("安全验证"))
+            }
             if beneficiary == nil {
                 codeField(Loc("邮箱验证码"), text: $emailCode, sendType: "email")
             }
@@ -443,10 +449,6 @@ struct WithdrawView: View {
             if store.needsPhoneCode {
                 codeField(Loc("短信验证码"), text: $phoneCode, sendType: "phone")
             }
-            // SafeTrade keys may only withdraw with Enable Withdraw; the key's Trusted
-            // IPs list gates every call it makes, withdrawals included.
-            Text(Loc("API 密钥需在 SafeTrade 开启 Enable Withdraw；它的 Trusted IPs 白名单对所有请求都生效，不只是提现。"))
-                .pearlExplanation()
             Button { focused = false; confirming = true } label: { Text(Loc("提现")) }
                 .buttonStyle(.pearl)
                 .disabled(!canSubmit)
@@ -463,6 +465,7 @@ struct WithdrawView: View {
                     set: { text.wrappedValue = String($0.filter(\.isNumber).prefix(6)) }))
                     .textFieldStyle(.roundedBorder)
                     .font(.body.monospacedDigit())
+                    .accessibilityLabel(title)
                     .focused($focused)
                     #if os(iOS)
                     .keyboardType(.numberPad)

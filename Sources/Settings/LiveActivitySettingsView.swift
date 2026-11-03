@@ -31,16 +31,16 @@ struct LiveActivityCard: View {
         VStack(alignment: .leading, spacing: Pearl.Space.sm) {
             HStack(spacing: Pearl.Space.md) {
                 PearlIconBadge(systemImage: "lock.iphone", size: 36)
-                VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
                     Text(Loc("锁屏盯盘")).font(.headline)
-                    Text(Loc("锁屏和灵动岛实时显示 PRL 价格，约每分钟更新，最长 8 小时。"))
-                        .pearlExplanation()
+                    PearlInfoTip(Loc("锁屏和灵动岛实时显示 PRL 价格，约每分钟更新，最长 8 小时。"),
+                                 title: Loc("锁屏盯盘"))
                 }
                 Spacer(minLength: 0)
                 if busy {
                     ProgressView().controlSize(.small)
                 } else {
-                    Toggle("", isOn: Binding(get: { live.running }, set: { on in
+                    Toggle(Loc("锁屏盯盘"), isOn: Binding(get: { live.running }, set: { on in
                         busy = true
                         Task { if on { await live.start() } else { await live.stop() }; busy = false }
                     }))

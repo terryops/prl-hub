@@ -314,10 +314,16 @@ struct DashboardView: View {
                     NockWalletEntry(slot: .card, surface: cardSurface, secondary: cardSecondary)
                 }
 
-                PriceAlertInlineLink()
-                WidgetInlineLink()
-                // …otherwise only this line, deliberately the quietest entry on the page.
-                if !store.isWatchOnly { NockWalletEntry(slot: .link) }
+                // The page's way out to its side features: one card of rows like the one above
+                // (价格提醒 always; 桌面小组件 until a widget is placed; the NOCK line until NOCK
+                // is used or the line is closed), not a centred stack of loose links.
+                VStack(spacing: 0) {
+                    PriceAlertInlineLink()
+                    WidgetInlineLink()
+                    if !store.isWatchOnly { NockWalletEntry(slot: .link) }
+                }
+                .padding(.horizontal, Pearl.Space.md)
+                .pearlCard(padding: 0, radius: Pearl.Radius.md, frosted: true, surface: cardSurface)
             }
             .padding(Pearl.Space.screen)
             .frame(maxWidth: 560)
@@ -539,13 +545,16 @@ struct ReceiveView: View {
                     // A read-only wallet has exactly one address — the one it watches.
                     if !store.isWatchOnly {
                         HStack(spacing: Pearl.Space.lg) {
-                            Button {
-                                copied = false
-                                store.nextReceiveAddress()
-                            } label: {
-                                Label(Loc("换一个地址"), systemImage: "arrow.triangle.2.circlepath")
+                            HStack(spacing: 4) {
+                                Button {
+                                    copied = false
+                                    store.nextReceiveAddress()
+                                } label: {
+                                    Label(Loc("换一个地址"), systemImage: "arrow.triangle.2.circlepath")
+                                }
+                                .accessibilityLabel(Loc("换一个收款地址"))
+                                PearlInfoTip(Loc("把这个地址发给对方即可收到 PRL。点按「换一个地址」可生成新地址，更好地保护隐私。"))
                             }
-                            .accessibilityLabel(Loc("换一个收款地址"))
                             if store.receiveIndex > 0 {
                                 Button {
                                     copied = false
@@ -558,9 +567,6 @@ struct ReceiveView: View {
                         .font(.callout.weight(.medium))
                         .buttonStyle(.plain)
                         .foregroundStyle(Pearl.accent)
-
-                        Text(Loc("把这个地址发给对方即可收到 PRL。点按「换一个地址」可生成新地址，更好地保护隐私。"))
-                            .pearlExplanation().multilineTextAlignment(.center)
                     }
                 } else {
                     ProgressView(Loc("派生地址…")).frame(maxHeight: 240)
@@ -710,7 +716,6 @@ struct SendView: View {
                     Label(result, systemImage: resultIsWarning ? "exclamationmark.triangle" : "xmark.octagon")
                         .font(.callout).foregroundStyle(resultIsWarning ? .orange : .red).textSelection(.enabled)
                 }
-                PearlInfoRow(Loc("交易在本机签名（私钥不离开设备），经 Blockbook 广播。"), systemImage: "lock.shield")
             }
             .padding(Pearl.Space.screen).frame(maxWidth: 520).frame(maxWidth: .infinity)
             .animation(.snappy, value: sending)
@@ -812,8 +817,7 @@ struct ActivityView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if store.txs.isEmpty {
                 PearlEmptyState(systemImage: "clock.arrow.circlepath",
-                                title: Loc("暂无交易记录"),
-                                message: Loc("你的收发记录会显示在这里"))
+                                title: Loc("暂无交易记录"))
             } else {
                 // Capped-width list so it doesn't stretch across a wide Mac window.
                 // One card with hairline-separated rows, not a stack of small cards.
@@ -993,7 +997,6 @@ struct RevealSeedView: View {
                         .font(.callout).foregroundStyle(.red).multilineTextAlignment(.center)
                 }
                 Text(Loc("助记词是你资产的唯一凭证")).font(.headline)
-                Text(Loc("需通过 Face ID / Touch ID 验证后才会显示")).pearlExplanation()
                 Button {
                     authing = true
                     Task { let ok = await store.authenticate(reason: Loc("查看助记词")); authing = false; if ok { withAnimation { revealed = true } } }
@@ -1013,5 +1016,52 @@ struct RevealSeedView: View {
         }
         .onChange(of: scenePhase) { _, p in if p != .active { revealed = false } }   // re-hide when backgrounded
         .onDisappear { revealed = false }
+    }
+}
+
+// MARK: - Shortcut rows
+
+/// One row of the wallet page's shortcut card (价格提醒 / 桌面小组件 / NOCK 钱包): glyph
+/// column, title, an optional status on the right, chevron. Every row but the first draws
+/// the hairline above itself, so a row that hides takes its line with it.
+struct WalletShortcutRow<Accessory: View>: View {
+    let systemImage: String
+    let title: String
+    var status: String? = nil
+    var divider = false
+    /// Room before the chevron for a control laid over the row (the NOCK line's ×).
+    @ViewBuilder var accessory: () -> Accessory
+
+    static var glyphWidth: CGFloat { 22 }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if divider { Divider().padding(.leading, Self.glyphWidth + Pearl.Space.sm) }
+            HStack(spacing: Pearl.Space.sm) {
+                Image(systemName: systemImage)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Pearl.accent)
+                    .frame(width: Self.glyphWidth)
+                    .accessibilityHidden(true)
+                Text(title).font(.subheadline).foregroundStyle(.primary)
+                Spacer(minLength: Pearl.Space.sm)
+                if let status {
+                    Text(status).font(.caption).foregroundStyle(.secondary)
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                }
+                accessory()
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, 11)
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+extension WalletShortcutRow where Accessory == EmptyView {
+    init(systemImage: String, title: String, status: String? = nil, divider: Bool = false) {
+        self.init(systemImage: systemImage, title: title, status: status, divider: divider) { EmptyView() }
     }
 }

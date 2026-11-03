@@ -1322,3 +1322,21 @@
 "这个只读钱包的地址不属于 %@ 网络" = "L'indirizzo di questo wallet in sola lettura non è della rete %@";
 "移除只读钱包" = "Rimuovi wallet in sola lettura";
 "只从本机删除这个地址，不影响链上资产，之后可以再添加。" = "Viene rimosso solo questo indirizzo dal dispositivo. Sulla blockchain non cambia nulla e puoi aggiungerlo di nuovo quando vuoi.";
+
+"说明" = "Maggiori informazioni";
+"联网取价" = "Prezzi live";
+"自动汇率" = "Cambio automatico";
+"自身算力计入全网" = "Conta il tuo hashrate nella rete";
+"先在「我的监控」添加矿池，再一键同步矿机" = "Aggiungi prima un pool in Monitor, poi sincronizza i miner con un tocco";
+"删除设备" = "Elimina dispositivo";
+"数量" = "Quantità";
+"每天挖矿时长" = "Ore al giorno";
+"未设芯片" = "Nessun chip impostato";
+"划算" = "Conviene";
+"不划算" = "Non conviene";
+"盈亏平衡租金" = "Affitto di pareggio";
+"回报" = "Rendimento";
+"保本币价" = "Prezzo di pareggio";
+"保本全网算力" = "Hashrate di rete di pareggio";
+"扣抽水后" = "Dopo commissione pool";
+"功耗" = "Consumo";

@@ -75,16 +75,16 @@ struct DepositView: View {
                 }
                 .font(.callout)
             } else {
-                Text(Loc("网络")).font(.subheadline).foregroundStyle(.secondary)
+                // The address card (and its wrong-network warning) only appears once a
+                // tile is picked, so the tiles are the obvious next step.
+                HStack(spacing: 4) {
+                    Text(Loc("网络")).font(.subheadline).foregroundStyle(.secondary)
+                    PearlInfoTip(Loc("先选择充值网络：要和转出方使用的网络一致。"), title: Loc("网络"))
+                }
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: Pearl.Space.sm),
                                     GridItem(.flexible(), spacing: Pearl.Space.sm)],
                           spacing: Pearl.Space.sm) {
                     ForEach(store.networks) { n in networkTile(n) }
-                }
-                if store.networkKey == nil {
-                    Text(Loc("先选择充值网络：要和转出方使用的网络一致。"))
-                        .font(.caption).foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             if let note = store.network?.maintenanceMessage {
@@ -221,7 +221,8 @@ struct DepositView: View {
     }
 
     /// PRL from the in-app wallet: the send screen with this address filled in (the
-    /// amount, fee and device check stay the user's).
+    /// amount, fee and device check stay the user's). While the wallet is locked the
+    /// same button unlocks it first (device auth), instead of a line saying to.
     @ViewBuilder private func fromWallet(_ address: String) -> some View {
         if canSendFromWallet {
             NavigationLink {
@@ -232,9 +233,12 @@ struct DepositView: View {
             }
             .buttonStyle(.pearl)
         } else if isPearl, wallet.phase == .locked {
-            Text(Loc("解锁钱包后，可以从钱包直接转入。"))
-                .pearlExplanation()
-                .frame(maxWidth: .infinity, alignment: .leading)
+            Button { Task { await wallet.unlock() } } label: {
+                Label(Loc("从钱包转入"), systemImage: "lock.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.pearl)
+            .accessibilityHint(Loc("解锁钱包"))
         }
     }
 

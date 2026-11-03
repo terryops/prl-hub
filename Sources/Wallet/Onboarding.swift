@@ -39,10 +39,7 @@ struct CreateWalletView: View {
                 PearlHero(gradient: Pearl.brandVivid, minHeight: 0) {
                     HStack(spacing: Pearl.Space.md) {
                         PearlMark(size: 52)
-                        VStack(alignment: .leading, spacing: Pearl.Space.xxs) {
-                            Text(Loc("创建钱包")).font(.title3.bold()).foregroundStyle(Pearl.onHero)
-                            Text(Loc("生成助记词并安全备份")).font(.subheadline).foregroundStyle(Pearl.onHero.opacity(0.85))
-                        }
+                        Text(Loc("创建钱包")).font(.title3.bold()).foregroundStyle(Pearl.onHero)
                         Spacer(minLength: 0)
                     }
                 }
@@ -72,8 +69,6 @@ struct CreateWalletView: View {
             VStack(alignment: .leading, spacing: Pearl.Space.md) {
                 PearlSectionHeader(Loc("钱包名称"), systemImage: "wallet.pass")
                 TextField("Pearl Wallet", text: $name).textFieldStyle(.roundedBorder)
-                PearlInfoRow(Loc("下一步会生成 12 个助记词。请离线抄写，任何人拿到它都能转走你的资产。"),
-                             systemImage: "exclamationmark.shield")
             }
             .pearlCard()
             Button {
@@ -89,7 +84,7 @@ struct CreateWalletView: View {
     private var seedStep: some View {
         VStack(alignment: .leading, spacing: Pearl.Space.lg) {
             VStack(alignment: .leading, spacing: Pearl.Space.md) {
-                PearlSectionHeader(Loc("你的助记词"), systemImage: "key.horizontal", subtitle: Loc("请按顺序离线抄写"))
+                PearlSectionHeader(Loc("你的助记词"), systemImage: "key.horizontal")
                 // No copy button by design — the seed must never reach the clipboard.
                 // Screen-capture protection: hard-blocked on macOS, redacted while
                 // recording on iOS, and a screenshot triggers a warning.
@@ -114,11 +109,9 @@ struct CreateWalletView: View {
                           systemImage: "exclamationmark.octagon.fill")
                         .font(.callout).foregroundStyle(.red)
                 }
-                Label(Loc("请离线手抄，切勿截图、拍照或复制——任何人拿到它都能转走你的资产。"),
-                      systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.orange)
-                Label(Loc("写下来并妥善保管后再继续。"), systemImage: "pencil.and.list.clipboard")
-                    .font(.callout).foregroundStyle(.orange)
+                // The one must-read on this step (the button below already says "backed up").
+                PearlInfoRow(Loc("请离线手抄，切勿截图、拍照或复制——任何人拿到它都能转走你的资产。"),
+                             systemImage: "exclamationmark.triangle", tint: .orange)
             }
 
             Button { withAnimation { step = .verify } } label: { Text(Loc("我已安全备份")) }
@@ -151,7 +144,7 @@ private struct VerifyStep: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Pearl.Space.lg) {
-            PearlSectionHeader(Loc("验证助记词"), systemImage: "checkmark.shield", subtitle: Loc("确认你已正确记录"))
+            PearlSectionHeader(Loc("验证助记词"), systemImage: "checkmark.shield")
             // The options are the user's REAL seed words, so the same capture protection as
             // the seed step: redacted while recording/mirroring, with a screenshot warning.
             // (Buttons must stay tappable, so the non-interactive secure-canvas can't wrap them.)
@@ -247,10 +240,7 @@ struct ImportWalletView: View {
                 PearlHero(gradient: AppPalette.current == .modern ? Pearl.brandVivid : Pearl.mint, minHeight: 0) {
                     HStack(spacing: Pearl.Space.md) {
                         PearlIconBadge(systemImage: "arrow.down.doc", gradient: Pearl.mint, size: 46)
-                        VStack(alignment: .leading, spacing: Pearl.Space.xxs) {
-                            Text(Loc("恢复钱包")).font(.title3.bold()).foregroundStyle(Pearl.onHero)
-                            Text(Loc("粘贴或输入你的助记词")).font(.subheadline).foregroundStyle(Pearl.onHero.opacity(0.85))
-                        }
+                        Text(Loc("恢复钱包")).font(.title3.bold()).foregroundStyle(Pearl.onHero)
                         Spacer(minLength: 0)
                     }
                 }

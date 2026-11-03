@@ -21,11 +21,6 @@ struct RecoverChangeView: View {
 
     var body: some View {
         Form {
-            Section {
-                Text(Loc("转账产生的“找零”会退回到钱包自动生成的找零地址。这些余额已计入你的总额、也能正常花费；如需把它们归集到一个地址，可在这里一键扫回。"))
-                    .pearlExplanation()
-            }
-
             if done {
                 // Recovery succeeded: `recoverable` is now empty and `recoveryScanned` was
                 // reset, which would otherwise flip the view to "没有发现搁浅的找零 🎉" and hide
@@ -36,8 +31,6 @@ struct RecoverChangeView: View {
                     } else {
                         Label(Loc("找回成功 ✓"), systemImage: "checkmark.seal.fill").foregroundStyle(.green)
                     }
-                    Text(Loc("交易已广播，待网络确认后即并入「钱包」余额与最近交易。"))
-                        .pearlExplanation()
                 }
             } else if store.recoveryScanning {
                 Section {
@@ -54,13 +47,20 @@ struct RecoverChangeView: View {
                     Button(Loc("重新扫描")) { Task { await store.scanRecoverableChange() } }
                 }
             } else {
-                Section(Loc("可找回 %@ PRL", amount(store.recoverableTotal))) {
+                Section {
                     ForEach(store.recoverable) { s in
                         HStack {
                             Text(short(s.address)).font(.footnote.monospaced())
                             Spacer()
                             Text(amount(s.valuePRL) + " PRL").foregroundStyle(.secondary)
                         }
+                    }
+                } header: {
+                    // What "stranded change" is (and that it's already spendable) sits in the ⓘ.
+                    HStack(spacing: 4) {
+                        Text(Loc("可找回 %@ PRL", amount(store.recoverableTotal)))
+                        PearlInfoTip(Loc("转账产生的“找零”会退回到钱包自动生成的找零地址。这些余额已计入你的总额、也能正常花费；如需把它们归集到一个地址，可在这里一键扫回。"),
+                                     title: Loc("找回搁浅的找零"))
                     }
                 }
 
@@ -107,7 +107,8 @@ struct RecoverChangeView: View {
                     .disabled(working || done || !destValid)
                     .listRowBackground(Color.clear)
                 } footer: {
-                    Text(Loc("交易在本机签名（私钥不离开设备），合并到一笔扫回，剩余不再搁浅。"))
+                    // The button broadcasts at once (no confirm step), so its consequence stays visible.
+                    Text(Loc("在本机签名，上链后不可撤销"))
                 }
 
                 if let result {

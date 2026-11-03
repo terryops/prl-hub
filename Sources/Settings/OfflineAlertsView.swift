@@ -12,7 +12,6 @@ struct OfflineAlertsView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Pearl.Space.lg) {
-                introCard
                 if pro.isPro {
                     if push.authorization == .denied && push.pushHere {
                         NotificationsDeniedCard(message: Loc("通知权限已关闭，掉线提醒无法送达"))
@@ -22,14 +21,9 @@ struct OfflineAlertsView: View {
                     PushHereCard(store: push)
                     #endif
                     PushWindowCard(store: push)
-                    if push.window != nil {
-                        note(Loc("推送时段之外掉线的矿机，到时段开始时如果还没恢复，会在那时通知你。"), systemImage: "moon.zzz")
-                    }
                 } else {
                     ProPaywallCard(pro: pro)
                 }
-                note(Loc("为监控开启掉线提醒后，服务器会保存它的矿池和收款地址（F2Pool 为只读页链接），只用来查询矿机状态；不涉及助记词、私钥或余额。"),
-                     systemImage: "lock.shield")
             }
             .padding(Pearl.Space.screen)
             .frame(maxWidth: 560)
@@ -50,30 +44,26 @@ struct OfflineAlertsView: View {
         }
     }
 
-    private func note(_ text: String, systemImage: String) -> some View {
-        PearlInfoRow(text, systemImage: systemImage)
-            .padding(.horizontal, Pearl.Space.xs)
-    }
-
     // MARK: cards
 
-    private var introCard: some View {
-        HStack(alignment: .center, spacing: Pearl.Space.md) {
-            PearlIconBadge(systemImage: "wifi.exclamationmark", size: 44)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(Loc("矿机掉线，第一时间知道")).font(.headline)
-                Text(Loc("矿机离线达到你设定的时长就推送通知，恢复上线后再通知一次，不用打开 App。服务器每 3 分钟向矿池查询一次。"))
-                    .pearlExplanation()
-            }
-            Spacer(minLength: 0)
+    /// How it works, what an outside-the-window drop does, and what the server keeps —
+    /// all behind the ⓘ by the card title; each row's menu says what is being chosen.
+    private var howItWorks: String {
+        var parts = [Loc("矿机离线达到你设定的时长就推送通知，恢复上线后再通知一次，不用打开 App。服务器每 3 分钟向矿池查询一次。")]
+        if push.window != nil {
+            parts.append(Loc("推送时段之外掉线的矿机，到时段开始时如果还没恢复，会在那时通知你。"))
         }
-        .pearlCard(padding: Pearl.Space.md)
+        parts.append(Loc("为监控开启掉线提醒后，服务器会保存它的矿池和收款地址（F2Pool 为只读页链接），只用来查询矿机状态；不涉及助记词、私钥或余额。"))
+        return parts.joined(separator: "\n\n")
     }
 
     private var monitorsCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
-                Text(Loc("我的监控")).font(.headline)
+                HStack(spacing: 4) {
+                    Text(Loc("我的监控")).font(.headline)
+                    PearlInfoTip(howItWorks, title: Loc("掉线提醒"))
+                }
                 Spacer()
                 AlertSyncStatus(store: push, active: store.activeCount > 0)
             }
@@ -223,16 +213,10 @@ struct OfflineAlertHintCard: View {
             Button(action: onOpen) {
                 HStack(spacing: Pearl.Space.md) {
                     PearlIconBadge(systemImage: "bell.badge.fill", size: 40)
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 6) {
-                            Text(Loc("新功能：掉线提醒")).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
-                                .lineLimit(1).minimumScaleFactor(0.8)
-                            if !pro.isPro { PearlBadge(text: Loc("高级版"), systemImage: "sparkles").fixedSize() }
-                        }
-                        Text(Loc("矿机离线 10 分钟以上就推送通知。点这里为你的监控开启。"))
-                            .pearlExplanation()
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 6) {
+                        Text(Loc("新功能：掉线提醒")).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                        if !pro.isPro { PearlBadge(text: Loc("高级版"), systemImage: "sparkles").fixedSize() }
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right")

@@ -38,7 +38,8 @@ struct TradeStatusLines: View {
 
 /// "Your IP isn't on this key's Trusted IPs": shows the address SafeTrade actually
 /// sees (from Cloudflare's trace, on the same session as the API calls) with a copy
-/// button, and what to do — add it to the key's list, again after a network change.
+/// button, and the one thing to do — add it to the key's list. Why the IP changes
+/// (IPv4 / IPv6, network switches, a proxy) sits in the ⓘ beside the title.
 /// The phone reaches SafeTrade over IPv4 or IPv6 as the network allows, so an IPv6
 /// address there usually means the list only holds the IPv4 one.
 struct UntrustedIPCard: View {
@@ -48,10 +49,12 @@ struct UntrustedIPCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Pearl.Space.sm) {
-            Label(Loc("当前网络的 IP 不在密钥的白名单里"), systemImage: "network.badge.shield.half.filled")
-                .font(.subheadline.weight(.semibold)).foregroundStyle(.orange)
-            Text(Loc("这把 API 密钥设置了 Trusted IPs，SafeTrade 只接受名单里的 IP。SafeTrade 看到你现在的 IP 是："))
-                .pearlExplanation()
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Label(Loc("当前网络的 IP 不在密钥的白名单里"), systemImage: "network.badge.shield.half.filled")
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                PearlInfoTip(Loc("同一个网络下，手机可能时而用 IPv4、时而用 IPv6 连接，IPv6 地址也会定期变化；换网络后 IP 也会变。开着代理或 VPN 时，这里显示的是代理的出口 IP。"))
+            }
             HStack(spacing: Pearl.Space.sm) {
                 if let ip = issue.ip {
                     Text(verbatim: ip).font(.callout.monospaced()).textSelection(.enabled)
@@ -70,8 +73,6 @@ struct UntrustedIPCard: View {
             Text(issue.isIPv6
                  ? Loc("这是 IPv6 地址：白名单里如果只有 IPv4，可能需要把这个 IPv6 地址也加进 Trusted IPs。")
                  : Loc("把上面这个 IP 加进这把密钥的 Trusted IPs 即可。"))
-                .pearlExplanation()
-            Text(Loc("同一个网络下，手机可能时而用 IPv4、时而用 IPv6 连接，IPv6 地址也会定期变化；换网络后 IP 也会变。开着代理或 VPN 时，这里显示的是代理的出口 IP。"))
                 .pearlExplanation()
             Button(Loc("在哪里设置 Trusted IPs")) { showingGuide = true }
                 .buttonStyle(.borderless).font(.caption.weight(.semibold)).tint(Pearl.accent)

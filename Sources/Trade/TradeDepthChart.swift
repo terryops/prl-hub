@@ -74,12 +74,12 @@ struct DepthSection: View {
             .blur(radius: 3)
             .opacity(0.45)
             .accessibilityHidden(true)
+            // The header's 高级版 badge, the lock and the button already say it's Pro:
+            // the one line says what it shows.
             VStack(spacing: Pearl.Space.xs) {
                 Image(systemName: "lock.fill").font(.title3).foregroundStyle(Pearl.accent)
-                Text(Loc("买卖深度图是高级版功能"))
-                    .font(.subheadline.weight(.semibold))
                 Text(Loc("看清各价位的挂单量，以及买盘和卖盘谁更强"))
-                    .pearlExplanation()
+                    .font(.subheadline.weight(.semibold))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                 Button(Loc("解锁高级版")) { showingPaywall = true }

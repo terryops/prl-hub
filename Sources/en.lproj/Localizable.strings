@@ -1322,3 +1322,21 @@
 "这个只读钱包的地址不属于 %@ 网络" = "This read-only wallet's address isn't on %@";
 "移除只读钱包" = "Remove Read-only Wallet";
 "只从本机删除这个地址，不影响链上资产，之后可以再添加。" = "Only this address is removed from this device. Nothing on-chain changes, and you can add it again any time.";
+
+"说明" = "More info";
+"联网取价" = "Live pricing";
+"自动汇率" = "Auto rate";
+"自身算力计入全网" = "Count own hashrate in network";
+"先在「我的监控」添加矿池，再一键同步矿机" = "Add a pool in Monitor first, then sync your miners in one tap";
+"删除设备" = "Delete Device";
+"数量" = "Quantity";
+"每天挖矿时长" = "Hours per Day";
+"未设芯片" = "No chip set";
+"划算" = "Worth it";
+"不划算" = "Not worth it";
+"盈亏平衡租金" = "Break-even rent";
+"回报" = "Return";
+"保本币价" = "Break-even price";
+"保本全网算力" = "Break-even network hashrate";
+"扣抽水后" = "After pool fee";
+"功耗" = "Power";

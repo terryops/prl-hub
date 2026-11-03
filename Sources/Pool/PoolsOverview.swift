@@ -903,28 +903,17 @@ struct PoolsOverviewSection: View {
             let compact = geometry.size.width - 60 < 720
             ScrollView {
                 VStack(alignment: .leading, spacing: compact ? 14 : 20) {
-                    if compact {
-                        // The 矿池 pill right above already names the page: on a phone
-                        // the big title only pushed the table down.
-                        updateStatus
-                    } else {
-                        ViewThatFits(in: .horizontal) {
-                            HStack(alignment: .firstTextBaseline) {
-                                title
-                                Spacer(minLength: 24)
-                                updateStatus
-                            }
-                            VStack(alignment: .leading, spacing: 12) {
-                                title
-                                updateStatus
-                            }
-                        }
-                    }
+                    // No page title: the 矿池 pill right above already names the page.
+                    updateStatus
                     if store.pools.isEmpty && store.loading {
                         ProgressView().frame(maxWidth: .infinity, minHeight: 200)
                     } else if store.pools.isEmpty {
-                        PearlEmptyState(systemImage: "server.rack", title: Loc("矿池总览"),
-                                        message: Loc("暂时无法获取矿池数据"))
+                        PearlEmptyState(systemImage: "server.rack", title: Loc("暂时无法获取矿池数据")) {
+                            Button { Task { await store.refresh(force: true) } } label: {
+                                Label(Loc("重试"), systemImage: "arrow.clockwise")
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     } else {
                         PoolComparisonTable(pools: store.pools, source: store.source,
                                             availableWidth: min(geometry.size.width - 60, 1500))
@@ -949,12 +938,6 @@ struct PoolsOverviewSection: View {
             .refreshable { await store.refresh(force: true) }
         }
         .task { await store.refresh() }
-    }
-
-    private var title: some View {
-        Text(Loc("矿池总览"))
-            .font(.system(size: 30, weight: .bold))
-            .fixedSize(horizontal: true, vertical: false)
     }
 
     private var updateStatus: some View {
@@ -1143,10 +1126,6 @@ private struct PoolComparisonTable: View {
                 }
                 .accessibilityIdentifier("pool-comparison-metrics")
             }
-            Label(Loc("左右滑动查看完整对比"), systemImage: "arrow.left.and.right")
-                .font(.caption2).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(10)
         }
         .background(Pearl.surface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -1404,7 +1383,7 @@ private struct RealFeeHelpButton: View {
 
     var body: some View {
         Button { showingExplanation = true } label: {
-            Image(systemName: "questionmark.circle")
+            Image(systemName: "info.circle")
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
                 .frame(width: 28, height: 28)
@@ -1413,7 +1392,7 @@ private struct RealFeeHelpButton: View {
         .buttonStyle(.plain)
         .accessibilityLabel(Loc("真实费用说明"))
         .accessibilityIdentifier("pool-real-fee-help")
-        .help(Loc("真实费用说明"))
+        .help(explanation)
         .popover(isPresented: $showingExplanation, arrowEdge: .top) {
             HStack(alignment: .top, spacing: 10) {
                 Text(explanation)
@@ -1537,7 +1516,6 @@ private struct PoolComparisonNotes: View {
             if source == .lordOfPearls, pools.contains(where: \.fromMiningPoolStats) {
                 Text(Loc("F2Pool 数据源未收录，该行取自 miningpoolstats（出块按其最近 1000 个区块口径）。"))
             }
-            Text(Loc("走势展示近 7 天算力；数据缺失时显示「—」。"))
             switch source {
             case .lordOfPearls:    Text(Loc("数据来源：lordofpearls.xyz"))
             case .miningPoolStats: Text(Loc("数据来源：miningpoolstats.stream"))
@@ -1601,8 +1579,8 @@ private struct HashShareChart: View {
     var body: some View {
         let slices = self.slices
         if !slices.isEmpty {
+            // No title or card of its own: it opens inside the 算力占比 disclosure card.
             VStack(alignment: .leading, spacing: Pearl.Space.sm) {
-                Text(Loc("算力占比")).font(.headline)
                 Chart(slices) { s in
                     SectorMark(angle: .value(Loc("算力"), s.hps),
                                innerRadius: .ratio(0.62), angularInset: 1.5)
@@ -1640,7 +1618,6 @@ private struct HashShareChart: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .pearlCard()
         }
     }
 }
