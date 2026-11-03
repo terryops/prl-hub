@@ -11,33 +11,43 @@ import SwiftUI
 
 struct CatalogSection: View {
     @ObservedObject var store: PRLStore
-    @Environment(\.horizontalSizeClass) private var hsc
-    @State private var pushed: String?      // compact: GPU name pushed onto the stack
+    @State private var pushed: String?      // narrow: GPU name pushed onto the stack
 
     var body: some View {
         // Every figure here is derived from the live 币价/全网算力. Until the
         // first successful fetch (live mode), show a placeholder instead of
         // ranking cards by stale defaults.
         let ready = !store.live || store.liveReady
-        Group {
-            if !ready {
-                PearlEmptyState(systemImage: "antenna.radiowaves.left.and.right",
-                    title: Loc("等待联网行情…"))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if hsc == .compact {
-                table(compact: true)
-                    .navigationDestination(item: $pushed) { name in
-                        GPUDetailView(store: store, name: name)
+        // Table and detail side by side only when both fit (360 + 380). Decided by the
+        // space on offer, not the size class — an iPhone Duo's open screen held upright
+        // is "regular" yet only ~670pt wide.
+        GeometryReader { proxy in
+            let sideBySide = proxy.size.width >= 360 + 1 + 380
+            Group {
+                if !ready {
+                    PearlEmptyState(systemImage: "antenna.radiowaves.left.and.right",
+                        title: Loc("等待联网行情…"))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if !sideBySide {
+                    table(compact: true)
+                } else {
+                    HStack(spacing: 0) {
+                        table(compact: false)
+                            .frame(minWidth: 360)
+                        Divider()
+                        GPUDetailView(store: store, name: store.selected, beside: true)
+                            .frame(width: 380)
                     }
-            } else {
-                HStack(spacing: 0) {
-                    table(compact: false)
-                        .frame(minWidth: 360)
-                    Divider()
-                    GPUDetailView(store: store, name: store.selected)
-                        .frame(width: 380)
                 }
             }
+            // Widened while a card was pushed (unfolding, rotating): pop it and show it beside.
+            .onChange(of: sideBySide, initial: true) { _, wide in
+                if wide, let p = pushed { store.selected = p; pushed = nil }
+            }
+        }
+        // Outside the branches, so switching between them never removes it while it presents.
+        .navigationDestination(item: $pushed) { name in
+            GPUDetailView(store: store, name: name, beside: false)
         }
     }
 
@@ -163,9 +173,26 @@ struct GPURow: View {
 struct GPUDetailView: View {
     @ObservedObject var store: PRLStore
     let name: String?
-    @Environment(\.horizontalSizeClass) private var hsc
+    /// Shown beside the table (wide) rather than pushed on its own.
+    let beside: Bool
 
-    var body: some View {
+    @ViewBuilder var body: some View {
+        // Beside the table the page keeps its own title (PRL 挖矿监控); only a pushed
+        // detail is titled with the card's name.
+        #if os(iOS)
+        if beside {
+            content
+        } else {
+            content
+                .navigationTitle(name ?? Loc("显卡"))
+                .navigationBarTitleDisplayMode(.inline)
+        }
+        #else
+        content
+        #endif
+    }
+
+    private var content: some View {
         Group {
             if let name, let g = gpu(name) {
                 form(g)
@@ -174,10 +201,6 @@ struct GPUDetailView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        #if os(iOS)
-        .navigationTitle(name ?? Loc("显卡"))
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
     }
 
     private func form(_ g: GPU) -> some View {
@@ -186,7 +209,7 @@ struct GPUDetailView: View {
         return Form {
             Section {
                 // Beside the table there is no navigation title to name the card.
-                if hsc != .compact {
+                if beside {
                     Text(g.name).font(.title2.bold())
                 }
                 LabeledContent(Loc("算力"), value: formatHashrate(g.pearl * 1e12))

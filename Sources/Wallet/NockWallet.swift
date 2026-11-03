@@ -1,8 +1,9 @@
 import SwiftUI
 
 // The NOCK (Nockchain) side of a wallet: same seed as PRL, its own address, balance,
-// history and sends. Reached from the wallet page: a one-line link at the bottom, or a small
-// strip under the recent transactions once the wallet uses NOCK.
+// history and sends. Off until switched on in 设置 → 钱包; then reached from the wallet page: a
+// one-line link at the bottom, or a small strip under the recent transactions once the wallet
+// uses NOCK.
 
 private func nockPrice(_ usd: Double) -> String {
     let digits = usd < 1 ? 4 : 2
@@ -15,70 +16,40 @@ private func nockText(_ nicks: UInt64, decimals: Int = 6) -> String {
 
 // MARK: - Wallet page entries
 
-/// Where NOCK shows on the wallet page. A wallet that uses NOCK (`inUse`) gets the small strip
-/// under the recent transactions; any other gets only the quiet `link` at the very bottom.
+/// Where NOCK shows on the wallet page, once NOCK is switched on (设置 → 钱包). A wallet that
+/// uses NOCK (`inUse`) gets the small strip under the recent transactions; any other gets only
+/// the quiet `link` in the card at the bottom.
 struct NockWalletEntry: View {
     enum Slot { case card, link }
     let slot: Slot
     var surface: Color? = nil
     var secondary: Color = .secondary
     @ObservedObject private var nock = NockWalletStore.shared
-    @AppStorage(NockInlineLink.hiddenKey) private var linkHidden = false
 
     var body: some View {
-        switch slot {
-        case .card:
-            if nock.inUse { NockAssetCard(nock: nock, surface: surface, secondary: secondary) }
-        case .link:
-            if !nock.inUse && !linkHidden { NockInlineLink() }
+        if nock.enabled {
+            switch slot {
+            case .card:
+                if nock.inUse { NockAssetCard(nock: nock, surface: surface, secondary: secondary) }
+            case .link:
+                if !nock.inUse { NockInlineLink() }
+            }
         }
     }
 }
 
-/// The last line on the wallet page, styled like 价格提醒 / 桌面小组件 above it: NOCK is a
+/// A row in the wallet page's bottom card, styled like 价格和到账提醒 / 桌面小组件: NOCK is a
 /// side feature, so until it's used its entry stays out of the way (no card, no balance).
-/// Someone with no use for it can close the line; 设置 → 钱包与安全 brings it back. A wallet
-/// that uses NOCK always shows its strip — closing only ever hides this unused-wallet line.
+/// Switching NOCK off in 设置 → 钱包 removes it.
 struct NockInlineLink: View {
-    /// Set once the line was closed (all wallets: it's the same offer on each).
-    static let hiddenKey = "nock.linkHidden"
-    @AppStorage(hiddenKey) private var hidden = false
-    @State private var confirmingClose = false
-    @ScaledMetric(relativeTo: .subheadline) private var closeSize: CGFloat = 16
-
     var body: some View {
         NavigationLink {
             NockWalletView(nock: .shared)
         } label: {
-            // The row keeps a slot before its chevron for the × laid over it, so every
-            // chevron in the card lines up.
-            WalletShortcutRow(systemImage: "hexagon", title: Loc("NOCK 钱包"), divider: true) {
-                Color.clear.frame(width: closeSize + 8, height: 1)
-            }
+            WalletShortcutRow(systemImage: "hexagon", title: Loc("NOCK 钱包"), divider: true)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .overlay(alignment: .trailing) {
-            Button { confirmingClose = true } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: closeSize))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.secondary)
-                    .padding(6)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel(Loc("关闭"))
-            // Clear of the chevron (caption2 glyph + the row's spacing).
-            .padding(.trailing, 12)
-            .padding(.top, 1)   // the row's hairline sits above its centre line
-        }
-        .alert(Loc("关闭 NOCK 钱包入口？"), isPresented: $confirmingClose) {
-            Button(Loc("关闭")) { withAnimation(.snappy) { hidden = true } }
-            Button(Loc("取消"), role: .cancel) {}
-        } message: {
-            Text(Loc("钱包页不再显示 NOCK 钱包，之后可以在「设置 → 钱包与安全」重新打开。"))
-        }
     }
 }
 
@@ -163,6 +134,7 @@ struct NockWalletView: View {
     @ObservedObject private var price = NockPriceManager.shared
     @EnvironmentObject private var currency: CurrencyManager
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dismiss) private var dismiss
     @State private var toast: String?
     @ScaledMetric(relativeTo: .subheadline) private var badge: CGFloat = 20
     /// DEBUG: SHOT_NOCK=receive|send|history pushes that screen (verification runs).
@@ -216,6 +188,9 @@ struct NockWalletView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .refreshable { await nock.load(forceScan: true); await price.refreshIfStale() }
+        // NOCK switched off (设置 → 钱包) while this page sat in the wallet tab: close it, with
+        // whatever was pushed on top — nothing here works without the derived account.
+        .onChange(of: nock.enabled) { _, on in if !on { dismiss() } }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             nock.wantHistory()
@@ -446,47 +421,138 @@ struct NockTxRow: View {
 
 // MARK: - Receive
 
+/// One card — which chain, the code, the address in 4-character groups — and under it the
+/// same slim bar as the NOCK page's 收款 · 转账 · 记录, here 复制地址 · 分享. Black and
+/// white with grey labels, like the rest of the NOCK pages.
 struct NockReceiveView: View {
     @ObservedObject var nock: NockWalletStore
     @State private var copied = false
+    @State private var copyTask: Task<Void, Never>?
+    @ScaledMetric(relativeTo: .body) private var scaledQRSide: CGFloat = 196
+    /// Grows with the text size, but only so far. RootView caps text at xLarge (about 220 pt
+    /// here); without that cap the largest accessibility size would scale it to about 610 pt,
+    /// wider than the card and the screen.
+    private var qrSide: CGFloat { min(scaledQRSide, 260) }
 
     var body: some View {
         ScrollView {
-            VStack(spacing: Pearl.Space.lg) {
+            Group {
                 if let addr = nock.address {
-                    if let qr = QRCode.cgImage(from: addr) {
-                        Image(decorative: qr, scale: 1)
-                            .interpolation(.none).resizable().scaledToFit()
-                            .frame(width: 220, height: 220)
-                            .padding(Pearl.Space.md).background(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: Pearl.Radius.md, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: Pearl.Radius.md, style: .continuous)
-                                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1))
+                    VStack(spacing: Pearl.Space.md) {
+                        card(addr)
+                        actions(addr)
                     }
-                    PearlSectionHeader(Loc("NOCK 收款地址 · Nockchain 主网"), systemImage: "qrcode",
-                                       info: Loc("这个地址只收 NOCK，别往这里转 PRL。"))
-                    Text(addr).font(.callout.monospaced()).multilineTextAlignment(.center).textSelection(.enabled)
-                        .frame(maxWidth: .infinity)
-                        .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.sm)
-                    Button {
-                        copyToPasteboard(addr)
-                        withAnimation { copied = true }
-                        Task { try? await Task.sleep(for: .seconds(2)); withAnimation { copied = false } }
-                    } label: {
-                        Label(copied ? Loc("已复制") : Loc("复制地址"), systemImage: copied ? "checkmark" : "doc.on.doc")
-                    }
-                    .buttonStyle(.pearl)
                 } else {
-                    ProgressView(Loc("派生地址…")).frame(maxHeight: 240)
+                    ProgressView(Loc("派生地址…")).frame(maxWidth: .infinity, minHeight: 320)
                 }
             }
-            .padding(Pearl.Space.screen).frame(maxWidth: 460).frame(maxWidth: .infinity)
+            .padding(Pearl.Space.screen).frame(maxWidth: 420).frame(maxWidth: .infinity)
         }
         .pearlScreenBackground()
         .navigationTitle(Loc("收 NOCK"))
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         // Getting the address counts as starting to use NOCK: the wallet page shows its card.
         .onAppear { nock.markAddressShown() }
         .onChange(of: nock.address) { _, _ in nock.markAddressShown() }
+    }
+
+    private func card(_ addr: String) -> some View {
+        VStack(spacing: Pearl.Space.md) {
+            HStack(spacing: 4) {
+                Text(verbatim: "Nockchain").font(.subheadline.weight(.semibold))
+                PearlInfoTip(Loc("这个地址只收 NOCK，别往这里转 PRL。"),
+                             title: Loc("NOCK 收款地址 · Nockchain 主网"))
+            }
+            .foregroundStyle(.secondary)
+
+            code(addr)
+
+            // The address copies on a tap too; selecting it would take the group spaces along.
+            Button { copy(addr) } label: {
+                Text(groupedAddress: addr, perLine: 5)
+                    .font(.callout.monospaced())
+                    .lineSpacing(4)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Loc("复制收款地址"))
+            .accessibilityValue(addr)
+            .contextMenu {
+                Button { copy(addr) } label: { Label(Loc("复制地址"), systemImage: "doc.on.doc") }
+            }
+        }
+        .padding(.horizontal, Pearl.Space.md)
+        .padding(.top, Pearl.Space.sm)
+        .padding(.bottom, Pearl.Space.lg)
+        .frame(maxWidth: .infinity)
+        .pearlCard(padding: 0, radius: Pearl.Radius.md)
+    }
+
+    /// The code on its own white plate (it has to scan in dark mode too), with the NOCK
+    /// hexagon in the middle so it can't pass for the PRL one; level-Q correction carries
+    /// it (H works too but packs the code noticeably finer).
+    private func code(_ addr: String) -> some View {
+        Group {
+            if let qr = QRCode.cgImage(from: addr, correction: "Q") {
+                Image(decorative: qr, scale: 1)
+                    .interpolation(.none).resizable().scaledToFit()
+                    .overlay {
+                        RoundedRectangle(cornerRadius: qrSide * 0.05, style: .continuous)
+                            .fill(.white)
+                            .frame(width: qrSide * 0.2, height: qrSide * 0.2)
+                            .overlay {
+                                Image(systemName: "hexagon.fill")
+                                    .font(.system(size: qrSide * 0.11, weight: .semibold))
+                                    .foregroundStyle(.black)
+                            }
+                    }
+            }
+        }
+        .frame(width: qrSide, height: qrSide)
+        .padding(Pearl.Space.xs)
+        .background(.white, in: RoundedRectangle(cornerRadius: Pearl.Radius.sm, style: .continuous))
+        .accessibilityHidden(true)
+    }
+
+    private func actions(_ addr: String) -> some View {
+        HStack(spacing: 0) {
+            Button { copy(addr) } label: {
+                barLabel(copied ? Loc("已复制") : Loc("复制地址"), copied ? "checkmark" : "doc.on.doc")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(copied ? Loc("已复制") : Loc("复制收款地址"))
+            Divider().frame(height: 20)
+            ShareLink(item: addr) { barLabel(Loc("分享"), "square.and.arrow.up") }
+                .buttonStyle(.plain)
+        }
+        .pearlCard(padding: 0, radius: Pearl.Radius.sm)
+    }
+
+    private func barLabel(_ title: String, _ icon: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon).font(.subheadline.weight(.medium)).foregroundStyle(Pearl.accent)
+                .contentTransition(.symbolEffect(.replace))
+            Text(title).font(.subheadline.weight(.medium)).lineLimit(1).minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Pearl.Space.sm + 2)
+        .contentShape(Rectangle())
+    }
+
+    private func copy(_ addr: String) {
+        copyToPasteboard(addr)
+        withAnimation(.snappy) { copied = true }
+        copyTask?.cancel()
+        copyTask = Task {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            withAnimation(.snappy) { copied = false }
+        }
     }
 }
 

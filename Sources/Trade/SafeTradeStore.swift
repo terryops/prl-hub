@@ -118,7 +118,9 @@ final class SafeTradeStore: ObservableObject {
     #else
     static let shotDemo = false
     #endif
-    var hasCredentials: Bool { Self.shotDemo || SafeTradeSecrets.hasCredentials }
+    /// Always false without the account feature: keys saved by an older build stay in
+    /// the Keychain untouched but are never read, so only the public market loads.
+    var hasCredentials: Bool { AppFeatures.tradeAccount && (Self.shotDemo || SafeTradeSecrets.hasCredentials) }
 
     /// K-line periods offered by the chart picker, in minutes.
     static let periods = [5, 15, 60, 240, 1440]
@@ -175,7 +177,7 @@ final class SafeTradeStore: ObservableObject {
             lastOrder = nil
             ipIssue = nil
             accountStale = false
-            accountError = Loc("未配置 API 密钥")
+            accountError = AppFeatures.tradeAccount ? Loc("未配置 API 密钥") : nil
             await loadPublic()
             return
         }
@@ -329,17 +331,21 @@ final class SafeTradeStore: ObservableObject {
     /// inline. The returned order is inserted optimistically so the list updates
     /// immediately while the background reconcile catches up.
     @discardableResult
-    func placeOrder(side: String, ordType: String, volume: String, price: String?) async -> Bool {
+    func placeOrder(side: String, ordType: String, volume: String, price: String?,
+                    slippagePercent: Double = TradeSlippage.defaultPercent) async -> Bool {
         // Never start a second order while one is in flight or unaccounted for.
         guard !placing, unverifiedOrder == nil, let amount = PRLAmount.parse(volume) else { return false }
         // The API takes "1.5": a ru/vi decimalPad types "1,5", which PRLAmount.parse accepts.
         let priceValue = price.flatMap(PRLAmount.parse)
         let amountText = SafeTradeMarketRules.plain(amount)
         let priceText = priceValue.map(SafeTradeMarketRules.plain)
+        let capText = ordType == "market"
+            ? marketPriceCap(side: side, slippagePercent: slippagePercent).map(SafeTradeMarketRules.plain) : nil
         let before = PendingOrderCheck(side: side, knownIDs: Set(orders.compactMap(\.id)), knownComplete: !accountStale)
         placing = true; error = nil; lastOrder = nil
         do {
-            let o = try await client.placeOrder(market: market, side: side, amount: amountText, price: priceText, type: ordType)
+            let o = try await client.placeOrder(market: market, side: side, amount: amountText, price: priceText,
+                                                maxPrice: capText, type: ordType)
             placing = false   // order accepted — stop blocking the screen right away
             lastOrder = Loc("已下单 #%@ · %@ %@ @ %@ · %@", o.id.map(String.init) ?? "?", o.side ?? side, o.origin_amount ?? amountText, o.displayPrice ?? priceText ?? "—", o.state ?? "")
             orders.insert(o, at: 0)            // optimistic: show it at the top at once
@@ -368,6 +374,14 @@ final class SafeTradeStore: ObservableObject {
             Task { await refreshAccount() }
             return false
         }
+    }
+
+    /// A market order's price cap, from the last trade (else the best price it fills against).
+    func marketPriceCap(side: String, slippagePercent: Double) -> Decimal? {
+        let book = side == "buy" ? depth?.asks.first?.price : depth?.bids.first?.price
+        let last = ticker?.last.flatMap { Decimal(string: $0) }.flatMap { $0 > 0 ? $0 : nil }
+            ?? book.flatMap { Decimal(string: String($0)) }
+        return last.flatMap { rules.marketPriceCap(side: side, last: $0, slippage: TradeSlippage.fraction(slippagePercent)) }
     }
 
     /// Settle an unverified order: look for it in the recent list a few times (the

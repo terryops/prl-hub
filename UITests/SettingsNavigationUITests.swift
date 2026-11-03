@@ -91,7 +91,7 @@ import XCTest
         back(in: app)
         back(in: app)
 
-        for (id, title) in [("settings-price-alerts", "价格提醒"),
+        for (id, title) in [("settings-price-alerts", "价格和到账提醒"),
                             ("settings-offline-alerts", "掉线提醒"),
                             ("settings-live-activity", "锁屏盯盘")] {
             open(id, title: title, in: app)
@@ -131,6 +131,8 @@ import XCTest
         capture("settings-directory-light-bottom")
         open("settings-about", title: "关于", in: app)
         XCTAssertTrue(app.buttons["开源许可"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["support@pearlhub.net"].exists)
+        capture("settings-about")
     }
 
     func testSecurityOverviewNamesItsRepositories() {

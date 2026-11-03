@@ -14,16 +14,18 @@ enum QRCode {
     /// The last few rendered codes (receive addresses), so re-renders are free.
     private static var cache: [String: CGImage] = [:]
 
-    static func cgImage(from string: String) -> CGImage? {
-        if let hit = cache[string] { return hit }
+    /// `correction` "Q" / "H" survive a mark laid over the centre (~25% / ~30% of the code).
+    static func cgImage(from string: String, correction: String = "M") -> CGImage? {
+        let key = correction + "|" + string
+        if let hit = cache[key] { return hit }
         let filter = CIFilter.qrCodeGenerator()
         filter.message = Data(string.utf8)
-        filter.correctionLevel = "M"
+        filter.correctionLevel = correction
         guard let out = filter.outputImage?
             .transformed(by: CGAffineTransform(scaleX: 8, y: 8)),
               let image = context.createCGImage(out, from: out.extent) else { return nil }
         if cache.count >= 16 { cache.removeAll() }
-        cache[string] = image
+        cache[key] = image
         return image
     }
 }

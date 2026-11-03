@@ -76,6 +76,12 @@ final class NockWalletStore: ObservableObject {
     @Published private(set) var syncError: String?
     private(set) var lastSyncedAt: Date?
 
+    /// NOCK is opt-in (设置 → 钱包, this device only). Off: no NOCK key is derived, no node is
+    /// asked, and the wallet page has no NOCK entry. Saved NOCK history stays for when it's
+    /// switched back on.
+    @Published private(set) var enabled: Bool
+    nonisolated static let enabledKey = "nock.enabled"
+
     var hasBalance: Bool { backendReady || balanceIsCached }
     /// This wallet uses NOCK: it has fetched its address from the receive page, or holds or
     /// has held NOCK. The wallet page then shows the NOCK card where it otherwise shows only a
@@ -174,6 +180,9 @@ final class NockWalletStore: ObservableObject {
             addressShown = try c.decodeIfPresent(Bool.self, forKey: .addressShown) ?? false
             fullScanAt = try c.decodeIfPresent(Date.self, forKey: .fullScanAt)
         }
+
+        /// Same test as `inUse`, on a saved state.
+        var usesNock: Bool { addressShown || (balance?.total ?? 0) > 0 || !history.isEmpty }
     }
     nonisolated static let seenRetention: TimeInterval = 3 * 86_400
 
@@ -181,6 +190,14 @@ final class NockWalletStore: ObservableObject {
     private static func stateKey(_ id: String) -> String { "nock.state.\(id)" }
 
     private init() {
+        var on = Self.initialEnabled(.standard)
+        #if DEBUG
+        // Screenshot / verification runs that open NOCK need it on (and must not save that).
+        let env = ProcessInfo.processInfo.environment
+        if env["SHOT_NOCK"] != nil || env["SHOT_NOCK_WATCH"] != nil { on = true }
+        if let forced = env["SHOT_NOCK_ENABLED"] { on = forced == "1" }
+        #endif
+        enabled = on
         let wallet = WalletStore.shared
         wallet.$activeWalletID.combineLatest(wallet.$mnemonic)
             .receive(on: RunLoop.main)
@@ -201,7 +218,7 @@ final class NockWalletStore: ObservableObject {
             state = id.flatMap(Self.loadState) ?? State()
             publishState()
         }
-        guard let mnemonic, let id else { return }
+        guard enabled, let mnemonic, let id else { return }
         guard account == nil else { return }
         let gen = generation
         #if DEBUG
@@ -227,6 +244,50 @@ final class NockWalletStore: ObservableObject {
                 self.persist()
                 Task { await self.load() }
             }
+        }
+    }
+
+    /// Whether NOCK starts on: as last set here; before that ever happened (the first run of the
+    /// build that made NOCK opt-in) on only where a wallet on this device already uses it, so
+    /// nobody loses sight of NOCK they hold.
+    static func initialEnabled(_ d: UserDefaults) -> Bool {
+        if let on = d.object(forKey: enabledKey) as? Bool { return on }
+        let on = d.dictionaryRepresentation().keys.contains { key in
+            guard key.hasPrefix("nock.state."), let data = d.data(forKey: key),
+                  let s = try? JSONDecoder().decode(State.self, from: data) else { return false }
+            return s.usesNock
+        }
+        #if DEBUG
+        if Keychain.isMemoryOnly { return on }   // screenshot runs share the real defaults
+        #endif
+        d.set(on, forKey: enabledKey)
+        d.removeObject(forKey: "nock.linkHidden")   // the wallet page's old "close the NOCK line"
+        return on
+    }
+
+    /// 设置 → 钱包 → NOCK 钱包.
+    func setEnabled(_ on: Bool) {
+        guard on != enabled else { return }
+        enabled = on
+        #if DEBUG
+        if !Keychain.isMemoryOnly { UserDefaults.standard.set(on, forKey: Self.enabledKey) }
+        #else
+        UserDefaults.standard.set(on, forKey: Self.enabledKey)
+        #endif
+        if on {
+            // Derive this wallet's NOCK key now (and read its balance), as unlocking does.
+            let wallet = WalletStore.shared
+            walletChanged(id: wallet.activeWalletID, mnemonic: wallet.mnemonic)
+        } else {
+            // Stop, as removing the wallet does — but the saved state stays for switching back
+            // on. An in-flight derivation or read lands on a newer generation and is dropped.
+            persist()
+            generation += 1
+            loadTask?.cancel(); loadTask = nil; loadAgain = false; lastLoadAt = nil; retriedFirstLoad = false
+            scanAt = nil; forceScanNext = false; historyRequested = false
+            account = nil; backendReady = false; syncError = nil; tipHeight = nil; notes = []
+            lastSyncedAt = nil; blockTimes = [:]
+            publishState()
         }
     }
 

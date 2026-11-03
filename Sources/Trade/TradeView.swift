@@ -15,6 +15,7 @@ struct TradeView: View {
     @State private var withdrawing: WithdrawCurrency? = TradeView.shotWithdraw
     @State private var depositing: WithdrawCurrency? = TradeView.shotDeposit
     @State private var sideColumnWidth: CGFloat = 20   // measured width of the 买/卖 column
+    @State private var pageWidth: CGFloat?             // measured; nil before the first layout
 
     /// Which balance the withdraw / deposit sheet is for (`.sheet(item:)` needs Identifiable).
     struct WithdrawCurrency: Identifiable { let id: String }
@@ -23,7 +24,7 @@ struct TradeView: View {
     /// SHOT_TAB=1) so a verification run can reach it without API keys.
     private static var shotWithdraw: WithdrawCurrency? {
         #if DEBUG
-        if let c = ProcessInfo.processInfo.environment["SHOT_WITHDRAW"], [SafeTradeMarket.base, "usdt"].contains(c) {
+        if AppFeatures.tradeAccount, let c = ProcessInfo.processInfo.environment["SHOT_WITHDRAW"], [SafeTradeMarket.base, "usdt"].contains(c) {
             return WithdrawCurrency(id: c)
         }
         #endif
@@ -34,7 +35,7 @@ struct TradeView: View {
     /// SHOT_TAB=1). With SHOT_TRADE_DEMO it shows a demo address.
     private static var shotDeposit: WithdrawCurrency? {
         #if DEBUG
-        if let c = ProcessInfo.processInfo.environment["SHOT_DEPOSIT"], [SafeTradeMarket.base, "usdt"].contains(c) {
+        if AppFeatures.tradeAccount, let c = ProcessInfo.processInfo.environment["SHOT_DEPOSIT"], [SafeTradeMarket.base, "usdt"].contains(c) {
             return WithdrawCurrency(id: c)
         }
         #endif
@@ -55,7 +56,7 @@ struct TradeView: View {
     /// DEBUG-only: SHOT_KEY_GUIDE=1 opens 如何获取 API 密钥 on launch (with SHOT_TAB=1).
     private static var shotKeyGuide: Bool {
         #if DEBUG
-        return ProcessInfo.processInfo.environment["SHOT_KEY_GUIDE"] == "1"
+        return AppFeatures.tradeAccount && ProcessInfo.processInfo.environment["SHOT_KEY_GUIDE"] == "1"
         #else
         return false
         #endif
@@ -73,7 +74,13 @@ struct TradeView: View {
 
     private var usdt: STBalance? { store.balance("usdt") }
     private var pearl: STBalance? { store.balance(SafeTradeMarket.base) }
-    private var wide: Bool { hsc != .compact }
+    /// Market beside the order form only when both get room: the order column is a fixed
+    /// 360pt and the chart wants ~380pt. Decided by the measured width, not the size class
+    /// — an iPhone Duo's open screen held upright is "regular" yet only ~670pt wide.
+    private var wide: Bool {
+        guard let w = pageWidth else { return hsc != .compact }
+        return w >= 360 + Pearl.Space.lg + 380 + 2 * Pearl.Space.screen
+    }
 
     /// A refresh the user asked for (pull-to-refresh or the toolbar button). Only these
     /// count toward the Pro upsell — automatic loads and iCloud-sync refreshes must not
@@ -96,13 +103,14 @@ struct TradeView: View {
                     // minHeight: geo.size.height force an exact height that compresses tall
                     // content and wrecks the layout (and also breaks pull-to-refresh).
             }
+            .onGeometryChange(for: CGFloat.self, of: \.size.width) { pageWidth = $0 }
             // 下拉滚动即可收起数字键盘（decimalPad 没有回车键）。
             #if os(iOS)
             .scrollDismissesKeyboard(.interactively)
             #endif
             .pearlScreenBackground()
-            .navigationTitle(Loc("交易 · SafeTrade"))
-            .navigationDestination(isPresented: $openAlerts) { PriceAlertsView() }
+            .navigationTitle(AppFeatures.tradeAccount ? Loc("交易 · SafeTrade") : Loc("行情"))
+            .navigationDestination(isPresented: $openAlerts) { AlertsView() }
             .sheet(item: $withdrawing) { WithdrawView(trade: store, currency: $0.id).environmentObject(contacts) }
             .sheet(item: $depositing) { DepositView(trade: store, currency: $0.id).environmentObject(contacts) }
             .sheet(isPresented: $showingKeyGuide) { SafeTradeKeyGuide() }
@@ -188,7 +196,9 @@ struct TradeView: View {
     // MARK: layout
 
     @ViewBuilder private var content: some View {
-        if wide {
+        if !AppFeatures.tradeAccount {
+            marketOnly
+        } else if wide {
             VStack(spacing: Pearl.Space.lg) {
                 notices
                 HStack(alignment: .top, spacing: Pearl.Space.lg) {
@@ -210,6 +220,25 @@ struct TradeView: View {
                 orderSection
                 statusMessages
                 ordersList
+            }
+        }
+    }
+
+    /// A build without the SafeTrade account (App Store, guideline 3.1.5(iii)): the
+    /// public market only — price, K-line, depth. No keys, balances, orders or funds.
+    @ViewBuilder private var marketOnly: some View {
+        if wide {
+            HStack(alignment: .top, spacing: Pearl.Space.lg) {
+                MarketSection(store: store).frame(maxWidth: .infinity)
+                VStack(spacing: Pearl.Space.lg) { DepthSection(store: store); PriceAlertPromoCard(); statusMessages }
+                    .frame(width: 360)
+            }
+        } else {
+            VStack(spacing: Pearl.Space.lg) {
+                MarketSection(store: store)
+                DepthSection(store: store)
+                PriceAlertPromoCard()
+                statusMessages
             }
         }
     }

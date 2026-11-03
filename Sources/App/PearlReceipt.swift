@@ -93,12 +93,21 @@ extension Text {
     /// An address in 4-character groups, first and last group bold, the rest
     /// secondary — e.g. **prl1** pqvw gxsx … 2qxl **z0q9**. Lines break only at the
     /// spaces, so the system never hyphenates it (a "-" that isn't in the address).
-    init(groupedAddress address: String) {
+    /// `perLine` sets the lines up front at that many groups each, spread evenly (14 groups
+    /// at 5 → 5 / 5 / 4, not 6 / 6 / 2) — for a centred address; text too large for it
+    /// still wraps at the spaces.
+    init(groupedAddress address: String, perLine: Int? = nil) {
         let chars = Array(address)
         let groups = stride(from: 0, to: chars.count, by: 4).map { String(chars[$0..<min($0 + 4, chars.count)]) }
         guard groups.count > 2 else { self = Text(verbatim: address).bold(); return }
+        let lines = perLine.map { max(1, (groups.count + $0 - 1) / $0) } ?? 1
+        let each = (groups.count + lines - 1) / lines
+        func gap(_ i: Int) -> String { lines > 1 && i % each == 0 ? "\n" : " " }
         var t = Text(verbatim: groups[0]).bold()
-        for g in groups.dropFirst().dropLast() { t = t + Text(verbatim: " " + g).foregroundColor(.secondary) }
-        self = t + Text(verbatim: " " + groups[groups.count - 1]).bold()
+        for i in groups.indices.dropFirst().dropLast() {
+            t = t + Text(verbatim: gap(i) + groups[i]).foregroundColor(.secondary)
+        }
+        let last = groups.count - 1
+        self = t + Text(verbatim: gap(last) + groups[last]).bold()
     }
 }

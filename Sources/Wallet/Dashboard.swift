@@ -18,6 +18,11 @@ struct DashboardView: View {
     @State private var restoringWatched = false
     /// False while a pushed screen (收款 / 转账 / 记录) or another tab covers the dashboard.
     @State private var dashboardVisible = false
+    /// Measured: the page's width, the left column's height, and how many 最近交易 rows
+    /// fill the column beside it (two-column layout only).
+    @State private var pageWidth: CGFloat?
+    @State private var balanceColumnHeight: CGFloat?
+    @State private var recentFill = 3
     /// DEBUG: SHOT_NOCK=1 opens the NOCK page on launch (screenshot / verification runs).
     @State private var shotNock: Bool = {
         #if DEBUG
@@ -147,6 +152,19 @@ struct DashboardView: View {
         return (intGrouped + dec + head2, tail)
     }
 
+    /// Two columns once two phone-width ones fit: an iPhone Duo opened (held sideways,
+    /// ~950pt), an iPad. Decided by the measured width, not the size class — the open Duo
+    /// held upright is "regular" yet only ~670pt wide, and keeps the single column. The Mac
+    /// keeps its one centred column.
+    private var wide: Bool {
+        #if os(iOS)
+        guard let w = pageWidth else { return false }
+        return w >= 2 * 340 + Pearl.Space.lg + 2 * Pearl.Space.screen
+        #else
+        return false
+        #endif
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: Pearl.Space.lg) {
@@ -156,177 +174,35 @@ struct DashboardView: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
-                // Balance card → brand hero banner (compact)
-                // Every row keeps a FIXED slot (placeholder until its data loads) so
-                // the hero never changes height — the layout settles first, then the
-                // real balance / fiat / address fade in without shoving anything.
-                PearlHero(gradient: balanceGradient, minHeight: 0, padding: Pearl.Space.md,
-                          showSparkle: false, backdrop: isClassicNight ? AnyView(ClassicNightBackground()) : nil) {
-                    VStack(spacing: Pearl.Space.xs) {
-                        // Top row: the 币价 chip on the right (the wallet name lives in the
-                        // toolbar switcher). The chip always holds its slot — "—" until the first
-                        // price loads — so the hero never changes height.
-                        HStack(spacing: Pearl.Space.sm) {
-                            // Like the web's wallet page: a read-only wallet says so on its card.
-                            if store.isWatchOnly {
-                                Label(Loc("只读"), systemImage: "eye")
-                                    .font(Self.chipLabelFont)
-                                    .foregroundStyle(Pearl.onHeroChip.opacity(0.75))
-                                    .lineLimit(1)
-                                    .padding(.horizontal, 10).padding(.vertical, 5)
-                                    .background(Pearl.heroChip, in: Capsule())
-                            }
-                            Spacer(minLength: Pearl.Space.xs)
-                            HStack(spacing: 6) {
-                                Text(verbatim: "PRL").font(Self.chipLabelFont)
-                                    .foregroundStyle(Pearl.onHeroChip.opacity(0.75))
-                                Text(unitPriceText ?? "—").font(Self.chipPriceFont).monospacedDigit()
-                                    .foregroundStyle(unitPriceText == nil ? Pearl.onHeroChip.opacity(0.55) : chipPriceColor)
-                                    .contentTransition(.numericText())
-                            }
-                            .lineLimit(1).minimumScaleFactor(0.7)
-                            .padding(.horizontal, 12).padding(.vertical, 5)
-                            .background(Pearl.heroChip, in: Capsule())
-                            .accessibilityElement(children: .combine)
-                            .accessibilityLabel(Loc("PRL 币价 %@", unitPriceText ?? "—"))
-                            .animation(.snappy, value: unitPriceText)
+                if wide {
+                    // The balance and everything to do with it on the left; the activity
+                    // beside it, as tall as that column, with as many rows as fill it.
+                    HStack(alignment: .top, spacing: Pearl.Space.lg) {
+                        VStack(spacing: Pearl.Space.lg) {
+                            balanceHero
+                            syncProblem
+                            actionRow
+                            nockCard
+                            sideLinks
                         }
-
-                        // Balance — always-present slot; dimmed dashes until the chain syncs,
-                        // or last session's figure (slightly dimmed) until the fresh one lands.
-                        // Big grouped "1,234.56" head (2 dp), the remaining fraction digits
-                        // tiny & trailing, then the PRL unit.
-                        Group {
-                            if hasBalance {
-                                let p = balanceParts(store.balance.total)
-                                (
-                                    Text(p.head)
-                                        .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                                    + Text(p.tail)
-                                        .font(.system(.footnote, design: .rounded).weight(.bold))
-                                        .foregroundStyle(Pearl.onHero.opacity(0.6))
-                                    + Text(verbatim: " PRL")
-                                        .font(.system(.callout, design: .rounded).weight(.semibold))
-                                        .foregroundStyle(Pearl.onHero.opacity(0.85))
-                                )
-                                .foregroundStyle(Pearl.onHero)
-                                .opacity(store.balanceIsCached ? 0.7 : 1)
-                                .contentTransition(.numericText())
-                            } else {
-                                Text(verbatim: "—— PRL")
-                                    .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                                    .foregroundStyle(Pearl.onHero.opacity(0.45))
-                            }
-                        }
-                        .monospacedDigit()
-                        .lineLimit(1).minimumScaleFactor(0.5)
-                        .accessibilityLabel(hasBalance ? Loc("余额 %@ PRL", store.balance.total.formatted(.number.locale(LocBundleHolder.shared.locale))) : Loc("同步余额…"))
-                        // Tuck the balance up under the chip row: with only a right-aligned chip
-                        // above it, the full row gap made the number read as sitting low.
-                        .padding(.top, -6)
-
-                        // Fiat — slot reserved; shows the sync hint until balance+price are in.
-                        Group {
-                            if hasBalance, let usd = price.value(of: store.balance.total) {
-                                Text(verbatim: "≈ " + currency.dual(usd))
-                                    .foregroundStyle(Pearl.onHero.opacity(store.balanceIsCached ? 0.6 : 0.85))
-                                    .contentTransition(.numericText())
-                                    .accessibilityLabel(Loc("约合 %@", currency.dual(usd)))
-                            } else {
-                                Text(Loc("同步余额…")).foregroundStyle(Pearl.onHero.opacity(0.7))
-                            }
-                        }
-                        .font(.callout.weight(.medium)).monospacedDigit()
-                        .lineLimit(1).minimumScaleFactor(0.5)
+                        .frame(maxWidth: .infinity)
+                        .onGeometryChange(for: CGFloat.self, of: \.size.height) { balanceColumnHeight = $0 }
+                        recentCard(rows: recentFill, fill: true)
+                            .frame(height: balanceColumnHeight)
+                            .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
-                    .animation(.snappy, value: store.backendReady)
-                    .animation(.snappy, value: store.balanceIsCached)
+                } else {
+                    balanceHero
+                    syncProblem
+                    actionRow
+                    recentCard(rows: 3, fill: false)
+                    // The same seed's NOCK side, after everything PRL.
+                    nockCard
+                    sideLinks
                 }
-
-                // Backend unreachable: the figures above are the last good snapshot — say so
-                // rather than let them pass for live.
-                if let problem = store.syncError {
-                    Label(store.lastSyncedAt.map { Loc("%@，显示的是 %@ 的数据", problem, $0.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(LocBundleHolder.shared.locale))) }
-                          ?? Loc("%@，稍后自动重试", problem),
-                          systemImage: "exclamationmark.icloud")
-                        .font(.caption).foregroundStyle(.orange)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .transition(.opacity)
-                }
-
-                // Actions
-                HStack(spacing: Pearl.Space.md) {
-                    action(Loc("收款"), "qrcode") { ReceiveView(store: store) }
-                    if store.isWatchOnly {
-                        Button { watchSendInfo = true } label: { actionTile(Loc("转账"), "paperplane") }
-                            .buttonStyle(.plain)
-                    } else {
-                        action(Loc("转账"), "paperplane") { SendView(store: store) }
-                    }
-                    action(Loc("记录"), "clock.arrow.circlepath") { ActivityView(store: store) }
-                }
-
-                // 最近交易：金额为 0 的交易不显示。卡片始终保留 3 个等高行槽——同步时为骨架
-                // 占位，加载后填入真实交易、空槽留白——所以高度恒定（居中布局不跳动），且
-                // 满 3 笔时没有多余空白。
-                let recent = Array(store.txs.filter { $0.amount > 0 }.sorted { $0.time > $1.time }.prefix(3))
-                let rowH: CGFloat = 24
-                VStack(alignment: .leading, spacing: Pearl.Space.xs) {
-                    HStack {
-                        Text(Loc("最近交易")).font(.caption.weight(.semibold)).foregroundStyle(cardSecondary)
-                        Spacer()
-                        if store.historyReady && !recent.isEmpty {
-                            NavigationLink { ActivityView(store: store) } label: {
-                                Text(Loc("全部")).font(.caption2).foregroundStyle(Pearl.accent)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    VStack(alignment: .leading, spacing: Pearl.Space.xxs) {
-                        if !store.historyReady {
-                            // 历史还没拉回来：3 行骨架占位（不要先显示"暂无交易记录"）。
-                            ForEach(0..<3, id: \.self) { _ in txSkeletonRow().frame(height: rowH) }
-                        } else if recent.isEmpty {
-                            Text(Loc("暂无交易记录")).font(.caption).foregroundStyle(cardSecondary)
-                                .frame(maxWidth: .infinity, minHeight: rowH * 3 + Pearl.Space.xxs * 2, alignment: .center)
-                        } else {
-                            // 始终 3 个等高槽：有交易填真实行，没有的留等高空槽（高度恒定）。
-                            ForEach(0..<3, id: \.self) { i in
-                                if i < recent.count {
-                                    NavigationLink { TxDetailView(store: store, txid: recent[i].txid) } label: {
-                                        txRow(recent[i]).frame(height: rowH).contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                else { Color.clear.frame(height: rowH) }
-                            }
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md, frosted: true, surface: cardSurface)
-                .animation(.snappy, value: store.backendReady)
-
-                // The same seed's NOCK side, after everything PRL: a small muted strip once the
-                // wallet uses NOCK… (a read-only wallet has no seed, so no NOCK side)
-                if !store.isWatchOnly {
-                    NockWalletEntry(slot: .card, surface: cardSurface, secondary: cardSecondary)
-                }
-
-                // The page's way out to its side features: one card of rows like the one above
-                // (价格提醒 always; 桌面小组件 until a widget is placed; the NOCK line until NOCK
-                // is used or the line is closed), not a centred stack of loose links.
-                VStack(spacing: 0) {
-                    PriceAlertInlineLink()
-                    WidgetInlineLink()
-                    if !store.isWatchOnly { NockWalletEntry(slot: .link) }
-                }
-                .padding(.horizontal, Pearl.Space.md)
-                .pearlCard(padding: 0, radius: Pearl.Radius.md, frosted: true, surface: cardSurface)
             }
             .padding(Pearl.Space.screen)
-            .frame(maxWidth: 560)
+            .frame(maxWidth: wide ? 1000 : 560)
             .frame(maxWidth: .infinity)
             .animation(.snappy, value: store.syncError)
             .animation(.snappy, value: updates.available)
@@ -340,6 +216,7 @@ struct DashboardView: View {
             .containerRelativeFrame(.vertical, alignment: .center)
             #endif
         }
+        .onGeometryChange(for: CGFloat.self, of: \.size.width) { pageWidth = $0 }
         .background {
             if isClassicNight {
                 Color(red: 17 / 255, green: 18 / 255, blue: 22 / 255).ignoresSafeArea()
@@ -398,7 +275,7 @@ struct DashboardView: View {
         .task { await store.refreshIfStale(); await price.refreshIfStale() }
         .refreshable {
             let nock = NockWalletStore.shared
-            if nock.inUse {
+            if nock.enabled && nock.inUse {
                 async let nockLoad: Void = nock.load()
                 await store.loadChain(); await price.refresh()
                 await nockLoad
@@ -436,6 +313,195 @@ struct DashboardView: View {
             }
         }
         .animation(.snappy, value: store.toast)
+    }
+
+    // MARK: pieces
+
+    /// Balance card → brand hero banner (compact).
+    /// Every row keeps a FIXED slot (placeholder until its data loads) so
+    /// the hero never changes height — the layout settles first, then the
+    /// real balance / fiat / address fade in without shoving anything.
+    private var balanceHero: some View {
+        PearlHero(gradient: balanceGradient, minHeight: 0, padding: Pearl.Space.md,
+                  showSparkle: false, backdrop: isClassicNight ? AnyView(ClassicNightBackground()) : nil) {
+            VStack(spacing: Pearl.Space.xs) {
+                // Top row: the 币价 chip on the right (the wallet name lives in the
+                // toolbar switcher). The chip always holds its slot — "—" until the first
+                // price loads — so the hero never changes height.
+                HStack(spacing: Pearl.Space.sm) {
+                    // Like the web's wallet page: a read-only wallet says so on its card.
+                    if store.isWatchOnly {
+                        Label(Loc("只读"), systemImage: "eye")
+                            .font(Self.chipLabelFont)
+                            .foregroundStyle(Pearl.onHeroChip.opacity(0.75))
+                            .lineLimit(1)
+                            .padding(.horizontal, 10).padding(.vertical, 5)
+                            .background(Pearl.heroChip, in: Capsule())
+                    }
+                    Spacer(minLength: Pearl.Space.xs)
+                    HStack(spacing: 6) {
+                        Text(verbatim: "PRL").font(Self.chipLabelFont)
+                            .foregroundStyle(Pearl.onHeroChip.opacity(0.75))
+                        Text(unitPriceText ?? "—").font(Self.chipPriceFont).monospacedDigit()
+                            .foregroundStyle(unitPriceText == nil ? Pearl.onHeroChip.opacity(0.55) : chipPriceColor)
+                            .contentTransition(.numericText())
+                    }
+                    .lineLimit(1).minimumScaleFactor(0.7)
+                    .padding(.horizontal, 12).padding(.vertical, 5)
+                    .background(Pearl.heroChip, in: Capsule())
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(Loc("PRL 币价 %@", unitPriceText ?? "—"))
+                    .animation(.snappy, value: unitPriceText)
+                }
+
+                // Balance — always-present slot; dimmed dashes until the chain syncs,
+                // or last session's figure (slightly dimmed) until the fresh one lands.
+                // Big grouped "1,234.56" head (2 dp), the remaining fraction digits
+                // tiny & trailing, then the PRL unit.
+                Group {
+                    if hasBalance {
+                        let p = balanceParts(store.balance.total)
+                        (
+                            Text(p.head)
+                                .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                            + Text(p.tail)
+                                .font(.system(.footnote, design: .rounded).weight(.bold))
+                                .foregroundStyle(Pearl.onHero.opacity(0.6))
+                            + Text(verbatim: " PRL")
+                                .font(.system(.callout, design: .rounded).weight(.semibold))
+                                .foregroundStyle(Pearl.onHero.opacity(0.85))
+                        )
+                        .foregroundStyle(Pearl.onHero)
+                        .opacity(store.balanceIsCached ? 0.7 : 1)
+                        .contentTransition(.numericText())
+                    } else {
+                        Text(verbatim: "—— PRL")
+                            .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                            .foregroundStyle(Pearl.onHero.opacity(0.45))
+                    }
+                }
+                .monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.5)
+                .accessibilityLabel(hasBalance ? Loc("余额 %@ PRL", store.balance.total.formatted(.number.locale(LocBundleHolder.shared.locale))) : Loc("同步余额…"))
+                // Tuck the balance up under the chip row: with only a right-aligned chip
+                // above it, the full row gap made the number read as sitting low.
+                .padding(.top, -6)
+
+                // Fiat — slot reserved; shows the sync hint until balance+price are in.
+                Group {
+                    if hasBalance, let usd = price.value(of: store.balance.total) {
+                        Text(verbatim: "≈ " + currency.dual(usd))
+                            .foregroundStyle(Pearl.onHero.opacity(store.balanceIsCached ? 0.6 : 0.85))
+                            .contentTransition(.numericText())
+                            .accessibilityLabel(Loc("约合 %@", currency.dual(usd)))
+                    } else {
+                        Text(Loc("同步余额…")).foregroundStyle(Pearl.onHero.opacity(0.7))
+                    }
+                }
+                .font(.callout.weight(.medium)).monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.5)
+            }
+            .frame(maxWidth: .infinity)
+            .animation(.snappy, value: store.backendReady)
+            .animation(.snappy, value: store.balanceIsCached)
+        }
+    }
+
+    /// Backend unreachable: the figures above are the last good snapshot — say so
+    /// rather than let them pass for live.
+    @ViewBuilder private var syncProblem: some View {
+        if let problem = store.syncError {
+            Label(store.lastSyncedAt.map { Loc("%@，显示的是 %@ 的数据", problem, $0.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(LocBundleHolder.shared.locale))) }
+                  ?? Loc("%@，稍后自动重试", problem),
+                  systemImage: "exclamationmark.icloud")
+                .font(.caption).foregroundStyle(.orange)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.opacity)
+        }
+    }
+
+    private var actionRow: some View {
+        HStack(spacing: Pearl.Space.md) {
+            action(Loc("收款"), "qrcode") { ReceiveView(store: store) }
+            if store.isWatchOnly {
+                Button { watchSendInfo = true } label: { actionTile(Loc("转账"), "paperplane") }
+                    .buttonStyle(.plain)
+            } else {
+                action(Loc("转账"), "paperplane") { SendView(store: store) }
+            }
+            action(Loc("记录"), "clock.arrow.circlepath") { ActivityView(store: store) }
+        }
+    }
+
+    /// 最近交易：金额为 0 的交易不显示。卡片始终保留 `rows` 个等高行槽——同步时为骨架
+    /// 占位，加载后填入真实交易、空槽留白——所以高度恒定（居中布局不跳动），且满员时
+    /// 没有多余空白。`fill`（两栏）：卡片撑满给它的高度，放得下几行就把行数报给 recentFill。
+    private func recentCard(rows: Int, fill: Bool) -> some View {
+        let recent = Array(store.txs.filter { $0.amount > 0 }.sorted { $0.time > $1.time }.prefix(rows))
+        let rowH: CGFloat = 24
+        return VStack(alignment: .leading, spacing: Pearl.Space.xs) {
+            HStack {
+                Text(Loc("最近交易")).font(.caption.weight(.semibold)).foregroundStyle(cardSecondary)
+                Spacer()
+                if store.historyReady && !recent.isEmpty {
+                    NavigationLink { ActivityView(store: store) } label: {
+                        Text(Loc("全部")).font(.caption2).foregroundStyle(Pearl.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            VStack(alignment: .leading, spacing: Pearl.Space.xxs) {
+                if !store.historyReady {
+                    // 历史还没拉回来：骨架占位（不要先显示"暂无交易记录"）。
+                    ForEach(0..<rows, id: \.self) { _ in txSkeletonRow().frame(height: rowH) }
+                } else if recent.isEmpty {
+                    Text(Loc("暂无交易记录")).font(.caption).foregroundStyle(cardSecondary)
+                        .frame(maxWidth: .infinity, minHeight: rowH * 3 + Pearl.Space.xxs * 2,
+                               maxHeight: fill ? .infinity : nil, alignment: .center)
+                } else {
+                    // 始终 `rows` 个等高槽：有交易填真实行，没有的留等高空槽（高度恒定）。
+                    ForEach(0..<rows, id: \.self) { i in
+                        if i < recent.count {
+                            NavigationLink { TxDetailView(store: store, txid: recent[i].txid) } label: {
+                                txRow(recent[i]).frame(height: rowH).contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        else { Color.clear.frame(height: rowH) }
+                    }
+                }
+            }
+            .frame(maxHeight: fill ? .infinity : nil, alignment: .top)
+            .onGeometryChange(for: Int.self) { proxy in
+                Int((proxy.size.height + Pearl.Space.xxs) / (rowH + Pearl.Space.xxs))
+            } action: { fits in
+                if fill { recentFill = min(max(fits, 3), 20) }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
+        .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md, frosted: true, surface: cardSurface)
+        .animation(.snappy, value: store.backendReady)
+    }
+
+    /// The same seed's NOCK side: a small muted strip once the wallet uses NOCK… (a
+    /// read-only wallet has no seed, so no NOCK side)
+    @ViewBuilder private var nockCard: some View {
+        if !store.isWatchOnly {
+            NockWalletEntry(slot: .card, surface: cardSurface, secondary: cardSecondary)
+        }
+    }
+
+    /// The page's way out to its side features: one card of rows like 最近交易
+    /// (价格和到账提醒 always; 桌面小组件 until a widget is placed; the NOCK line while NOCK
+    /// is switched on but not used yet), not a centred stack of loose links.
+    private var sideLinks: some View {
+        VStack(spacing: 0) {
+            AlertsInlineLink()
+            WidgetInlineLink()
+            if !store.isWatchOnly { NockWalletEntry(slot: .link) }
+        }
+        .padding(.horizontal, Pearl.Space.md)
+        .pearlCard(padding: 0, radius: Pearl.Radius.md, frosted: true, surface: cardSurface)
     }
 
     /// One placeholder transaction row (固定占位) shown while the chain syncs — same
@@ -1021,16 +1087,14 @@ struct RevealSeedView: View {
 
 // MARK: - Shortcut rows
 
-/// One row of the wallet page's shortcut card (价格提醒 / 桌面小组件 / NOCK 钱包): glyph
+/// One row of the wallet page's shortcut card (价格和到账提醒 / 桌面小组件 / NOCK 钱包): glyph
 /// column, title, an optional status on the right, chevron. Every row but the first draws
 /// the hairline above itself, so a row that hides takes its line with it.
-struct WalletShortcutRow<Accessory: View>: View {
+struct WalletShortcutRow: View {
     let systemImage: String
     let title: String
     var status: String? = nil
     var divider = false
-    /// Room before the chevron for a control laid over the row (the NOCK line's ×).
-    @ViewBuilder var accessory: () -> Accessory
 
     static var glyphWidth: CGFloat { 22 }
 
@@ -1049,7 +1113,6 @@ struct WalletShortcutRow<Accessory: View>: View {
                     Text(status).font(.caption).foregroundStyle(.secondary)
                         .lineLimit(1).minimumScaleFactor(0.8)
                 }
-                accessory()
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
                     .accessibilityHidden(true)
@@ -1060,8 +1123,3 @@ struct WalletShortcutRow<Accessory: View>: View {
     }
 }
 
-extension WalletShortcutRow where Accessory == EmptyView {
-    init(systemImage: String, title: String, status: String? = nil, divider: Bool = false) {
-        self.init(systemImage: systemImage, title: title, status: status, divider: divider) { EmptyView() }
-    }
-}

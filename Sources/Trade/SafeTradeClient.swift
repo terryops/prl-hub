@@ -38,12 +38,22 @@ struct STTicker: Decodable, Equatable {
 }
 private struct STTickerEnvelope: Decodable { let ticker: STTicker }
 
-/// Millisecond nonces, strictly increasing, on the SERVER's clock: SafeTrade refuses a
-/// nonce outside its time window (`authz.nonce_expired`), so a phone whose clock is
-/// off would fail every signed call. The offset is learned from response `Date` headers.
+/// Millisecond nonces on the SERVER's clock: SafeTrade's gateway (Barong) refuses a nonce
+/// more than its lifetime away from its own time (`authz.nonce_expired`) and keeps no
+/// record of earlier ones, so a phone whose clock is off would fail every signed call.
+/// The offset is learned from response `Date` headers. Nonces increase between replies;
+/// once a reply shows the last one ran ahead of the server's time (a fast clock, or one
+/// set back), they start again from the server's time, so the one re-sign can pass.
 actor SafeTradeNonceGenerator {
+    /// Further ahead of the server's time than a burst of nonces gets: a wrong clock.
+    static let maxAheadMs = 1_000
     private var last = 0
     private var offsetMs = 0
+    private let clock: @Sendable () -> Date
+
+    init(clock: @escaping @Sendable () -> Date = { Date() }) {
+        self.clock = clock
+    }
     private let httpDate: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
@@ -53,7 +63,7 @@ actor SafeTradeNonceGenerator {
     }()
 
     func next() -> String {
-        let now = Int(Date().timeIntervalSince1970 * 1000) + offsetMs
+        let now = Int(clock().timeIntervalSince1970 * 1000) + offsetMs
         let nonce = max(now, last + 1)
         last = nonce
         return String(nonce)
@@ -61,7 +71,10 @@ actor SafeTradeNonceGenerator {
 
     func observe(serverDate header: String) {
         guard let server = httpDate.date(from: header) else { return }
-        offsetMs = Self.offset(server: server, local: Date())
+        let local = clock()
+        offsetMs = Self.offset(server: server, local: local)
+        let now = Int(local.timeIntervalSince1970 * 1000) + offsetMs
+        if last > now + Self.maxAheadMs { last = now }
     }
 
     /// The header has whole-second resolution (the true time is on average half a
@@ -368,8 +381,12 @@ struct STCandle: Identifiable, Equatable {
 
 enum SafeTradeError: LocalizedError {
     case noCredentials, invalidURL, http(Int, String), decode(String), placedUnverified, withdrawUnverified
+    /// The balances call's 404 `record.not_found`: an API key SafeTrade doesn't know
+    /// (SafeTradeAuthProblem.isUnknownKey). Keeps the body SafeTrade sent.
+    case unknownKey(String)
     var errorDescription: String? {
         switch self {
+        case .unknownKey: return SafeTradeAuthProblem.badKey.message
         case .withdrawUnverified: return Loc("提现请求可能已提交但未能确认结果，请先看下方提现记录，切勿重复提交。")
         case .noCredentials: return Loc("未配置 SafeTrade API 密钥")
         case .invalidURL: return Loc("SafeTrade 请求地址无效")
@@ -385,6 +402,7 @@ enum SafeTradeError: LocalizedError {
     /// Why a signed request was refused, when it was an auth refusal.
     var authProblem: SafeTradeAuthProblem? {
         if case .http(let c, let m) = self { return SafeTradeAuthProblem(status: c, body: m) }
+        if case .unknownKey = self { return .badKey }
         return nil
     }
 }
@@ -442,7 +460,10 @@ extension SafeTradeError {
     private static func orderMessage(forKey key: String) -> String? {
         let t = Set(SafeTradeAuthProblem.tokens(key))
         if t.contains("insufficient") && t.contains("balance") { return Loc("SafeTrade 可用余额不足") }
-        if t.contains("liquidity") { return Loc("盘口深度不够，市价单成交不了这么多，请减少数量或改用限价单") }
+        // `market_price_exceeded`: the fill would pass the market order's price cap.
+        if t.contains("liquidity") || (t.contains("price") && t.contains("exceeded")) {
+            return Loc("盘口深度不够，市价单成交不了这么多，请减少数量或改用限价单")
+        }
         if t.contains("round") && t.contains("price") { return Loc("价格的小数位太多") }
         if t.contains("round") && (t.contains("amount") || t.contains("volume")) { return Loc("数量的小数位太多") }
         if (t.contains("amount") || t.contains("volume")) && (t.contains("min") || t.contains("less") || t.contains("small")) {
@@ -551,12 +572,16 @@ struct SafeTradeClient {
                       query: [URLQueryItem] = [], form: [String: String]? = nil, json: [String: Any]? = nil,
                       auth: Auth = .none) async throws -> Data {
         let credentials: (key: String, secret: String)?
+        // A build without the account feature never signs a request (App Review 3.1.5(iii)):
+        // only SafeTrade's public market endpoints are reachable.
         switch auth {
         case .none: credentials = nil
         case .stored:
-            guard let c = SafeTradeSecrets.credentials else { throw SafeTradeError.noCredentials }
+            guard AppFeatures.tradeAccount, let c = SafeTradeSecrets.credentials else { throw SafeTradeError.noCredentials }
             credentials = c
-        case .explicit(let key, let secret): credentials = (key, secret)
+        case .explicit(let key, let secret):
+            guard AppFeatures.tradeAccount else { throw SafeTradeError.noCredentials }
+            credentials = (key, secret)
         }
         guard var comps = URLComponents(string: root + path) else { throw SafeTradeError.invalidURL }
         if !query.isEmpty { comps.queryItems = query }
@@ -621,7 +646,13 @@ struct SafeTradeClient {
     }
 
     func balances() async throws -> [STBalance] {
-        let data = try await send("/api/v2/trade/account/balances/spot", auth: .stored)
+        let data: Data
+        do {
+            data = try await send("/api/v2/trade/account/balances/spot", auth: .stored)
+        } catch SafeTradeError.http(let code, let body) where SafeTradeAuthProblem.isUnknownKey(status: code, body: body) {
+            // Shown as the wrong key it is (SafeTradeAuthProblem.badKey), not as a raw HTTP 404.
+            throw SafeTradeError.unknownKey(body)
+        }
         do { return try JSONDecoder().decode([STBalance].self, from: data) }
         catch { throw SafeTradeError.decode(error.localizedDescription) }
     }
@@ -636,8 +667,10 @@ struct SafeTradeClient {
             _ = try await send("/api/v2/trade/account/balances/spot", auth: .explicit(key: apiKey, secret: apiSecret))
             return .ok
         } catch SafeTradeError.http(let code, let body) {
-            // 401/403 = auth refused (see SafeTradeAuthProblem for which kind);
-            // anything else 2xx-failing is a server-side problem to retry later.
+            // 401/403 = auth refused (see SafeTradeAuthProblem for which kind), and SafeTrade's
+            // 404 for a key it doesn't know; anything else 2xx-failing is a server-side problem
+            // to retry later.
+            if SafeTradeAuthProblem.isUnknownKey(status: code, body: body) { return .rejected(.badKey) }
             if let problem = SafeTradeAuthProblem(status: code, body: body) { return .rejected(problem) }
             return .serverError(code, body)
         } catch {
@@ -831,11 +864,13 @@ struct SafeTradeClient {
         }
     }
 
+    /// `maxPrice` is a market order's price cap (see `SafeTradeMarketRules.marketPriceCap`).
     func placeOrder(market: String, side: String, amount: String,
-                    price: String?, type: String) async throws -> STOrder {
+                    price: String?, maxPrice: String? = nil, type: String) async throws -> STOrder {
         let market = SafeTradeMarket.normalized(market)
         var form = ["market": market, "side": side, "amount": amount, "type": type]
         if type == "limit", let price { form["price"] = price }
+        if type == "market", let maxPrice { form["max_price"] = maxPrice }
         let data: Data
         do {
             data = try await send("/api/v2/trade/market/orders", method: "POST", form: form, auth: .stored)

@@ -1,25 +1,27 @@
 import Foundation
 
-/// Compile-time feature switches.
+/// Compile-time feature switches. The deploy scripts set them (tools/lib.sh
+/// `trade_settings`); a plain Xcode run has neither.
 ///
-/// `tradeEnabled` gates the in-app SafeTrade trading surface (the Trade tab +
-/// the SafeTrade API-key section in Settings). It is **off by default**: an app
-/// that facilitates crypto-exchange buying/selling triggers App Review guideline
-/// 3.1.5(b) (must be the exchange itself, or licensed in each region), the single
-/// biggest rejection risk — so every App Store build ships with trading compiled
-/// out.
+/// `tradeEnabled` (`TRADE_ENABLED`) — the 交易 / 行情 tab: SafeTrade's PUBLIC
+/// PEARL/USDT market (price, K-line, Pro depth chart).
 ///
-/// To build with trading IN, define the `TRADE_ENABLED` Swift compilation
-/// condition. iOS TestFlight and App Store builds share one pipeline
-/// (`deploy-testflight.sh`), so this is an explicit per-build choice rather than
-/// a checked-in flag: run `TRADE_ENABLED=1 ./deploy-testflight.sh` for a
-/// TestFlight test build, and the plain script for any build you'll submit to
-/// App Store review. Read-only price/k-line data from SafeTrade's PUBLIC ticker
-/// stays on regardless (it isn't a trading feature).
+/// `tradeAccount` — the user's own SafeTrade account inside that tab: API keys,
+/// balances, orders, deposit and withdraw. Always on for iOS (with `TRADE_ENABLED`).
+/// On macOS only with `TRADE_ACCOUNT` too: App Review rejected the Mac app under
+/// guideline 3.1.5(iii) (2.1.7, 2026-10-29: SafeTrade has no exchange licences), so
+/// Mac App Store builds leave it out and the tab is the public 行情 only.
+/// deploy-mac.sh (local) turns it on; deploy-mac-appstore.sh refuses to.
 enum AppFeatures {
     #if TRADE_ENABLED
     static let tradeEnabled = true
     #else
     static let tradeEnabled = false
+    #endif
+
+    #if TRADE_ENABLED && (os(iOS) || TRADE_ACCOUNT)
+    static let tradeAccount = true
+    #else
+    static let tradeAccount = false
     #endif
 }

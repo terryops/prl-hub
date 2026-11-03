@@ -110,8 +110,8 @@ struct SettingsView: View {
             }
             #endif
             .navigationDestination(isPresented: $shotOfflineAlerts) { OfflineAlertsView() }
-            .navigationDestination(isPresented: $shotPriceAlerts) { PriceAlertsView() }
-            .navigationDestination(isPresented: $shotIncomeAlerts) { IncomeAlertsView() }
+            .navigationDestination(isPresented: $shotPriceAlerts) { AlertsView() }
+            .navigationDestination(isPresented: $shotIncomeAlerts) { AlertsView() }
             .navigationDestination(isPresented: $shotWebLink) { WebLinkView() }
             .navigationDestination(isPresented: $shotSecurity) { SecurityInfoView() }
         }
@@ -309,7 +309,7 @@ private struct GatewaySettingsSection: View {
                 }
             }
             .accessibilityIdentifier("settings-network")
-            if AppFeatures.tradeEnabled {
+            if AppFeatures.tradeAccount {
                 NavigationLink {
                     TradeSettingsView()
                 } label: {
@@ -332,17 +332,18 @@ private struct NotificationSettingsSection: View {
     var body: some View {
         Section(Loc("通知设置")) {
             NavigationLink {
-                PriceAlertsView()
+                AlertsView()
             } label: {
                 LabeledContent {
-                    let on = alerts.rules.filter(\.isOn).count
+                    // 到账提醒 only once this device really sends it (see PriceAlertStore.incomeRegistered).
+                    let on = alerts.rules.filter(\.isOn).count + (alerts.incomeRegistered ? 1 : 0)
                     if !pro.isPro {
                         PearlBadge(text: Loc("高级版"), tint: Pearl.accent)
                     } else if on > 0 {
                         Text("\(on)")
                     }
                 } label: {
-                    SettingsMenuLabel(Loc("价格提醒"), systemImage: "bell.badge")
+                    SettingsMenuLabel(Loc("价格和到账提醒"), systemImage: "bell.badge")
                 }
             }
             .accessibilityIdentifier("settings-price-alerts")
@@ -361,21 +362,6 @@ private struct NotificationSettingsSection: View {
                 }
             }
             .accessibilityIdentifier("settings-offline-alerts")
-            NavigationLink {
-                IncomeAlertsView()
-            } label: {
-                LabeledContent {
-                    if !pro.isPro {
-                        PearlBadge(text: Loc("高级版"), tint: Pearl.accent)
-                    } else if income.wire != nil && alerts.incomeRegistered {
-                        // Only when this device really sends it (pushes on here, Pro proven to the server).
-                        Text(Loc("已开启"))
-                    }
-                } label: {
-                    SettingsMenuLabel(Loc("到账提醒"), systemImage: "arrow.down.circle")
-                }
-            }
-            .accessibilityIdentifier("settings-income-alerts")
             if PriceLiveActivity.supported {
                 NavigationLink {
                     LiveActivitySettingsView()

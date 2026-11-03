@@ -1,12 +1,14 @@
 import SwiftUI
 import UserNotifications
 
-/// 价格提醒 — reached from 设置 → 通知 and from the 交易 tab's promo card. Card layout
-/// in the app's Pearl style: the price the alerts watch, then either the Pro paywall
-/// or the rule list (tap a rule to edit / delete it). The checking itself happens
-/// on the server — see PriceAlertStore.
-struct PriceAlertsView: View {
+/// 价格和到账提醒 — one page for both pushes, reached from the wallet page's bottom card,
+/// 设置 → 通知设置 and the 交易 tab's card. 价格提醒: rules on the PRL price (tap one to edit /
+/// delete it); 到账提醒: one address, pushed when it's paid (IncomeAlertCard). Both are checked
+/// on the server (PriceAlertStore, IncomeAlertStore) and share this device's push
+/// registration and 推送时段, which close the page.
+struct AlertsView: View {
     @ObservedObject private var store = PriceAlertStore.shared
+    @ObservedObject private var income = IncomeAlertStore.shared
     @ObservedObject private var price = PRLPriceManager.shared
     @ObservedObject private var pro = ProStore.shared
     @State private var editing: EditTarget?
@@ -22,21 +24,27 @@ struct PriceAlertsView: View {
 
     /// Price the alerts trigger on (the worker's) — the app's own price until it loads.
     private var refPrice: Double? { quote?.usd ?? price.usd }
+    private var priceActive: Bool { store.rules.contains(where: \.isOn) }
+    /// Something on this page is meant to push.
+    private var anyActive: Bool { priceActive || income.wire != nil }
 
     var body: some View {
         ScrollView {
             VStack(spacing: Pearl.Space.lg) {
-                priceCard
                 if pro.isPro {
-                    if store.authorization == .denied && store.pushHere {
-                        NotificationsDeniedCard(message: Loc("通知权限已关闭，价格提醒无法送达"))
+                    if store.authorization == .denied && store.pushHere && anyActive {
+                        NotificationsDeniedCard(message: priceActive ? Loc("通知权限已关闭，价格提醒无法送达")
+                                                                     : Loc("通知权限已关闭，到账提醒无法送达"))
                     }
-                    rulesCard
+                    priceCard
+                    IncomeAlertCard()
+                    footer
                     #if os(macOS)
                     PushHereCard(store: store)
                     #endif
                     PushWindowCard(store: store)
                 } else {
+                    // Its feature list says what both alerts do (到价 / 涨跌幅 / 到账).
                     ProPaywallCard(pro: pro)
                 }
             }
@@ -45,7 +53,7 @@ struct PriceAlertsView: View {
             .frame(maxWidth: .infinity)
         }
         .background { PearlBackground() }
-        .navigationTitle(Loc("价格提醒"))
+        .navigationTitle(Loc("价格和到账提醒"))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -71,28 +79,54 @@ struct PriceAlertsView: View {
         .refreshable { quote = await AlertQuote.fetch() }
     }
 
-    // MARK: price
+    // MARK: 价格提醒
 
     private var priceCard: some View {
-        VStack(alignment: .leading, spacing: Pearl.Space.md) {
-            HStack(alignment: .center, spacing: Pearl.Space.md) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Text(Loc("PRL 提醒参考价")).font(.caption).foregroundStyle(.secondary)
-                        // The worker prices off SafeTrade (same as the wallet) and only falls
-                        // back to the three-exchange median while its SafeTrade relay is down.
-                        PearlInfoTip(quote?.source == "median"
-                                     ? Loc("每分钟更新 · CoinEx、BigONE、WhatToMine 行情中位数")
-                                     : Loc("每分钟更新 · SafeTrade 行情"),
-                                     title: Loc("PRL 提醒参考价"))
+        VStack(alignment: .leading, spacing: 0) {
+            AlertCardHeader(systemImage: "bell.badge.fill", title: Loc("价格提醒"),
+                            subtitle: Loc("PRL 到价或大涨大跌时推送通知"),
+                            info: Loc("价格提醒只需要本机的推送令牌和提醒条件，不涉及钱包地址或余额。"))
+
+            quoteBlock.padding(.top, Pearl.Space.md)
+
+            // Empty: the 添加提醒 button right below is the next step.
+            if !store.rules.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(Array(store.rules.enumerated()), id: \.element.id) { i, rule in
+                        if i > 0 { Divider().padding(.leading, 34 + Pearl.Space.sm) }
+                        ruleRow(rule)
                     }
-                    Text(refPrice.map(PriceAlertFormat.usd) ?? "—")
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
                 }
-                Spacer(minLength: 0)
-                PearlIconBadge(systemImage: "bell.badge.fill", size: 44)
+                .padding(.top, Pearl.Space.sm)
+            }
+
+            Button { editing = .new } label: {
+                Label(Loc("添加提醒"), systemImage: "plus")
+            }
+            .buttonStyle(.pearl)
+            .disabled(store.rules.count >= PriceAlertStore.maxRules)
+            .padding(.top, Pearl.Space.md)
+        }
+        .pearlCard()
+    }
+
+    /// The price the rules are checked against, and how it moved — what a new rule is set from.
+    private var quoteBlock: some View {
+        VStack(alignment: .leading, spacing: Pearl.Space.sm) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(Loc("PRL 提醒参考价")).font(.caption).foregroundStyle(.secondary)
+                    // The worker prices off SafeTrade (same as the wallet) and only falls
+                    // back to the three-exchange median while its SafeTrade relay is down.
+                    PearlInfoTip(quote?.source == "median"
+                                 ? Loc("每分钟更新 · CoinEx、BigONE、WhatToMine 行情中位数")
+                                 : Loc("每分钟更新 · SafeTrade 行情"),
+                                 title: Loc("PRL 提醒参考价"))
+                }
+                Text(refPrice.map(PriceAlertFormat.usd) ?? "—")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
             }
             HStack(spacing: Pearl.Space.xs) {
                 changeCell(Loc("5 分钟"), quote?.change5m)
@@ -100,7 +134,6 @@ struct PriceAlertsView: View {
                 changeCell(Loc("24 小时"), quote?.change24h)
             }
         }
-        .pearlCard()
     }
 
     private func changeCell(_ label: String, _ pct: Double?) -> some View {
@@ -113,62 +146,6 @@ struct PriceAlertsView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, Pearl.Space.xs)
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: Pearl.Radius.xs, style: .continuous))
-    }
-
-    // MARK: rules
-
-    private var rulesCard: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                HStack(spacing: 4) {
-                    Text(Loc("我的提醒")).font(.headline)
-                    PearlInfoTip(Loc("价格提醒只需要本机的推送令牌和提醒条件，不涉及钱包地址或余额。"),
-                                 title: Loc("我的提醒"))
-                }
-                Spacer()
-                AlertSyncStatus(store: store, active: !store.rules.isEmpty)
-            }
-            .padding(.bottom, Pearl.Space.sm)
-
-            // Empty: the 添加提醒 button right below is the next step.
-            if !store.rules.isEmpty {
-                ForEach(Array(store.rules.enumerated()), id: \.element.id) { i, rule in
-                    if i > 0 { Divider().padding(.leading, 34 + Pearl.Space.sm) }
-                    ruleRow(rule)
-                }
-            }
-
-            AlertSyncFailure(store: store)
-
-            Button { editing = .new } label: {
-                Label(Loc("添加提醒"), systemImage: "plus")
-            }
-            .buttonStyle(.pearl)
-            .disabled(store.rules.count >= PriceAlertStore.maxRules)
-            .padding(.top, Pearl.Space.md)
-
-            if !store.rules.isEmpty && store.token != nil && store.pushHere {
-                HStack(spacing: Pearl.Space.xs) {
-                    Button {
-                        Task { await sendTest() }
-                    } label: {
-                        Label(Loc("发送测试通知"), systemImage: "paperplane")
-                    }
-                    .font(.footnote.weight(.medium))
-                    .disabled(testing)
-                    if testing { ProgressView().controlSize(.small) }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, Pearl.Space.sm)
-                if let testMsg {
-                    Text(testMsg).font(.caption).foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 4)
-                }
-            }
-        }
-        .pearlCard()
     }
 
     private func ruleRow(_ rule: PriceAlertRule) -> some View {
@@ -200,6 +177,40 @@ struct PriceAlertsView: View {
             Button { editing = .rule(rule) } label: { Label(Loc("编辑"), systemImage: "pencil") }
             Button(role: .destructive) { store.remove(rule) } label: { Label(Loc("删除"), systemImage: "trash") }
         }
+    }
+
+    // MARK: under both cards
+
+    /// The registration both cards ride on: synced or not, why not, and a test push.
+    @ViewBuilder private var footer: some View {
+        let canTest = anyActive && store.token != nil && store.pushHere
+        if anyActive {
+            VStack(spacing: 4) {
+                HStack(spacing: Pearl.Space.sm) {
+                    AlertSyncStatus(store: store, active: anyActive)
+                    Spacer(minLength: 0)
+                    if canTest {
+                        if testing { ProgressView().controlSize(.small) }
+                        Button {
+                            Task { await sendTest() }
+                        } label: {
+                            Label(Loc("发送测试通知"), systemImage: "paperplane")
+                        }
+                        .font(.footnote.weight(.medium))
+                        .disabled(testing)
+                    }
+                }
+                if let testMsg {
+                    Text(testMsg).font(.caption).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+            .padding(.horizontal, Pearl.Space.xs)
+        }
+        AlertSyncFailure(store: store)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Pearl.Space.xs)
     }
 
     private func sendTest() async {

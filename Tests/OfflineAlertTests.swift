@@ -189,6 +189,20 @@ struct IncomeAlertTests {
         #expect(IncomeAlertStore.normalize("") == nil)
     }
 
+    /// Moving a switched-off alert to another address keeps it off: nothing to send the server.
+    @MainActor @Test func anotherAddressForAnAlertThatIsOffStaysOff() {
+        let store = IncomeAlertStore.shared
+        let saved = UserDefaults.standard.data(forKey: IncomeAlertStore.key)
+        defer { UserDefaults.standard.set(saved, forKey: IncomeAlertStore.key) }
+        let other = "prl1p20n3ysh8uq97v5vhsvtqrp2txaw0jtl3cuc9y7aqkfkj3svnc5qs6gu3u3"
+        #expect(store.set(address: addr, label: "Main"))
+        #expect(store.wire?.addr == addr)
+        store.setOn(false)
+        #expect(store.set(address: other, label: "Pool", on: store.setting?.on ?? true))
+        #expect(store.setting == IncomeAlertSetting(addr: other, label: "Pool", on: false))
+        #expect(store.wire == nil)
+    }
+
     @Test func storedAsItIsSentAndDroppedWhenUnreadable() {
         let d = UserDefaults(suiteName: "IncomeAlertTests-\(UUID().uuidString)")!
         #expect(IncomeAlertStore.load(d) == nil)

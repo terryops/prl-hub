@@ -19,6 +19,17 @@ struct SafeTradeSigningTests {
         #expect(SafeTradeNonceGenerator.offset(server: local.addingTimeInterval(-5), local: local) == -4_500)
     }
 
+    /// A phone a minute fast: once a reply's Date shows it, the next nonce (the re-sign)
+    /// is on the server's time instead of last + 1, still a minute ahead.
+    @Test func aFastClockStartsNoncesAgainFromTheServerClock() async {
+        let server = Date(timeIntervalSince1970: 1_790_474_921) // Sun, 27 Sep 2026 02:08:41 GMT
+        let g = SafeTradeNonceGenerator(clock: { server.addingTimeInterval(60) })
+        #expect(await g.next() == "1790474981000")
+        await g.observe(serverDate: "Sun, 27 Sep 2026 02:08:41 GMT")
+        #expect(await g.next() == "1790474921501")
+        #expect(await g.next() == "1790474921502")
+    }
+
     @Test func noncesStayIncreasing() async {
         let g = SafeTradeNonceGenerator()
         var last = 0
@@ -56,6 +67,21 @@ struct SafeTradeErrorTests {
         #expect(problem(422, ["authz.not_trusted_ip"]) == nil)   // not an auth status
         #expect(SafeTradeAuthProblem.isNonceKey("authz.nonce_expired"))
         #expect(!SafeTradeAuthProblem.isNonceKey("authz.invalid_signature"))
+    }
+
+    /// An API key SafeTrade doesn't know: 404 record.not_found (live, 2026-10-28), read as a wrong key
+    /// on the balances call; the error balances() throws for it reads as .badKey and keeps the body.
+    @Test func unknownKeyIsAWrongKey() {
+        let body = #"{"errors":["record.not_found"]}"#
+        #expect(SafeTradeAuthProblem.isUnknownKey(status: 404, body: body))
+        #expect(!SafeTradeAuthProblem.isUnknownKey(status: 404, body: #"{"errors":["market.order.not_found"]}"#))
+        #expect(!SafeTradeAuthProblem.isUnknownKey(status: 401, body: body))
+        let e = SafeTradeError.unknownKey(body)
+        #expect(e.authProblem == .badKey)
+        #expect(e.errorDescription == SafeTradeAuthProblem.badKey.message)
+        #expect(e.errorDescription?.contains("HTTP") == false)
+        // Any other 404 stays what SafeTrade said.
+        #expect(SafeTradeError.http(404, body).authProblem == nil)
     }
 
     @Test func orderErrorsGetHumanText() {

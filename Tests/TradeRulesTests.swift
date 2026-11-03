@@ -35,6 +35,41 @@ struct SafeTradeMarketRulesTests {
         #expect(rules.problem(amountText: "", priceText: "") == nil)                  // empty = the form's concern
     }
 
+    /// Market orders carry a cap like SafeTrade's web client (last ± 15%): a ceiling for a
+    /// buy, a floor for a sell, rounded outward to the price precision.
+    @Test func marketOrderPriceCap() {
+        let d = { (s: String) in Decimal(string: s)! }
+        #expect(rules.marketPriceCap(side: "sell", last: d("1.53")) == d("1.3"))     // 1.3005 → down
+        #expect(rules.marketPriceCap(side: "buy", last: d("1.53")) == d("1.76"))     // 1.7595 → up
+        #expect(rules.marketPriceCap(side: "sell", last: d("0.01")) == d("0.01"))    // never below min_price
+        #expect(rules.marketPriceCap(side: "buy", last: 100000) == 100000)           // never above max_price
+        #expect(rules.marketPriceCap(side: "sell", last: 0) == nil)
+        #expect(SafeTradeMarketRules.plain(rules.marketPriceCap(side: "sell", last: d("1.53"))!) == "1.3")
+        #expect(SafeTradeError.message(forKey: "market.order.market_price_exceeded") != nil)
+        // The user's own slippage.
+        #expect(rules.marketPriceCap(side: "sell", last: d("1.53"), slippage: TradeSlippage.fraction(1)) == d("1.51"))  // 1.5147 → down
+        #expect(rules.marketPriceCap(side: "buy", last: d("1.53"), slippage: TradeSlippage.fraction(1)) == d("1.55"))   // 1.5453 → up
+        #expect(rules.marketPriceCap(side: "sell", last: d("1.53"), slippage: TradeSlippage.fraction(2.5)) == d("1.49")) // 1.49175
+    }
+
+    @Test func slippageSetting() {
+        #expect(TradeSlippage.parse("2.5") == 2.5)
+        #expect(TradeSlippage.parse("2,5%") == 2.5)       // ru/vi keypads type a comma
+        #expect(TradeSlippage.parse(" 3 ") == 3)
+        #expect(TradeSlippage.parse("0") == 0.1)          // kept inside 0.1 – 50
+        #expect(TradeSlippage.parse("80") == 50)
+        #expect(TradeSlippage.parse("1.26") == 1.3)       // one decimal
+        #expect(TradeSlippage.parse("abc") == nil)
+        #expect(TradeSlippage.parse("") == nil)
+        #expect(TradeSlippage.clamped(.nan) == TradeSlippage.defaultPercent)
+        #expect(TradeSlippage.fraction(15) == Decimal(string: "0.15")!)
+        #expect(TradeSlippage.fraction(0.5) == Decimal(string: "0.005")!)
+        #expect(TradeSlippage.label(15) == "15%")
+        #expect(TradeSlippage.label(0.5) == "0.5%")
+        #expect(TradeSlippage.number(2.5) == "2.5")
+        #expect(TradeSlippage.presets.contains(TradeSlippage.defaultPercent))
+    }
+
     @Test func decimalPlacesAndFloor() {
         #expect(SafeTradeMarketRules.decimalPlaces("1.2300") == 2)
         #expect(SafeTradeMarketRules.decimalPlaces("7") == 0)
@@ -64,6 +99,17 @@ struct SafeTradeBookTests {
         // More than the visible book: can't estimate.
         #expect(SafeTradeBook.averagePrice(for: 1_000_000, levels: d.bids) == nil)
         #expect(SafeTradeBook.averagePrice(for: 0, levels: d.asks) == nil)
+    }
+
+    /// The level a market order reaches — what the slippage cap is checked against.
+    @Test func worstPriceIsTheFarthestLevelReached() throws {
+        let d = try JSONDecoder().decode(STDepth.self, from: Data(depthJSON.utf8))
+        #expect(SafeTradeBook.worstPrice(for: 100, levels: d.asks) == 1.48)
+        #expect(SafeTradeBook.worstPrice(for: 5591.0758, levels: d.asks) == 1.48)   // exactly the first level
+        #expect(SafeTradeBook.worstPrice(for: 6000, levels: d.asks) == 1.49)
+        #expect(SafeTradeBook.worstPrice(for: 1000, levels: d.bids) == 1.46)
+        #expect(SafeTradeBook.worstPrice(for: 1_000_000, levels: d.bids) == nil)
+        #expect(SafeTradeBook.worstPrice(for: 0, levels: d.asks) == nil)
     }
 
     @Test func affordableAmountKeepsAMargin() throws {

@@ -43,12 +43,16 @@ struct RootView: View {
                 }
                 .tag(0)
 
-            // Trade tab gated off for the App Store build (guideline 3.1.5 crypto
-            // exchange risk). Flip AppFeatures.tradeEnabled to restore it.
+            // 交易 with the SafeTrade account compiled in; otherwise the same tab is the
+            // public 行情 only (App Review 3.1.5(iii)). See AppFeatures.
             if AppFeatures.tradeEnabled {
                 TradeView()
                     .tabItem {
-                        Label(Loc("交易"), image: "TabTrade")
+                        if AppFeatures.tradeAccount {
+                            Label(Loc("交易"), image: "TabTrade")
+                        } else {
+                            Label(Loc("行情"), image: "TabMarket")
+                        }
                     }
                     .tag(1)
             }

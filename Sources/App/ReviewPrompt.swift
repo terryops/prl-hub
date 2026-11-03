@@ -9,6 +9,8 @@ import AppKit
 /// Public places the app points people to.
 enum AppLinks {
     static let telegram = URL(string: "https://t.me/prl_hub")!
+    static let supportEmail = "support@pearlhub.net"
+    static let email = URL(string: "mailto:\(supportEmail)")!
     static let github = URL(string: "https://github.com/terryops/prl-hub")!
     static let githubWeb = URL(string: "https://github.com/terryops/prl-hub-web")!
     static let githubServer = URL(string: "https://github.com/terryops/prl-hub-server")!

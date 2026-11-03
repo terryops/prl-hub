@@ -185,6 +185,9 @@ struct AboutSettingsView: View {
                     Label { Text(verbatim: "Telegram @prl_hub") } icon: { Image(systemName: "paperplane.fill") }
                 }
                 .accessibilityHint(Loc("加入 Telegram 频道 @prl_hub，获取更新公告与帮助"))
+                Link(destination: AppLinks.email) {
+                    Label { Text(verbatim: AppLinks.supportEmail) } icon: { Image(systemName: "envelope.fill") }
+                }
                 Link(destination: AppLinks.github) {
                     Label(Loc("GitHub 开源代码"), systemImage: "chevron.left.forwardslash.chevron.right")
                 }
@@ -201,7 +204,6 @@ struct AboutSettingsView: View {
 private struct WalletSettingsSection: View {
     @EnvironmentObject private var wallet: WalletStore
     @ObservedObject private var nock = NockWalletStore.shared
-    @AppStorage(NockInlineLink.hiddenKey) private var nockLinkHidden = false
     @State private var confirmingReset = false
     @State private var resetError: String?
 
@@ -229,11 +231,20 @@ private struct WalletSettingsSection: View {
                         RecoverChangeView(store: wallet)
                     } label: { Label(Loc("找回搁浅的找零"), systemImage: "arrow.uturn.down.circle") }
                 }
-                // Brings back the wallet page's NOCK line once closed there. A wallet that
-                // uses NOCK shows its strip regardless, so the switch only appears for one that doesn't.
-                if !nock.inUse && !wallet.isWatchOnly {
-                    Toggle(isOn: Binding(get: { !nockLinkHidden }, set: { nockLinkHidden = !$0 })) {
-                        Label(Loc("在钱包页显示 NOCK 钱包"), systemImage: "hexagon")
+                // NOCK is opt-in: on, the wallet page gets its NOCK entry. A read-only wallet
+                // has no seed to derive NOCK from. (The ⓘ sits outside the Toggle's label: on a
+                // Mac, clicking a Toggle's label flips it.)
+                if !wallet.isWatchOnly {
+                    HStack(spacing: 4) {
+                        Label(Loc("NOCK 钱包"), systemImage: "hexagon")
+                        PearlInfoTip(Loc("用同一套助记词收发 NOCK（Nockchain）。打开后钱包页底部会出现 NOCK 钱包。"),
+                                     title: Loc("NOCK 钱包"))
+                        Spacer(minLength: Pearl.Space.sm)
+                        Toggle(Loc("NOCK 钱包"), isOn: Binding(get: { nock.enabled }, set: { on in
+                            withAnimation(.snappy) { nock.setEnabled(on) }
+                        }))
+                        .labelsHidden()
+                        .accessibilityIdentifier("settings-nock")
                     }
                 }
                 Button { wallet.lock() } label: {

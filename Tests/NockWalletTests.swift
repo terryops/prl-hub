@@ -173,6 +173,42 @@ struct NockStoreTests {
         #expect(back.addressShown)
     }
 
+    /// NOCK is off unless switched on — except, on the first run of the opt-in build, where a
+    /// wallet already uses it (so nobody loses sight of NOCK they hold).
+    @Test func nockIsOptInButStaysOnWhereItsUsed() throws {
+        func fresh() -> UserDefaults {
+            let name = "nock-optin-\(UUID().uuidString)"
+            let d = UserDefaults(suiteName: name)!
+            d.removePersistentDomain(forName: name)
+            return d
+        }
+        // New install: off, and that's remembered.
+        let a = fresh()
+        #expect(!NockWalletStore.initialEnabled(a))
+        #expect(a.object(forKey: NockWalletStore.enabledKey) as? Bool == false)
+
+        // Updating with a wallet that never touched NOCK (its state only cached an address): off.
+        let b = fresh()
+        var idle = NockWalletStore.State()
+        idle.address = "a"
+        b.set(try JSONEncoder().encode(idle), forKey: "nock.state.w1")
+        b.set(true, forKey: "nock.linkHidden")
+        #expect(!NockWalletStore.initialEnabled(b))
+        #expect(b.object(forKey: "nock.linkHidden") == nil)
+
+        // Updating with a wallet that has NOCK history: on.
+        let c = fresh()
+        var used = NockWalletStore.State()
+        used.addressShown = true
+        c.set(try JSONEncoder().encode(idle), forKey: "nock.state.w1")
+        c.set(try JSONEncoder().encode(used), forKey: "nock.state.w2")
+        #expect(NockWalletStore.initialEnabled(c))
+
+        // Once set, the choice wins over what the wallets hold.
+        c.set(false, forKey: NockWalletStore.enabledKey)
+        #expect(!NockWalletStore.initialEnabled(c))
+    }
+
     @Test func removingAWalletDropsItsNockState() {
         let key = "nock.state.test-removed"
         UserDefaults.standard.set(Data("{}".utf8), forKey: key)

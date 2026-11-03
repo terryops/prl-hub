@@ -36,12 +36,21 @@ final class ScreenCaptureMonitor: ObservableObject {
 
     init() {
         #if os(iOS)
-        isCaptured = UIScreen.main.isCaptured
+        SceneCaptureTraits.watch()
+        isCaptured = Self.anySceneCaptured()
         let nc = NotificationCenter.default
-        tokens.append(nc.addObserver(forName: UIScreen.capturedDidChangeNotification,
-                                     object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.isCaptured = UIScreen.main.isCaptured }
-        })
+        // Any screen's capture state changing (the old screen notification, and the scenes'
+        // own capture trait, which may be all a newer system updates), or a scene moving /
+        // coming back (folding an iPhone Duo hands the scene to the other display): check again.
+        for name in [UIScreen.capturedDidChangeNotification, SceneCaptureTraits.didChange,
+                     UIScene.didActivateNotification, UIScene.willConnectNotification] {
+            tokens.append(nc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    SceneCaptureTraits.watch()   // a scene that just connected
+                    self?.isCaptured = Self.anySceneCaptured()
+                }
+            })
+        }
         tokens.append(nc.addObserver(forName: UIApplication.userDidTakeScreenshotNotification,
                                      object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.onScreenshot() }
@@ -53,7 +62,41 @@ final class ScreenCaptureMonitor: ObservableObject {
         let nc = NotificationCenter.default
         tokens.forEach { nc.removeObserver($0) }
     }
+
+    #if os(iOS)
+    /// Whether any screen showing one of the app's scenes is being recorded or mirrored.
+    /// iPhone Duo has two displays, so `UIScreen.main` can name the wrong one; ask each
+    /// scene's own screen instead, and hide the seed if any of them is captured.
+    static func anySceneCaptured() -> Bool {
+        UIApplication.shared.connectedScenes.contains { scene in
+            guard let scene = scene as? UIWindowScene else { return false }
+            return scene.screen.isCaptured || scene.traitCollection.sceneCaptureState == .active
+        }
+    }
+    #endif
 }
+
+#if os(iOS)
+/// Posts `didChange` when any of the app's window scenes changes its `sceneCaptureState`
+/// trait — recording or mirroring started or stopped while the scene stayed active, which
+/// nothing else reports once a system stops posting the deprecated
+/// `UIScreen.capturedDidChangeNotification`. Each scene is registered once and the
+/// registration lives as long as the scene.
+@MainActor
+enum SceneCaptureTraits {
+    static let didChange = Notification.Name("sceneCaptureStateDidChange")
+    private static let watched = NSHashTable<UIWindowScene>.weakObjects()
+
+    static func watch() {
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes where !watched.contains(scene) {
+            watched.add(scene)
+            scene.registerForTraitChanges([UITraitSceneCaptureState.self]) { (_: UIWindowScene, _: UITraitCollection) in
+                NotificationCenter.default.post(name: didChange, object: nil)
+            }
+        }
+    }
+}
+#endif
 
 extension View {
     /// Protect sensitive content (the seed) from screen capture while `active`.

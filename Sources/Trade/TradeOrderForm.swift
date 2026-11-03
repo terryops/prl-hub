@@ -11,6 +11,9 @@ struct OrderFormView: View {
     @State private var price = ""
     @State private var volume = ""
     @State private var confirming = false
+    @AppStorage(TradeSlippage.storageKey) private var slippage = TradeSlippage.defaultPercent
+    @State private var editingSlippage = false
+    @State private var slippageText = ""
     @FocusState private var focusedField: Field?
     private enum Field { case price, volume }
 
@@ -34,6 +37,21 @@ struct OrderFormView: View {
         return SafeTradeBook.averagePrice(for: volNum, levels: side == "buy" ? d.asks : d.bids)
     }
     private var marketEstimate: Double { (marketAvg ?? 0) * volNum }
+
+    /// The market order's price cap: the last price ± the chosen slippage (a floor for a sell).
+    private var marketCap: Decimal? {
+        store.marketPriceCap(side: side, slippagePercent: TradeSlippage.clamped(slippage))
+    }
+    /// Shown with the market's price decimals ("1.50", like every other price here).
+    private var marketCapText: String? {
+        marketCap.map { String(format: "%.\(rules.pricePrecision)f", NSDecimalNumber(decimal: $0).doubleValue) }
+    }
+    /// The book would fill this amount past the cap, so the exchange would refuse the order.
+    private var capExceeded: Bool {
+        guard let d = store.depth, let cap = marketCap.map({ NSDecimalNumber(decimal: $0).doubleValue }),
+              let worst = SafeTradeBook.worstPrice(for: volNum, levels: side == "buy" ? d.asks : d.bids) else { return false }
+        return side == "buy" ? worst > cap + 1e-9 : worst < cap - 1e-9
+    }
 
     /// MAX fillable PRL: sell → all PRL held; limit buy → USDT ÷ price (the best ask
     /// until a price is typed); market buy → what the USDT buys walking the asks,
@@ -69,12 +87,14 @@ struct OrderFormView: View {
     private var canOrder: Bool {
         store.hasCredentials && !store.placing && store.unverifiedOrder == nil && parsed && volNum > 0
             && (ordType == "market" || priceNum > 0) && ruleProblem == nil && !insufficient
-            && (ordType == "limit" || marketAvg != nil)
+            && (ordType == "limit" || (marketAvg != nil && !capExceeded))
     }
     private var confirmMessage: String {
         let head = (side == "buy" ? Loc("买入") : Loc("卖出")) + Loc(" %@ PEARL", volume)
         if ordType == "limit" { return head + Loc(" @ %@ USDT（约 %@ USDT）", price, amt(total)) }
-        return head + Loc("（市价，约 %@ USDT）", amt(marketEstimate))
+        guard let cap = marketCapText else { return head + Loc("（市价，约 %@ USDT）", amt(marketEstimate)) }
+        return head + (side == "buy" ? Loc("（市价，约 %@ USDT，最高 %@ USDT）", amt(marketEstimate), cap)
+                                     : Loc("（市价，约 %@ USDT，最低 %@ USDT）", amt(marketEstimate), cap))
     }
     private func amt(_ x: Double) -> String { String(format: "%.4f", x) }
 
@@ -142,6 +162,8 @@ struct OrderFormView: View {
                 }.font(.subheadline)
             }
 
+            if ordType == "market" { slippageRows }
+
             if volNum > 0 { formNote }
 
             Button { focusedField = nil; confirming = true } label: {
@@ -172,7 +194,8 @@ struct OrderFormView: View {
             Button(side == "buy" ? Loc("确认买入") : Loc("确认卖出"), role: side == "buy" ? .none : .destructive) {
                 let limitPrice = ordType == "limit" ? price : ""   // captured: the fields are cleared on success
                 Task {
-                    let ok = await store.placeOrder(side: side, ordType: ordType, volume: volume, price: ordType == "limit" ? price : nil)
+                    let ok = await store.placeOrder(side: side, ordType: ordType, volume: volume, price: ordType == "limit" ? price : nil,
+                                                    slippagePercent: TradeSlippage.clamped(slippage))
                     if ok {
                         price = ""; volume = ""
                         // Market orders fill immediately — nothing to be notified about.
@@ -183,6 +206,59 @@ struct OrderFormView: View {
             Button(Loc("取消"), role: .cancel) {}
         } message: {
             Text(confirmMessage)
+        }
+    }
+
+    /// 最大滑点 (a menu of presets + 自定义) and the price it caps the fill at.
+    @ViewBuilder private var slippageRows: some View {
+        HStack {
+            Text(Loc("最大滑点")).foregroundStyle(.secondary)
+            Spacer()
+            Menu {
+                Picker(Loc("最大滑点"), selection: $slippage) {
+                    ForEach(TradeSlippage.presets, id: \.self) { Text(TradeSlippage.label($0)).tag($0) }
+                    if !TradeSlippage.presets.contains(slippage) {
+                        Text(TradeSlippage.label(slippage)).tag(slippage)
+                    }
+                }
+                .pickerStyle(.inline)
+                Button(Loc("自定义…")) {
+                    slippageText = TradeSlippage.number(slippage)
+                    editingSlippage = true
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    Text(TradeSlippage.label(slippage)).monospacedDigit()
+                    Image(systemName: "chevron.up.chevron.down").font(.caption2.weight(.semibold))
+                }
+                .foregroundStyle(Pearl.accent)
+                .contentShape(Rectangle())
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel(Loc("最大滑点"))
+            .accessibilityValue(TradeSlippage.label(slippage))
+        }
+        .font(.subheadline)
+        .alert(Loc("最大滑点") + " (%)", isPresented: $editingSlippage) {
+            TextField(TradeSlippage.number(TradeSlippage.range.lowerBound) + " – " + TradeSlippage.number(TradeSlippage.range.upperBound),
+                      text: $slippageText)
+                #if os(iOS)
+                .keyboardType(.decimalPad)
+                #endif
+            Button(Loc("保存")) { if let p = TradeSlippage.parse(slippageText) { slippage = p } }
+            Button(Loc("取消"), role: .cancel) {}
+        }
+
+        if let cap = marketCapText {
+            HStack {
+                Text(side == "buy" ? Loc("最高成交价") : Loc("最低成交价")).foregroundStyle(.secondary)
+                Spacer()
+                Text(cap + " USDT").monospacedDigit()
+            }
+            .font(.subheadline)
         }
     }
 
@@ -197,6 +273,8 @@ struct OrderFormView: View {
                 Text(Loc("等待盘口数据后才能下市价单")).foregroundStyle(.orange)
             } else if ordType == "market" && marketAvg == nil {
                 Text(Loc("盘口深度不够，市价单成交不了这么多，请减少数量或改用限价单")).foregroundStyle(.orange)
+            } else if ordType == "market" && capExceeded {
+                Text(Loc("成交价会超出最大滑点，请调大滑点或减少数量")).foregroundStyle(.orange)
             }
         }
         .font(.caption)

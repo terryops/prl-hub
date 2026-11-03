@@ -428,6 +428,13 @@
 "验证并显示" = "Bestätigen und anzeigen";
 "高" = "Hoch";
 "（市价，约 %@ USDT）" = "(Marktpreis, ~%@ USDT)";
+"最大滑点" = "Max. Slippage";
+"自定义…" = "Eigener Wert…";
+"最高成交价" = "Höchster Ausführungspreis";
+"最低成交价" = "Niedrigster Ausführungspreis";
+"成交价会超出最大滑点，请调大滑点或减少数量" = "Die Ausführung würde die max. Slippage überschreiten – erhöhe sie oder verringere die Menge";
+"（市价，约 %@ USDT，最高 %@ USDT）" = "(Marktpreis, ~%@ USDT, höchstens %@ USDT)";
+"（市价，约 %@ USDT，最低 %@ USDT）" = "(Marktpreis, ~%@ USDT, mindestens %@ USDT)";
 "，累计 %@ PRL" = ", %@ PRL gesamt";
 "，近 7 天 %@ PRL" = ", %@ PRL in den letzten 7 Tagen";
 
@@ -1298,10 +1305,6 @@
 "App Store 版本查询" = "App-Store-Versionsabfrage";
 "向 Apple 的 itunes.apple.com 查询 App Store 上的最新版本号，用来提示更新。请求不带地址，也不带任何身份信息。" = "Fragt bei Apples itunes.apple.com die neueste Version im App Store ab, um dich auf Updates hinzuweisen. Die Anfrage enthält keine Adresse und keine identifizierenden Daten.";
 
-/* 钱包页底部的 NOCK 钱包入口：关闭 / 在设置里重新打开 */
-"关闭 NOCK 钱包入口？" = "Link zur NOCK-Wallet schließen?";
-"钱包页不再显示 NOCK 钱包，之后可以在「设置 → 钱包与安全」重新打开。" = "Die NOCK-Wallet wird auf der Wallet-Seite nicht mehr angezeigt. Unter „Einstellungen → Wallet & Sicherheit“ kannst du sie wieder einblenden.";
-"在钱包页显示 NOCK 钱包" = "NOCK-Wallet auf der Wallet-Seite zeigen";
 
 /* 网页版：我的监控顶部提示卡 + 设置 → 网页版 */
 "电脑上也能看" = "Auch am Computer";
@@ -1347,7 +1350,12 @@
 "这个地址收到 PRL，1 个区块确认后就推送通知，不用打开 App。从这个地址转出的交易和找零不算。" = "Erhält diese Adresse PRL, wirst du nach 1 Blockbestätigung benachrichtigt, ohne die App zu öffnen. Sendungen von dieser Adresse und ihr Wechselgeld zählen nicht.";
 "推送时段之外到账的，到时段开始时再通知你。" = "Ein Eingang außerhalb deiner Mitteilungszeiten wird gemeldet, sobald sie beginnen.";
 "开启后服务器会保存这个地址，只用来查到账；不涉及助记词或私钥。" = "Nach dem Einschalten speichert der Server diese Adresse nur, um Eingänge zu prüfen. Wiederherstellungsphrase und private Schlüssel sind nie beteiligt.";
-"更换地址" = "Adresse ändern";
-"我的地址" = "Meine Adressen";
 "开启到账提醒" = "Zahlungseingangs-Alarme einschalten";
-"已开启" = "Ein";
+
+/* 价格和到账提醒（合并页）+ NOCK 钱包开关 */
+"价格和到账提醒" = "Preis- und Zahlungsalarme";
+"PRL 到价或大涨大跌时推送通知" = "Benachrichtigung, wenn PRL deinen Preis erreicht oder sich stark bewegt";
+"收到 PRL 就推送通知" = "Benachrichtigung, sobald PRL eingeht";
+"其他地址…" = "Andere Adresse…";
+"用同一套助记词收发 NOCK（Nockchain）。打开后钱包页底部会出现 NOCK 钱包。" = "Sende und empfange NOCK (Nockchain) mit derselben Wiederherstellungsphrase. Eingeschaltet erscheint die NOCK-Wallet unten auf der Wallet-Seite.";
+"到账提醒：地址收到 PRL 就通知你" = "Zahlungseingangs-Alarme: erfahre sofort, wenn PRL auf deiner Adresse eingeht";

@@ -428,6 +428,13 @@
 "验证并显示" = "Verifikasi dan Tampilkan";
 "高" = "Tinggi";
 "（市价，约 %@ USDT）" = "(Harga pasar, ~%@ USDT)";
+"最大滑点" = "Slippage maks.";
+"自定义…" = "Kustom…";
+"最高成交价" = "Harga eksekusi tertinggi";
+"最低成交价" = "Harga eksekusi terendah";
+"成交价会超出最大滑点，请调大滑点或减少数量" = "Eksekusi akan melewati slippage maks. — naikkan atau kurangi jumlah";
+"（市价，约 %@ USDT，最高 %@ USDT）" = "(Harga pasar, ~%@ USDT, maksimal %@ USDT)";
+"（市价，约 %@ USDT，最低 %@ USDT）" = "(Harga pasar, ~%@ USDT, minimal %@ USDT)";
 "，累计 %@ PRL" = ", total %@ PRL";
 "，近 7 天 %@ PRL" = ", %@ PRL dalam 7 hari terakhir";
 
@@ -1298,10 +1305,6 @@
 "App Store 版本查询" = "Pengecekan versi App Store";
 "向 Apple 的 itunes.apple.com 查询 App Store 上的最新版本号，用来提示更新。请求不带地址，也不带任何身份信息。" = "Menanyakan versi terbaru di App Store ke itunes.apple.com milik Apple, untuk memberi tahu Anda saat ada pembaruan. Permintaan ini tidak membawa alamat maupun informasi identitas.";
 
-/* 钱包页底部的 NOCK 钱包入口：关闭 / 在设置里重新打开 */
-"关闭 NOCK 钱包入口？" = "Tutup tautan Dompet NOCK?";
-"钱包页不再显示 NOCK 钱包，之后可以在「设置 → 钱包与安全」重新打开。" = "Dompet NOCK tidak akan ditampilkan lagi di halaman dompet. Anda bisa mengaktifkannya kembali di Pengaturan → Dompet & Keamanan.";
-"在钱包页显示 NOCK 钱包" = "Tampilkan Dompet NOCK di halaman dompet";
 
 /* 网页版：我的监控顶部提示卡 + 设置 → 网页版 */
 "电脑上也能看" = "Juga di komputer";
@@ -1347,7 +1350,12 @@
 "这个地址收到 PRL，1 个区块确认后就推送通知，不用打开 App。从这个地址转出的交易和找零不算。" = "Saat alamat ini menerima PRL, Anda mendapat notifikasi setelah 1 konfirmasi blok tanpa membuka aplikasi. Pengiriman dari alamat ini dan kembaliannya tidak dihitung.";
 "推送时段之外到账的，到时段开始时再通知你。" = "Dana yang masuk di luar jam notifikasi akan diberitahukan saat jam itu dimulai.";
 "开启后服务器会保存这个地址，只用来查到账；不涉及助记词或私钥。" = "Setelah aktif, server menyimpan alamat ini hanya untuk memeriksa dana masuk. Frasa pemulihan dan kunci privat tidak terlibat.";
-"更换地址" = "Ganti Alamat";
-"我的地址" = "Alamat Saya";
 "开启到账提醒" = "Aktifkan Peringatan Dana Masuk";
-"已开启" = "Aktif";
+
+/* 价格和到账提醒（合并页）+ NOCK 钱包开关 */
+"价格和到账提醒" = "Peringatan Harga & Dana Masuk";
+"PRL 到价或大涨大跌时推送通知" = "Dapatkan notifikasi saat PRL menyentuh harga Anda atau bergerak tajam";
+"收到 PRL 就推送通知" = "Dapatkan notifikasi begitu PRL masuk";
+"其他地址…" = "Alamat lain…";
+"用同一套助记词收发 NOCK（Nockchain）。打开后钱包页底部会出现 NOCK 钱包。" = "Kirim dan terima NOCK (Nockchain) dengan frasa pemulihan yang sama. Setelah diaktifkan, Dompet NOCK muncul di bagian bawah halaman dompet.";
+"到账提醒：地址收到 PRL 就通知你" = "Peringatan dana masuk: langsung tahu saat PRL masuk ke alamat Anda";

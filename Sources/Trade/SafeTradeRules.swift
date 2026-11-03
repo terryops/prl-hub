@@ -41,6 +41,13 @@ enum SafeTradeAuthProblem: Equatable {
 
     private static let listTokens: Set<String> = ["whitelist", "whitelisted", "allowlist", "allowlisted"]
 
+    /// SafeTrade answers a signed request made with an API key it doesn't know by 404
+    /// `record.not_found` (checked live 2026-10-28), not 401. Only read so on the balances call,
+    /// where nothing else can be "not found"; other calls' 404s mean what they say.
+    static func isUnknownKey(status: Int, body: String) -> Bool {
+        status == 404 && SafeTradeError.errorKeys(body).contains("record.not_found")
+    }
+
     /// Is this one of the stale-nonce keys? (A request refused for its nonce never
     /// reached the handler, so re-signing it is safe even for a POST.)
     static func isNonceKey(_ key: String) -> Bool { tokens(key).contains("nonce") }
@@ -137,6 +144,18 @@ struct SafeTradeMarketRules: Decodable, Equatable {
         return nil
     }
 
+    /// `max_price` for a market order: the last price ± `slippage` (0.15 = 15%, see
+    /// `TradeSlippage`), rounded outward to the price precision and kept inside the market's
+    /// price range. nil without a last price.
+    func marketPriceCap(side: String, last: Decimal, slippage: Decimal = TradeSlippage.fraction(TradeSlippage.defaultPercent)) -> Decimal? {
+        guard last > 0, slippage > 0 else { return nil }
+        let buy = side == "buy"
+        var raw = last * (buy ? 1 + slippage : 1 - slippage)
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &raw, pricePrecision, buy ? .up : .down)
+        return min(max(rounded, minPrice), maxPrice)
+    }
+
     /// Significant decimals typed ("1.50" → 1: a trailing zero changes nothing).
     static func decimalPlaces(_ text: String) -> Int {
         let t = text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
@@ -153,6 +172,42 @@ struct SafeTradeMarketRules: Decodable, Equatable {
 
     /// Plain decimal text for the API and for display (no grouping, "." separator).
     static func plain(_ d: Decimal) -> String { NSDecimalNumber(decimal: d).stringValue }
+}
+
+/// How far a market order may fill from the last price, in percent, set on the order form.
+/// SafeTrade's web client sends every market order with `max_price` = last ± this (a ceiling
+/// for a buy, a floor for a sell; 15% unless changed) and the exchange refuses one that would
+/// fill past it (`market.order.market_price_exceeded`). A market order sent without one came
+/// back `price_less_than_min_price` (2026-10-31), so there is no "off".
+enum TradeSlippage {
+    static let storageKey = "safetrade.slippagePercent"
+    static let defaultPercent = 15.0
+    static let presets: [Double] = [1, 3, 5, 10, 15]
+    static let range: ClosedRange<Double> = 0.1...50
+
+    /// A stored value made safe: one decimal, inside `range`.
+    static func clamped(_ percent: Double) -> Double {
+        guard percent.isFinite else { return defaultPercent }
+        return min(max((percent * 10).rounded() / 10, range.lowerBound), range.upperBound)
+    }
+
+    /// What the user typed ("2.5", "2,5", "2.5%") → a percent to store; nil when it isn't a number.
+    static func parse(_ text: String) -> Double? {
+        let t = text.replacingOccurrences(of: "%", with: "").trimmingCharacters(in: .whitespaces)
+        guard let d = PRLAmount.parse(t) else { return nil }
+        return clamped(NSDecimalNumber(decimal: d).doubleValue)
+    }
+
+    /// 15 → 0.15, exactly.
+    static func fraction(_ percent: Double) -> Decimal {
+        (Decimal(string: String(format: "%.1f", clamped(percent))) ?? Decimal(defaultPercent)) / 100
+    }
+
+    /// "15", "0.5" — the number without a trailing ".0".
+    static func number(_ percent: Double) -> String {
+        SafeTradeMarketRules.plain(fraction(percent) * 100)
+    }
+    static func label(_ percent: Double) -> String { number(percent) + "%" }
 }
 
 /// One side of the order book, best price first.
@@ -199,6 +254,18 @@ enum SafeTradeBook {
             cost += take * l.price
             left -= take
             if left <= 1e-12 { return cost / amount }
+        }
+        return nil
+    }
+
+    /// The farthest level `amount` reaches walking `levels` best-first — the worst price a
+    /// market order fills at; nil when the visible book can't fill it (or amount ≤ 0).
+    static func worstPrice(for amount: Double, levels: [STBookLevel]) -> Double? {
+        guard amount > 0 else { return nil }
+        var left = amount
+        for l in levels {
+            left -= l.amount
+            if left <= 1e-12 { return l.price }
         }
         return nil
     }

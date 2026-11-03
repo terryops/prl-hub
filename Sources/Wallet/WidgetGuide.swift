@@ -3,7 +3,7 @@ import WidgetKit
 
 // MARK: - 桌面小组件 hint (钱包 tab)
 
-/// A one-line hint under 价格提醒 on the 钱包 tab: how to put Pearl Hub on the Home
+/// A one-line hint under 价格和到账提醒 on the 钱包 tab: how to put Pearl Hub on the Home
 /// Screen / desktop. Hidden once a Pearl Hub home widget is already placed. The small
 /// size is free, medium and large are Pro; the paywall only opens from the guide's
 /// explicit unlock button.

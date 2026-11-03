@@ -2,8 +2,9 @@ import SwiftUI
 
 // MARK: - 交易 tab promo
 
-/// Card under the Trade chart that opens 价格提醒: its name, the 高级版 badge before Pro,
-/// and how many alerts are live once there are some — no pitch line.
+/// Card under the Trade chart that opens 价格和到账提醒 (named for the price side, which is
+/// what this tab is about): the 高级版 badge before Pro, and how many price alerts are live
+/// once there are some — no pitch line.
 struct PriceAlertPromoCard: View {
     @ObservedObject private var store = PriceAlertStore.shared
     @ObservedObject private var pro = ProStore.shared
@@ -15,7 +16,7 @@ struct PriceAlertPromoCard: View {
 
     var body: some View {
         NavigationLink {
-            PriceAlertsView()
+            AlertsView()
         } label: {
             HStack(spacing: Pearl.Space.md) {
                 PearlIconBadge(systemImage: "bell.badge.fill", size: 40)
@@ -39,25 +40,30 @@ struct PriceAlertPromoCard: View {
     }
 }
 
-/// The same entry as PriceAlertPromoCard, as one quiet line of small text with no
-/// card, for the wallet screen, where a card would compete with the balance. Like the
-/// other lines there (桌面小组件, NOCK): icon + name + chevron, plus the live count.
-struct PriceAlertInlineLink: View {
+/// 价格和到账提醒 as one row of the wallet page's bottom card (no card of its own, which
+/// would compete with the balance). Like the other rows there: icon + name + chevron, plus
+/// how many alerts are live.
+struct AlertsInlineLink: View {
     @ObservedObject private var store = PriceAlertStore.shared
+    /// Watched for `incomeRegistered`, which reads it.
+    @ObservedObject private var income = IncomeAlertStore.shared
     @ObservedObject private var pro = ProStore.shared
 
+    /// 到账提醒 counts only once this device really sends it to the server (Pro proven, pushes
+    /// on here) — an address the worker never got must not read as a live alert.
     private var status: String? {
-        let on = store.rules.filter(\.isOn).count
+        let on = store.rules.filter(\.isOn).count + (store.incomeRegistered ? 1 : 0)
         return pro.isPro && on > 0 ? Loc("%d 条提醒生效中", on) : nil
     }
 
     var body: some View {
         NavigationLink {
-            PriceAlertsView()
+            AlertsView()
         } label: {
-            WalletShortcutRow(systemImage: "bell.badge", title: Loc("价格提醒"), status: status)
+            WalletShortcutRow(systemImage: "bell.badge", title: Loc("价格和到账提醒"), status: status)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("wallet-alerts")
     }
 }

@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 #endif
 
-// MARK: - Pieces the 价格提醒 and 掉线提醒 pages share
+// MARK: - Pieces the 价格和到账提醒 and 掉线提醒 pages share
 //
 // Both pages sit on the same device registration (PriceAlertStore): whether
 // notifications are allowed, and how the last sync with the worker went.
@@ -82,5 +82,39 @@ struct AlertSyncFailure: View {
                 .font(.caption).foregroundStyle(.orange)
                 .padding(.top, Pearl.Space.xs)
         }
+    }
+}
+
+/// A card's title block on 价格和到账提醒: badge, the alert's name (with its ⓘ), one line on
+/// what it pushes, and the card's own control on the right.
+struct AlertCardHeader<Trailing: View>: View {
+    let systemImage: String
+    let title: String
+    let subtitle: String
+    var info: String? = nil
+    @ViewBuilder var trailing: () -> Trailing
+
+    static var badgeSize: CGFloat { 36 }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: Pearl.Space.sm) {
+            PearlIconBadge(systemImage: systemImage, size: Self.badgeSize)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(title).font(.headline)
+                    if let info { PearlInfoTip(info, title: title) }
+                }
+                Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: Pearl.Space.xs)
+            trailing()
+        }
+    }
+}
+
+extension AlertCardHeader where Trailing == EmptyView {
+    init(systemImage: String, title: String, subtitle: String, info: String? = nil) {
+        self.init(systemImage: systemImage, title: title, subtitle: subtitle, info: info) { EmptyView() }
     }
 }

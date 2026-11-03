@@ -15,7 +15,7 @@ struct SecurityInfoView: View {
             Section(Loc("我们拿不到的数据")) {
                 PearlInfoRow(Loc("加密存于本机钥匙串，只属于这台设备：不同步到 iCloud，也不进备份。查看助记词和转账都要 Face ID / Touch ID 验证。"),
                              title: Loc("助记词与私钥"), systemImage: "key.fill")
-                if AppFeatures.tradeEnabled {
+                if AppFeatures.tradeAccount {
                     PearlInfoRow(Loc("只存在你的钥匙串里（开着 iCloud 钥匙串时由 Apple 端到端加密同步）；交易请求由 App 签名后直接发往 safetrade.com。"),
                                  title: Loc("SafeTrade API 密钥"), systemImage: "key.horizontal.fill")
                 }

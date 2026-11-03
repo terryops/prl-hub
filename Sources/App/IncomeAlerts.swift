@@ -70,15 +70,16 @@ final class IncomeAlertStore: ObservableObject {
         return PRLAddress.isValid(a, network: .mainnet) ? a : nil
     }
 
-    /// Watch `address` (replacing whatever was watched) and switch the alert on. false if it
-    /// is not a mainnet address.
+    /// Watch `address` (replacing whatever was watched), switched on unless `on` says otherwise
+    /// — another address picked for an alert that is off stays off, so nothing goes to the
+    /// server. false if it is not a mainnet address.
     @discardableResult
-    func set(address raw: String, label: String = "") -> Bool {
+    func set(address raw: String, label: String = "", on: Bool = true) -> Bool {
         guard let addr = Self.normalize(raw) else { return false }
         var name = label.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
         // The worker keeps 40 UTF-16 units (as the web counts): drop whole characters until it fits.
         while name.utf16.count > 40 { name.removeLast() }
-        update(IncomeAlertSetting(addr: addr, label: name, on: true), prompt: true)
+        update(IncomeAlertSetting(addr: addr, label: name, on: on), prompt: on)
         return true
     }
 
