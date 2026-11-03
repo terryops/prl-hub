@@ -633,7 +633,7 @@
 "自定义金额（最少 %@ PRL）" = "Özel miktar (en az %@ PRL)";
 "自定义金额最少 %@ PRL" = "Özel miktar en az %@ PRL olmalıdır";
 "开源项目 · GPL-3.0" = "Açık kaynak · GPL-3.0";
-"Pearl Hub 是免费的开源项目，全部代码公开在 GitHub，没有广告和追踪。你的捐赠会直接支持它持续更新。" = "Pearl Hub ücretsiz ve açık kaynaklı bir projedir; tüm kodu GitHub'da herkese açıktır, reklam ve izleme içermez. Bağışınız, güncel kalmasını doğrudan destekler.";
+"Pearl Hub 是开源项目，全部代码公开在 GitHub，没有广告和追踪。基础功能一直免费，捐赠和高级版的收入用来支付服务器和节点费用、维持更新。" = "Pearl Hub açık kaynaklı bir projedir; tüm kodu GitHub'da herkese açıktır, reklam ve izleme içermez. Temel özellikler ücretsiz kalır; bağışlar ve Pro satın alımları sunucu ve düğüm masraflarını karşılar ve uygulamanın güncel kalmasını sağlar.";
 "在 GitHub 查看源码" = "Kaynak kodunu GitHub'da görüntüle";
 "自定义金额" = "Özel Miktar";
 "无法读取钥匙串中的助记词，请重试解锁" = "Kurtarma ifadesi Anahtar Zinciri'nden okunamadı. Kilidi yeniden açmayı deneyin.";

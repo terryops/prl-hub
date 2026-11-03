@@ -11,7 +11,8 @@ enum Donation {
 }
 
 /// One-time automatic donation ask: after the app has been opened 10 times over at least
-/// 5 days (the same launch counters as `ReviewPrompt`). Shown once, ever.
+/// 5 days (the same launch counters as `ReviewPrompt`). Shown once, ever, and never to
+/// Pro owners (checked in `DashboardView.donationPromptReady`).
 enum DonationPrompt {
     static let minLaunches = 10
     static let minDaysInstalled: Double = 5
@@ -89,7 +90,7 @@ struct DonateView: View {
                     .font(.headline).multilineTextAlignment(.center)
                 PearlBadge(text: Loc("开源项目 · GPL-3.0"),
                            systemImage: "chevron.left.forwardslash.chevron.right", tint: Pearl.accent)
-                Text(Loc("Pearl Hub 是免费的开源项目，全部代码公开在 GitHub，没有广告和追踪。你的捐赠会直接支持它持续更新。"))
+                Text(Loc("Pearl Hub 是开源项目，全部代码公开在 GitHub，没有广告和追踪。基础功能一直免费，捐赠和高级版的收入用来支付服务器和节点费用、维持更新。"))
                     .pearlExplanation()
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)

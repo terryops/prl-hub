@@ -57,8 +57,11 @@ final class ProStore: ObservableObject {
         entitlements = ProEntitlements(apple: cachedApple)
         jws = cachedApple ? UserDefaults.standard.string(forKey: Self.jwsKey) : nil
         #if DEBUG
-        // Screenshot / UI-test seam, compiled out of release.
-        if ProcessInfo.processInfo.environment["SHOT_PRO"] == "1" { isPro = true; WidgetBridge.updatePro(true); return }
+        // Screenshot / UI-test seam, compiled out of release. Set the Apple source too, or
+        // the account restore at launch (useAccount → publish) turns isPro back off.
+        if ProcessInfo.processInfo.environment["SHOT_PRO"] == "1" {
+            entitlements.apple = true; isPro = true; WidgetBridge.updatePro(true); return
+        }
         #endif
         // Purchases made elsewhere (other device, Ask to Buy approval, refund).
         updates = Task { [weak self] in

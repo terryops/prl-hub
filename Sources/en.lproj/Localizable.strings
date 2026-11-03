@@ -633,7 +633,7 @@
 "自定义金额（最少 %@ PRL）" = "Custom amount (min %@ PRL)";
 "自定义金额最少 %@ PRL" = "Custom amount must be at least %@ PRL";
 "开源项目 · GPL-3.0" = "Open source · GPL-3.0";
-"Pearl Hub 是免费的开源项目，全部代码公开在 GitHub，没有广告和追踪。你的捐赠会直接支持它持续更新。" = "Pearl Hub is free and open source — all of its code is public on GitHub, with no ads and no tracking. Your donation directly keeps it updated.";
+"Pearl Hub 是开源项目，全部代码公开在 GitHub，没有广告和追踪。基础功能一直免费，捐赠和高级版的收入用来支付服务器和节点费用、维持更新。" = "Pearl Hub is open source — all of its code is public on GitHub, with no ads and no tracking. The core features stay free; donations and Pro purchases pay for servers and nodes and keep it updated.";
 "在 GitHub 查看源码" = "View the source on GitHub";
 "自定义金额" = "Custom Amount";
 "无法读取钥匙串中的助记词，请重试解锁" = "Couldn't read the recovery phrase from the Keychain. Try unlocking again.";

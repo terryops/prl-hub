@@ -633,7 +633,7 @@
 "自定义金额（最少 %@ PRL）" = "Montant libre (min. %@ PRL)";
 "自定义金额最少 %@ PRL" = "Le montant libre doit être d'au moins %@ PRL";
 "开源项目 · GPL-3.0" = "Open source · GPL-3.0";
-"Pearl Hub 是免费的开源项目，全部代码公开在 GitHub，没有广告和追踪。你的捐赠会直接支持它持续更新。" = "Pearl Hub est gratuit et open source : tout son code est public sur GitHub, sans publicité ni pistage. Votre don contribue directement à ses mises à jour.";
+"Pearl Hub 是开源项目，全部代码公开在 GitHub，没有广告和追踪。基础功能一直免费，捐赠和高级版的收入用来支付服务器和节点费用、维持更新。" = "Pearl Hub est open source : tout son code est public sur GitHub, sans publicité ni pistage. Les fonctions de base restent gratuites ; les dons et les achats Pro financent les serveurs, les nœuds et les mises à jour.";
 "在 GitHub 查看源码" = "Voir le code source sur GitHub";
 "自定义金额" = "Montant libre";
 "无法读取钥匙串中的助记词，请重试解锁" = "Impossible de lire la phrase de récupération dans le trousseau. Réessayez de déverrouiller.";

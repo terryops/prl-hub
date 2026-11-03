@@ -633,7 +633,7 @@
 "自定义金额（最少 %@ PRL）" = "Jumlah lain (min. %@ PRL)";
 "自定义金额最少 %@ PRL" = "Jumlah lain minimal %@ PRL";
 "开源项目 · GPL-3.0" = "Sumber terbuka · GPL-3.0";
-"Pearl Hub 是免费的开源项目，全部代码公开在 GitHub，没有广告和追踪。你的捐赠会直接支持它持续更新。" = "Pearl Hub gratis dan bersumber terbuka — seluruh kodenya publik di GitHub, tanpa iklan dan pelacakan. Donasi Anda langsung mendukung pembaruannya.";
+"Pearl Hub 是开源项目，全部代码公开在 GitHub，没有广告和追踪。基础功能一直免费，捐赠和高级版的收入用来支付服务器和节点费用、维持更新。" = "Pearl Hub bersumber terbuka — seluruh kodenya publik di GitHub, tanpa iklan dan pelacakan. Fitur dasar tetap gratis; donasi dan pembelian Pro membiayai server dan node serta menjaga pembaruannya.";
 "在 GitHub 查看源码" = "Lihat kode sumber di GitHub";
 "自定义金额" = "Jumlah Lain";
 "无法读取钥匙串中的助记词，请重试解锁" = "Tidak dapat membaca frasa pemulihan dari Keychain. Coba buka kunci lagi.";

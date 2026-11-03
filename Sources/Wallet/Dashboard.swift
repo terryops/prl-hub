@@ -79,6 +79,8 @@ struct DashboardView: View {
             && !store.hasUnconfirmedTx
             // Asking someone who can't give just spends the single ask.
             && store.balance.available >= Donation.minimum + WalletStore.sendFeeReserve
+            // Someone who already paid for Pro isn't asked again; the heart stays for them.
+            && !ProStore.shared.isPro
             && DonationPrompt.isEligible
     }
 
