@@ -66,6 +66,11 @@
             }
           ]
         }
+      },
+      "fortuneFees": {
+        "chain": "pearl",
+        "pool_fee_rate": 0.02,
+        "pps_fee_rate": 0.04
       }
     }
   },
@@ -106,7 +111,7 @@
         "payouts": [
           {
             "scheme": "PPS",
-            "fee": 5,
+            "fee": 4,
             "grossPerPH": 100,
             "estimated": true,
             "solo": false,

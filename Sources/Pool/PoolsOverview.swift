@@ -134,7 +134,7 @@ struct PoolOverview: Identifiable {
         }
         if name == "Pearl Fortune", !isSolo {
             return [
-                PoolPayoutComparison(scheme: "PPS", feePercent: 5,
+                PoolPayoutComparison(scheme: "PPS", feePercent: Self.fortunePPSFee,
                                      grossPerPH: theoreticalEarningsPerPH,
                                      theoreticalPerPH: theoreticalEarningsPerPH, estimated: true,
                                      measurement: ppsMeasurement),
@@ -148,8 +148,34 @@ struct PoolOverview: Identifiable {
                                      grossPerPH: earningsPerPH,
                                      theoreticalPerPH: theoreticalEarningsPerPH,
                                      estimated: isPPS || blocksEstimated || blocksSample < 20,
-                                     solo: isSolo, measurement: ppsMeasurement)]
+                                     solo: isSolo, measurement: ppsMeasurement,
+                                     mergeBonus: name == "F2Pool" && !isSolo ? .f2poolNOCK : nil)]
     }
+
+    /// PF's PPS fee when the service is unreachable (its own API said 4% on 2026-10-23, down
+    /// from 5%). The service reads the live figure; the PF summary this app falls back to has none.
+    static let fortunePPSFee: Double = 4
+}
+
+/// A second coin the pool pays on the same work (merged mining), quoted as roughly what share
+/// of the PRL income it adds. Shown as a note under 预估收益 only: it is paid in another coin,
+/// to an address the miner adds at the pool, so the yield, 真实费用 and the ranking leave it out.
+struct PoolMergeBonus: Equatable, Sendable {
+    let coin: String
+    let minPercent: Double
+    let maxPercent: Double
+
+    init?(coin: String?, minPercent: Double?, maxPercent: Double?) {
+        guard let coin = coin?.trimmingCharacters(in: .whitespaces), (1...12).contains(coin.count),
+              coin.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }),
+              let minPercent, let maxPercent, minPercent.isFinite, maxPercent.isFinite,
+              minPercent >= 0, minPercent <= maxPercent, maxPercent <= 100 else { return nil }
+        self.coin = coin; self.minPercent = minPercent; self.maxPercent = maxPercent
+    }
+
+    /// F2Pool's NOCK merged mining (from 2026-10-21; NOCK paid PPLNS at 1%), for the rows the app
+    /// builds itself when the service is down. The service sends the same figures.
+    static let f2poolNOCK = PoolMergeBonus(coin: "NOCK", minPercent: 1, maxPercent: 2)!
 }
 
 /// A dated, paired observation. Actual credits and independent theoretical work earnings
@@ -208,6 +234,8 @@ struct PoolPayoutComparison {
     var weekly = false
     /// Shared-reward payouts only; a PPS payout's Real Cost is its `measurement`.
     var sharedEstimate: SharedRealFee? = nil
+    /// Merged-mining income shown under 预估收益 ("另得 NOCK 约 1–2%"); never part of the yield or cost.
+    var mergeBonus: PoolMergeBonus? = nil
 
     var isPPS: Bool { scheme.uppercased().hasPrefix("PPS") || scheme.uppercased().hasPrefix("FPPS") }
 
@@ -392,6 +420,7 @@ final class PoolsOverviewStore: ObservableObject {
                 var payout = PoolPayoutComparison(scheme: own ?? rowScheme ?? "—", feePercent: $0.fee,
                                      grossPerPH: $0.grossPerPH, theoreticalPerPH: row.theoreticalEarningsPerPH,
                                      estimated: $0.estimated, solo: $0.solo)
+                payout.mergeBonus = $0.mergeBonus
                 // A shared-reward payout's Real Cost is the service's estimate; a PPS one keeps
                 // coming from the dated settlement measurement below.
                 if !payout.isPPS, !payout.solo, !row.solo {
@@ -982,6 +1011,8 @@ private struct PoolComparisonTable: View {
     /// The phone's table. Each cell keeps to its figure and one line under it, so a
     /// row stays short and the eye can run down a column.
     private var compact: Bool { availableWidth < 720 }
+    /// 预估收益 cell heights of the rows that carry a merged-mining bonus (see `rowHeight`).
+    @State private var bonusCellHeights: [String: CGFloat] = [:]
     private var lineGap: CGFloat { compact ? 3 : 8 }
     private var best: Double? { PoolOverview.bestYield(pools) }
     private func isBest(_ pool: PoolOverview, _ payout: PoolPayoutComparison) -> Bool {
@@ -1020,6 +1051,10 @@ private struct PoolComparisonTable: View {
     }
 
     var body: some View {
+        table.onPreferenceChange(BonusCellHeightKey.self) { bonusCellHeights = $0 }
+    }
+
+    @ViewBuilder private var table: some View {
         if availableWidth < 720 {
             mobileTable
         } else {
@@ -1056,7 +1091,11 @@ private struct PoolComparisonTable: View {
     }
     private func rowHeight(_ pool: PoolOverview) -> CGFloat {
         let schemes = pool.payoutComparisons.count > 1
-        return compact ? (schemes ? 108 : 76) : (schemes ? 126 : 100)
+        let base: CGFloat = compact ? (schemes ? 108 : 76) : (schemes ? 126 : 100)
+        // A row with 另得 NOCK… grows to its measured 预估收益 cell when that outgrows the fixed
+        // height (two lines of French or Hindi at the largest text size did, by a point or two).
+        guard let cell = bonusCellHeights[pool.id] else { return base }
+        return max(base, (cell + (compact ? 16 : 24)).rounded(.up))
     }
 
     private var mobileTable: some View {
@@ -1210,6 +1249,25 @@ private struct PoolComparisonTable: View {
                     if pool.payoutComparisons.count > 1 { secondary(comparison.scheme) }
                 }
                 secondary(pool.usesWeekLuck ? Loc("每 PH/天 · 7 天") : Loc("每 PH/天"))
+                // Income on top of the PRL figure, so it sits with the yield, not the fee — and in
+                // grey: green in this column means the best yield, and the bonus never counts there.
+                if let bonus = pool.payoutComparisons.lazy.compactMap(\.mergeBonus).first {
+                    // Up to two lines, broken between words and right-aligned, never shrunk or cut:
+                    // the phone's cell is 116 pt and French/Turkish run past it. "约 1–2%" is glued
+                    // in the string table and the range here, so the figure never splits.
+                    Text(Loc("另得 %@ 约 %@%%", bonus.coin, mergeBonusRange(bonus)))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.trailing)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .background {
+                if pool.payoutComparisons.contains(where: { $0.mergeBonus != nil }) {
+                    GeometryReader { g in
+                        Color.clear.preference(key: BonusCellHeightKey.self, value: [pool.id: g.size.height])
+                    }
+                }
             }
         case .blocks:
             VStack(alignment: .trailing, spacing: lineGap) {
@@ -1293,6 +1351,15 @@ private struct PoolComparisonTable: View {
     private func percent(_ amount: Double) -> String {
         let rounded = (amount * 10).rounded() / 10
         return f(rounded == 0 ? 0 : rounded, rounded == rounded.rounded() ? 0 : 1) + "%"
+    }
+
+    /// The "1–2" of "另得 NOCK 约 1–2%" (each language places the % itself): one figure when
+    /// the range is a single value.
+    private func mergeBonusRange(_ bonus: PoolMergeBonus) -> String {
+        let number = { (x: Double) in String(self.percent(x).dropLast()) }
+        // Word joiners: a line may break after an en dash, and "1–" / "2%" must stay together.
+        return bonus.minPercent == bonus.maxPercent ? number(bonus.minPercent)
+            : number(bonus.minPercent) + "\u{2060}–\u{2060}" + number(bonus.maxPercent)
     }
 
     /// Month and day only ("10/14 – 10/20"): with the year the column wrapped it onto a
@@ -1410,6 +1477,14 @@ private struct PoolHashrateSparkline: View {
     }
 }
 
+/// The 预估收益 cell height of each row with a merged-mining bonus, keyed by row id.
+private struct BonusCellHeightKey: PreferenceKey {
+    static let defaultValue: [String: CGFloat] = [:]
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        value.merge(nextValue()) { max($0, $1) }
+    }
+}
+
 private struct PoolComparisonNotes: View {
     let pools: [PoolOverview]
     let sampleDays: Double
@@ -1442,6 +1517,11 @@ private struct PoolComparisonNotes: View {
             }
             if pools.contains(where: { $0.payoutComparisons.contains(where: \.realFeeEstimated) }) {
                 Text(Loc("「≈」表示估算，可能包含算力统计、观测缺口补估和链上历史插值误差；结果反映样本期收益折损，不等同于矿池公示手续费或额外抽水。"))
+            }
+            let bonusCoins = Array(Set(pools.flatMap { $0.payoutComparisons.compactMap(\.mergeBonus?.coin) })).sorted()
+            if !bonusCoins.isEmpty {
+                let coins = bonusCoins.joined(separator: " / ")
+                Text(Loc("「另得 %1$@」：该矿池对同一份算力另发 %1$@（联合挖矿），百分比约为占 PRL 收益的比例；需在矿池账户里另填 %1$@ 收款地址才会发放。未计入预估收益和真实费用。", coins))
             }
             if pools.contains(where: \.hashFromPoolAPI) {
                 Text(Loc("HeroMiners 的算力数据源未收录，改取矿池自身 API。"))

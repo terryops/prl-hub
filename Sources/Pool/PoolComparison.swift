@@ -30,17 +30,26 @@ struct SharedOverview: Decodable, Sendable {
             var realFeePercent: Double? = nil
             var realFeeEstimated: Bool? = nil
             var realFeePeriod: Period? = nil
+            /// A second coin paid on the same work (F2Pool's NOCK). Lossy like the Real Cost: a
+            /// malformed one is dropped, never the payout.
+            var mergeBonus: PoolMergeBonus? = nil
 
             private enum CodingKeys: String, CodingKey {
-                case scheme, fee, grossPerPH, estimated, solo, realFeePercent, realFeeEstimated, realFeePeriod
+                case scheme, fee, grossPerPH, estimated, solo, realFeePercent, realFeeEstimated, realFeePeriod, mergeBonus
+            }
+            private struct MergeBonusWire: Decodable {
+                let coin: String?
+                let minPercent, maxPercent: Double?
             }
 
             init(scheme: String?, fee: Double?, grossPerPH: Double?, estimated: Bool, solo: Bool,
-                 realFeePercent: Double? = nil, realFeeEstimated: Bool? = nil, realFeePeriod: Period? = nil) {
+                 realFeePercent: Double? = nil, realFeeEstimated: Bool? = nil, realFeePeriod: Period? = nil,
+                 mergeBonus: PoolMergeBonus? = nil) {
                 self.scheme = scheme; self.fee = fee; self.grossPerPH = grossPerPH
                 self.estimated = estimated; self.solo = solo
                 self.realFeePercent = realFeePercent; self.realFeeEstimated = realFeeEstimated
                 self.realFeePeriod = realFeePeriod
+                self.mergeBonus = mergeBonus
             }
 
             init(from decoder: Decoder) throws {
@@ -53,6 +62,8 @@ struct SharedOverview: Decodable, Sendable {
                 realFeePercent = (try? c.decodeIfPresent(Double.self, forKey: .realFeePercent)) ?? nil
                 realFeeEstimated = (try? c.decodeIfPresent(Bool.self, forKey: .realFeeEstimated)) ?? nil
                 realFeePeriod = (try? c.decodeIfPresent(Period.self, forKey: .realFeePeriod)) ?? nil
+                let bonus = (try? c.decodeIfPresent(MergeBonusWire.self, forKey: .mergeBonus)) ?? nil
+                mergeBonus = bonus.flatMap { PoolMergeBonus(coin: $0.coin, minPercent: $0.minPercent, maxPercent: $0.maxPercent) }
             }
         }
         let id, name, url: String

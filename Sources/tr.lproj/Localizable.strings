@@ -1288,3 +1288,5 @@
 "涨到 / 跌到" = "Yükselince / Düşünce";
 "到达目标价" = "Hedefe ulaşınca";
 "价格涨破或跌破 %@ 时都会通知你" = "Fiyat %@ seviyesini yukarı ya da aşağı geçtiğinde bildirim alırsınız.";
+"另得 %@ 约 %@%%" = "Ek olarak %@ ≈%%%@";
+"「另得 %1$@」：该矿池对同一份算力另发 %1$@（联合挖矿），百分比约为占 PRL 收益的比例；需在矿池账户里另填 %1$@ 收款地址才会发放。未计入预估收益和真实费用。" = "“Ek olarak %1$@”: Havuz aynı hashrate için ayrıca %1$@ öder; yüzde, PRL gelirine oranla yaklaşık değerdir. Yalnızca havuz hesabınıza bir %1$@ ödeme adresi eklediğinizde ödenir. Tahmini getiri ve Gerçek maliyete dahil değildir.";

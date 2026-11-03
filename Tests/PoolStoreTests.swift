@@ -444,7 +444,7 @@ struct PoolsOverviewTests {
         #expect(pool.poolHashrate == 2e15)
         let contracts = pool.payoutComparisons
         #expect(contracts.map(\.scheme) == ["PPS", "PPLNS"])
-        #expect(contracts.map(\.feePercent) == [5, 2])
+        #expect(contracts.map(\.feePercent) == [4, 2])                 // PF's PPS fee, 4% since 2026-10
         #expect(contracts[0].realFeePercent == nil)
         #expect(contracts[0].estimated)
         #expect(contracts[1].realFeePercent == nil)
@@ -672,5 +672,90 @@ struct TakeHomeYieldTests {
         #expect(doubtful.rankedYield(doubtful.payoutComparisons[0]) == nil)
         #expect(PoolOverview.bestYield([kryptex, f2pool, solo, unknown]) == nil)
         #expect(PoolOverview.bestYield([]) == nil)
+    }
+}
+
+/// F2Pool's NOCK merged mining: the service's `mergeBonus` and the app's own fallback rows show
+/// the same "+NOCK 约 1–2%" under the fee, and neither touches what a miner keeps.
+@MainActor
+struct MergeBonusTests {
+    private struct Contract: Decodable { let snapshot: SharedOverview }
+
+    /// The shared fixture with PF's PPS payout (the first) given `bonus`, as the service would send
+    /// it for F2Pool. The fixture itself stays the service's exact output.
+    private func fortune(bonus: Any?) throws -> PoolOverview {
+        var document = try #require(try JSONSerialization.jsonObject(with: Fixture.data("shared_overview.json")) as? [String: Any])
+        var value = try #require(document["snapshot"] as? [String: Any])
+        var rows = try #require(value["rows"] as? [[String: Any]])
+        let i = try #require(rows.firstIndex { $0["name"] as? String == "Pearl Fortune" })
+        var payouts = try #require(rows[i]["payouts"] as? [[String: Any]])
+        if let bonus { payouts[0]["mergeBonus"] = bonus }
+        rows[i]["payouts"] = payouts
+        value["rows"] = rows; document["snapshot"] = value
+        let decoded = try JSONDecoder().decode(Contract.self, from: JSONSerialization.data(withJSONObject: document)).snapshot
+        #expect(decoded.rows.count == 2)
+        return try #require(PoolsOverviewStore.build(decoded).first { $0.name == "Pearl Fortune" })
+    }
+
+    @Test func theServicesPPSFeeAndBonusReachThePayout() throws {
+        let plain = try fortune(bonus: nil)
+        #expect(plain.payoutComparisons.map(\.feePercent) == [4, 2])     // the fixture is the service's output
+        #expect(plain.payoutComparisons.allSatisfy { $0.mergeBonus == nil })
+        let pool = try fortune(bonus: ["coin": "NOCK", "minPercent": 1, "maxPercent": 2])
+        let pps = pool.payoutComparisons[0]
+        #expect(pps.mergeBonus == PoolMergeBonus.f2poolNOCK)
+        #expect(pool.payoutComparisons[1].mergeBonus == nil)
+        // Display only: the cost, the take-home yield and the ranking ignore it.
+        #expect(pps.costPercent == plain.payoutComparisons[0].costPercent)
+        #expect(pps.netPerPH == plain.payoutComparisons[0].netPerPH)
+        #expect(pool.netYield == plain.netYield)
+    }
+
+    @Test func aMalformedBonusIsDroppedNotThePayout() throws {
+        let bad: [Any] = [
+            ["coin": 7, "minPercent": 1, "maxPercent": 2],
+            ["coin": "", "minPercent": 1, "maxPercent": 2],
+            ["coin": "NO CK", "minPercent": 1, "maxPercent": 2],
+            ["coin": "NOCK", "minPercent": 2, "maxPercent": 1],
+            ["coin": "NOCK", "minPercent": -1, "maxPercent": 2],
+            ["coin": "NOCK", "minPercent": 1, "maxPercent": 200],
+            ["coin": "NOCK", "minPercent": "1", "maxPercent": 2],
+            ["coin": "NOCK", "minPercent": 1],
+            "NOCK", 1.5, NSNull(),
+        ]
+        for value in bad {
+            let pool = try fortune(bonus: value)
+            #expect(pool.payoutComparisons.count == 2, "\(value)")
+            #expect(pool.payoutComparisons[0].mergeBonus == nil, "\(value)")
+            #expect(pool.payoutComparisons[0].feePercent == 4, "\(value)")
+        }
+        let single = try fortune(bonus: ["coin": "NOCK", "minPercent": 1.5, "maxPercent": 1.5])
+        #expect(single.payoutComparisons[0].mergeBonus?.minPercent == 1.5)
+    }
+
+    /// Without the service the app builds F2Pool itself, from miningpoolstats (and merges it into the
+    /// lordofpearls table the same way): the same NOCK figures, SOLO and other pools without.
+    @Test func theAppsOwnF2PoolRowCarriesTheSameBonus() throws {
+        let coin = try JSONDecoder().decode(MPSCoin.self, from: Data(#"{"nethash_estimat":1e18,"block_time_average":86.4,"supply":{"emission24":10000},"data":[{"url":"https://www.f2pool.com/coin/pearl","hashrate":2e16,"fee":1,"feetype":"PPS","blocks_1000":20},{"url":"https://www.f2pool.com/solo","hashrate":1e15,"fee":1,"feetype":"SOLO","blocks_1000":1},{"pool_id":"other","url":"https://other.example","hashrate":1e17,"fee":1,"feetype":"PPS","blocks_1000":50}]}"#.utf8))
+        let pools = PoolsOverviewStore.build(coin)
+        let f2 = try #require(pools.first { $0.name == "F2Pool" })
+        #expect(f2.payoutComparisons.map(\.mergeBonus) == [PoolMergeBonus.f2poolNOCK])
+        #expect(f2.payoutComparisons[0].costPercent == 1)
+        #expect(pools.filter { $0.name != "F2Pool" }.allSatisfy { $0.payoutComparisons.allSatisfy { $0.mergeBonus == nil } })
+        let solo = try #require(pools.first { $0.name == "F2Pool SOLO" })
+        #expect(solo.isSolo && solo.payoutComparisons.allSatisfy { $0.mergeBonus == nil })
+        let merged = PoolsOverviewStore.build([], chain: nil, heroHashrate: nil, mps: coin)
+        let row = try #require(merged.first { $0.name == "F2Pool" })
+        #expect(row.fromMiningPoolStats)
+        #expect(row.payoutComparisons.map(\.mergeBonus) == [PoolMergeBonus.f2poolNOCK])
+    }
+
+    @Test func aBonusTakesACoinAndAnOrderedRange() {
+        #expect(PoolMergeBonus(coin: "NOCK", minPercent: 1, maxPercent: 2) == PoolMergeBonus.f2poolNOCK)
+        #expect(PoolMergeBonus(coin: " NOCK ", minPercent: 0, maxPercent: 0)?.coin == "NOCK")
+        #expect(PoolMergeBonus(coin: nil, minPercent: 1, maxPercent: 2) == nil)
+        #expect(PoolMergeBonus(coin: "NOCK", minPercent: .nan, maxPercent: 2) == nil)
+        #expect(PoolMergeBonus(coin: "NOCK", minPercent: 1, maxPercent: .infinity) == nil)
+        #expect(PoolMergeBonus(coin: "NOCKNOCKNOCKNOCK", minPercent: 1, maxPercent: 2) == nil)
     }
 }

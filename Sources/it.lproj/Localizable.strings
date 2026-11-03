@@ -1288,3 +1288,5 @@
 "涨到 / 跌到" = "Sale / Scende a";
 "到达目标价" = "Raggiunge il target";
 "价格涨破或跌破 %@ 时都会通知你" = "Riceverai una notifica quando il prezzo supera %@, in salita o in discesa.";
+"另得 %@ 约 %@%%" = "In più %@ ≈%@%%";
+"「另得 %1$@」：该矿池对同一份算力另发 %1$@（联合挖矿），百分比约为占 PRL 收益的比例；需在矿池账户里另填 %1$@ 收款地址才会发放。未计入预估收益和真实费用。" = "«In più %1$@»: il pool paga anche %1$@ per lo stesso hashrate; la percentuale è circa la sua quota rispetto al ricavo in PRL. Viene pagato solo dopo aver aggiunto un indirizzo di pagamento %1$@ nel tuo account del pool. Non incluso in Rendimento stimato né in Costo reale.";
