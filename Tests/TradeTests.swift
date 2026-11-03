@@ -175,6 +175,22 @@ struct SafeTradeOrderTrackingTests {
         #expect(!check.isNew(order(11, "sell", "wait")))   // other side
     }
 
+    /// After an order the app reads the account again until the order is done AND the
+    /// balances moved: SafeTrade's lists can lag a fill that took the engine 28 ms.
+    @Test func settlesOnlyWhenTheOrderAndTheBalancesHaveCaughtUp() {
+        let marketDone: (STOrder) -> Bool = { !$0.isOpen }
+        let limitDone: (STOrder) -> Bool = { !$0.isPending }
+        #expect(SafeTradeStore.isSettled(order(5, "sell", "done"), balancesMoved: true, done: marketDone))
+        #expect(!SafeTradeStore.isSettled(order(5, "sell", "done"), balancesMoved: false, done: marketDone))  // balance lagging
+        #expect(!SafeTradeStore.isSettled(order(5, "sell", "pending"), balancesMoved: true, done: marketDone))
+        #expect(!SafeTradeStore.isSettled(order(5, "sell", "wait"), balancesMoved: true, done: marketDone))
+        #expect(!SafeTradeStore.isSettled(nil, balancesMoved: true, done: marketDone))                        // not listed yet
+        // A limit order that rests on the book has settled (its amount moved to locked).
+        #expect(SafeTradeStore.isSettled(order(6, "buy", "wait"), balancesMoved: true, done: limitDone))
+        #expect(!SafeTradeStore.isSettled(order(6, "buy", "pending"), balancesMoved: true, done: limitDone))
+        #expect(SafeTradeStore.settleDelays.reduce(0, +) < 30)
+    }
+
     @Test func unverifiedWithdrawMatchesAnyNewRow() throws {
         let check = PendingWithdrawCheck(knownIDs: [1, 2], knownComplete: true)
         let rows = try JSONDecoder().decode([STWithdraw].self, from: Data(#"[{"id":3,"amount":"5"},{"id":2,"amount":"1"}]"#.utf8))

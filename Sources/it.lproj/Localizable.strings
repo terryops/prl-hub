@@ -429,6 +429,7 @@
 "高" = "Max";
 "（市价，约 %@ USDT）" = "(A mercato, ~%@ USDT)";
 "最大滑点" = "Slippage max";
+"市价单按盘口逐档成交，数量越大，成交价离现价越远。最大滑点是允许偏离现价的上限：卖出不低于最低成交价，买入不高于最高成交价，超出时交易所会拒绝这笔订单。" = "Un ordine a mercato viene eseguito livello per livello nel book: più è grande, più il suo prezzo può allontanarsi dall'ultimo prezzo. Lo slippage max limita questo scostamento: una vendita non viene mai eseguita sotto il prezzo di esecuzione minimo, un acquisto mai sopra il massimo, e l'exchange rifiuta l'ordine che lo supererebbe.";
 "自定义…" = "Personalizzato…";
 "最高成交价" = "Prezzo di esecuzione massimo";
 "最低成交价" = "Prezzo di esecuzione minimo";

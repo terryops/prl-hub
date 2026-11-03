@@ -106,6 +106,10 @@ final class SafeTradeStore: ObservableObject {
     /// another app goes inactive → active within half a second), and a cancelled
     /// read would count as a failed one.
     private var refreshRun: Task<Void, Never>?
+    /// Follow-up account reads after an order or a cancel (see `settle`).
+    private var settleRun: Task<Void, Never>?
+    /// The last time the order lists were read, for the open-order watch.
+    private var ordersReadAt: Date?
     let market = SafeTradeMarket.defaultValue
 
     #if DEBUG
@@ -342,6 +346,7 @@ final class SafeTradeStore: ObservableObject {
         let capText = ordType == "market"
             ? marketPriceCap(side: side, slippagePercent: slippagePercent).map(SafeTradeMarketRules.plain) : nil
         let before = PendingOrderCheck(side: side, knownIDs: Set(orders.compactMap(\.id)), knownComplete: !accountStale)
+        let balancesBefore = balances
         placing = true; error = nil; lastOrder = nil
         do {
             let o = try await client.placeOrder(market: market, side: side, amount: amountText, price: priceText,
@@ -349,7 +354,8 @@ final class SafeTradeStore: ObservableObject {
             placing = false   // order accepted — stop blocking the screen right away
             lastOrder = Loc("已下单 #%@ · %@ %@ @ %@ · %@", o.id.map(String.init) ?? "?", o.side ?? side, o.origin_amount ?? amountText, o.displayPrice ?? priceText ?? "—", o.state ?? "")
             orders.insert(o, at: 0)            // optimistic: show it at the top at once
-            Task { await refreshAccount() }    // reconcile balances + orders off the hot path
+            // Reconcile balances + orders off the hot path, until the order has settled.
+            settle(orderID: o.id, balancesBefore: balancesBefore) { ordType == "market" ? !$0.isOpen : !$0.isPending }
             // Auto-dismiss the success banner so it can't linger and invite a duplicate.
             Task { try? await Task.sleep(for: .seconds(5)); withAnimation { lastOrder = nil } }
             return true
@@ -428,13 +434,57 @@ final class SafeTradeStore: ObservableObject {
     func cancelOrder(_ order: STOrder) async {
         guard let id = order.id, cancelingOrderID == nil, !placing else { return }
         cancelingOrderID = id; error = nil; lastOrder = nil
+        let balancesBefore = balances
         do {
             try await client.cancelOrder(id: id)
             await refreshAccount()   // pull the real state (and the unlocked balance)
+            if !Self.isSettled(orders.first(where: { $0.id == id }), balancesMoved: balances != balancesBefore, done: { !$0.isOpen }) {
+                settle(orderID: id, balancesBefore: balancesBefore, firstDelay: 1) { !$0.isOpen }
+            }
         } catch {
             await present(error)
         }
         cancelingOrderID = nil
+    }
+
+    /// Seconds between the follow-up reads. The engine settles an order in milliseconds
+    /// (a market sell: 28 ms, 2026-11-01), but the read right after the POST still showed
+    /// it unsettled and the balance unmoved, and nothing read the account again until a
+    /// manual refresh.
+    static let settleDelays: [Double] = [1, 2, 3, 5, 8]
+
+    /// Read the account again until order `orderID` is `done` and the balances have moved
+    /// off `balancesBefore` — at once, then after each of `settleDelays` (~19 s in all;
+    /// past that the open-order watch carries on).
+    private func settle(orderID: Int?, balancesBefore: [STBalance], firstDelay: Double = 0,
+                        done: @escaping (STOrder) -> Bool) {
+        settleRun?.cancel()
+        settleRun = Task { [weak self] in
+            for delay in [firstDelay] + Self.settleDelays {
+                if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+                guard let self, !Task.isCancelled else { return }
+                await self.refreshAccount()
+                let order = self.orders.first { $0.id != nil && $0.id == orderID }
+                if Self.isSettled(order, balancesMoved: self.balances != balancesBefore, done: done) { break }
+            }
+            if let self, !Task.isCancelled { self.settleRun = nil }
+        }
+    }
+
+    /// An order has settled once the list shows it `done` and the balances have moved
+    /// (the order list and the balances can each lag the engine).
+    nonisolated static func isSettled(_ order: STOrder?, balancesMoved: Bool, done: (STOrder) -> Bool) -> Bool {
+        guard balancesMoved, let order else { return false }
+        return done(order)
+    }
+
+    /// The open-order watch, from the 5 s poll: while an order rests on the book, read the
+    /// account every `seconds` so a fill shows up without a manual refresh.
+    func refreshAccountIfOrdersOpen(every seconds: TimeInterval = 15) async {
+        guard hasCredentials, !Self.shotDemo, orders.contains(where: \.isOpen),
+              !placing, !refreshing, cancelingOrderID == nil, settleRun == nil, unverifiedOrder == nil else { return }
+        if let t = ordersReadAt, Date().timeIntervalSince(t) < seconds { return }
+        await refreshAccount()
     }
 
     /// Balances + orders: the recent list plus EVERY open order (the recent list is
@@ -504,6 +554,7 @@ final class SafeTradeStore: ObservableObject {
             let open = await w ?? orders.filter(\.isOpen)
             let merged = Self.merge(recent: recent, open: open)
             if merged != orders { orders = merged }
+            ordersReadAt = Date()
             return nil
         } catch {
             return error

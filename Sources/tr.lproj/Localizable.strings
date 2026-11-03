@@ -429,6 +429,7 @@
 "高" = "Yüksek";
 "（市价，约 %@ USDT）" = "(Piyasa fiyatı, ~%@ USDT)";
 "最大滑点" = "Maks. kayma";
+"市价单按盘口逐档成交，数量越大，成交价离现价越远。最大滑点是允许偏离现价的上限：卖出不低于最低成交价，买入不高于最高成交价，超出时交易所会拒绝这笔订单。" = "Piyasa emri, emir defterinde kademe kademe gerçekleşir; emir büyüdükçe fiyatı son fiyattan o kadar uzaklaşabilir. Maks. kayma bu sapmanın sınırıdır: satış en düşük işlem fiyatının altında, alış en yüksek işlem fiyatının üstünde gerçekleşmez; bunu aşacak emri borsa reddeder.";
 "自定义…" = "Özel…";
 "最高成交价" = "En yüksek işlem fiyatı";
 "最低成交价" = "En düşük işlem fiyatı";

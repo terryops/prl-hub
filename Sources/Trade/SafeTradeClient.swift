@@ -145,6 +145,8 @@ struct STOrder: Decodable, Equatable {
         default: return false
         }
     }
+    /// Accepted but not yet on the book or matched.
+    var isPending: Bool { state?.lowercased() == "pending" }
 
     /// The actual price to SHOW for this order. Limit orders carry their set
     /// `price`; market orders have `price == nil` and fill at an average, so fall

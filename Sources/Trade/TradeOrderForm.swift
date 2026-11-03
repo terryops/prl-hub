@@ -212,7 +212,11 @@ struct OrderFormView: View {
     /// 最大滑点 (a menu of presets + 自定义) and the price it caps the fill at.
     @ViewBuilder private var slippageRows: some View {
         HStack {
-            Text(Loc("最大滑点")).foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                Text(Loc("最大滑点")).foregroundStyle(.secondary)
+                PearlInfoTip(Loc("市价单按盘口逐档成交，数量越大，成交价离现价越远。最大滑点是允许偏离现价的上限：卖出不低于最低成交价，买入不高于最高成交价，超出时交易所会拒绝这笔订单。"),
+                             title: Loc("最大滑点"))
+            }
             Spacer()
             Menu {
                 Picker(Loc("最大滑点"), selection: $slippage) {

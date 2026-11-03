@@ -163,6 +163,7 @@ struct TradeView: View {
                     try? await Task.sleep(for: .seconds(seconds))
                     if Task.isCancelled { break }
                     await store.refreshTickerOnly()
+                    if scenePhase == .active { await store.refreshAccountIfOrdersOpen() }
                 }
             }
             // One-time, order-triggered Pro offer: a limit order fills around the moment

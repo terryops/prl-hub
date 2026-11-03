@@ -429,6 +429,7 @@
 "高" = "Máx.";
 "（市价，约 %@ USDT）" = "(precio de mercado, ~%@ USDT)";
 "最大滑点" = "Deslizamiento máx.";
+"市价单按盘口逐档成交，数量越大，成交价离现价越远。最大滑点是允许偏离现价的上限：卖出不低于最低成交价，买入不高于最高成交价，超出时交易所会拒绝这笔订单。" = "Una orden a mercado se ejecuta nivel a nivel en el libro de órdenes: cuanto mayor es, más puede alejarse su precio del último precio. El deslizamiento máx. limita ese margen: una venta nunca se ejecuta por debajo del precio de ejecución mínimo, una compra nunca por encima del máximo, y el exchange rechaza la orden que lo superaría.";
 "自定义…" = "Personalizado…";
 "最高成交价" = "Precio de ejecución máximo";
 "最低成交价" = "Precio de ejecución mínimo";
