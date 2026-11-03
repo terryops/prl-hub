@@ -47,8 +47,6 @@ struct NockInlineLink: View {
             HStack(spacing: 5) {
                 NockBadge(size: badge)
                 Text(Loc("NOCK 钱包")).foregroundStyle(Pearl.accent)
-                Text(verbatim: "·").foregroundStyle(.tertiary)
-                Text(Loc("和 PRL 共用助记词")).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
                 Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
             }
             .font(.caption)
