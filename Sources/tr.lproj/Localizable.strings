@@ -1297,3 +1297,17 @@
 "不再提示这个版本" = "Bu sürüm için bir daha hatırlatma";
 "App Store 版本查询" = "App Store sürüm kontrolü";
 "向 Apple 的 itunes.apple.com 查询 App Store 上的最新版本号，用来提示更新。请求不带地址，也不带任何身份信息。" = "Güncelleme olduğunda haber vermek için Apple'ın itunes.apple.com adresine App Store'daki en son sürümü sorar. İstek adres ya da kimlik bilgisi içermez.";
+
+/* 钱包页底部的 NOCK 钱包入口：关闭 / 在设置里重新打开 */
+"关闭 NOCK 钱包入口？" = "NOCK Cüzdanı bağlantısı kapatılsın mı?";
+"钱包页不再显示 NOCK 钱包，之后可以在「设置 → 钱包与安全」重新打开。" = "NOCK Cüzdanı artık cüzdan sayfasında gösterilmeyecek. Ayarlar → Cüzdan ve Güvenlik bölümünden yeniden açabilirsiniz.";
+"在钱包页显示 NOCK 钱包" = "NOCK Cüzdanı'nı cüzdan sayfasında göster";
+
+/* 网页版：我的监控顶部提示卡 + 设置 → 网页版 */
+"电脑上也能看" = "Bilgisayarda da var";
+"打开 pearlhub.net，监控、币价和提醒都在。" = "İzlemeleriniz, fiyatlar ve uyarılar için pearlhub.net'i açın.";
+"在任何电脑的浏览器里看矿机监控、行情、矿池对比和收益计算，不用安装。" = "Madenci izleme, piyasa, havuz karşılaştırması ve kazanç hesaplayıcı her bilgisayarın tarayıcısında — kurulum gerekmez.";
+"用同一邮箱登录" = "Aynı e-postayla giriş yapın";
+"用 %@ 登录网页版，账号里的监控和提醒会自动同步过去。" = "Web sürümüne %@ ile giriş yapın; hesabınızdaki izlemeler ve uyarılar otomatik olarak eşitlenir.";
+"在浏览器打开" = "Tarayıcıda Aç";
+"分享" = "Paylaş";

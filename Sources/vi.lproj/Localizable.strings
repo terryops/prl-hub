@@ -1297,3 +1297,17 @@
 "不再提示这个版本" = "Không nhắc lại phiên bản này";
 "App Store 版本查询" = "Kiểm tra phiên bản trên App Store";
 "向 Apple 的 itunes.apple.com 查询 App Store 上的最新版本号，用来提示更新。请求不带地址，也不带任何身份信息。" = "Truy vấn itunes.apple.com của Apple để biết phiên bản mới nhất trên App Store và báo cho bạn khi có bản cập nhật. Yêu cầu không kèm địa chỉ hay thông tin nhận dạng.";
+
+/* 钱包页底部的 NOCK 钱包入口：关闭 / 在设置里重新打开 */
+"关闭 NOCK 钱包入口？" = "Đóng lối vào Ví NOCK?";
+"钱包页不再显示 NOCK 钱包，之后可以在「设置 → 钱包与安全」重新打开。" = "Ví NOCK sẽ không còn hiển thị trên trang ví. Bạn có thể bật lại trong Cài đặt → Ví & Bảo mật.";
+"在钱包页显示 NOCK 钱包" = "Hiển thị Ví NOCK trên trang ví";
+
+/* 网页版：我的监控顶部提示卡 + 设置 → 网页版 */
+"电脑上也能看" = "Xem được cả trên máy tính";
+"打开 pearlhub.net，监控、币价和提醒都在。" = "Mở pearlhub.net để xem theo dõi, giá và cảnh báo của bạn.";
+"在任何电脑的浏览器里看矿机监控、行情、矿池对比和收益计算，不用安装。" = "Xem theo dõi máy đào, thị trường, so sánh pool và máy tính thu nhập trên trình duyệt của bất kỳ máy tính nào — không cần cài đặt.";
+"用同一邮箱登录" = "Đăng nhập bằng cùng email";
+"用 %@ 登录网页版，账号里的监控和提醒会自动同步过去。" = "Đăng nhập phiên bản web bằng %@, theo dõi và cảnh báo trong tài khoản sẽ tự động đồng bộ.";
+"在浏览器打开" = "Mở trong trình duyệt";
+"分享" = "Chia sẻ";

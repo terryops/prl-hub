@@ -23,38 +23,57 @@ struct NockWalletEntry: View {
     var surface: Color? = nil
     var secondary: Color = .secondary
     @ObservedObject private var nock = NockWalletStore.shared
+    @AppStorage(NockInlineLink.hiddenKey) private var linkHidden = false
 
     var body: some View {
         switch slot {
         case .card:
             if nock.inUse { NockAssetCard(nock: nock, surface: surface, secondary: secondary) }
         case .link:
-            if !nock.inUse { NockInlineLink() }
+            if !nock.inUse && !linkHidden { NockInlineLink() }
         }
     }
 }
 
 /// The last line on the wallet page, styled like 价格提醒 / 桌面小组件 above it: NOCK is a
 /// side feature, so until it's used its entry stays out of the way (no card, no balance).
+/// Someone with no use for it can close the line; 设置 → 钱包与安全 brings it back. A wallet
+/// that uses NOCK always shows its strip — closing only ever hides this unused-wallet line.
 struct NockInlineLink: View {
+    /// Set once the line was closed (all wallets: it's the same offer on each).
+    static let hiddenKey = "nock.linkHidden"
+    @AppStorage(hiddenKey) private var hidden = false
+    @State private var confirmingClose = false
     /// The NOCK badge, shrunk to the line's text size.
     @ScaledMetric(relativeTo: .caption) private var badge: CGFloat = 17
 
     var body: some View {
-        NavigationLink {
-            NockWalletView(nock: .shared)
-        } label: {
-            HStack(spacing: 5) {
-                NockBadge(size: badge)
-                Text(Loc("NOCK 钱包")).foregroundStyle(Pearl.accent)
-                Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+        HStack(spacing: 5) {
+            NavigationLink {
+                NockWalletView(nock: .shared)
+            } label: {
+                HStack(spacing: 5) {
+                    NockBadge(size: badge)
+                    Text(Loc("NOCK 钱包")).foregroundStyle(Pearl.accent)
+                    Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
             }
-            .font(.caption)
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            Text(verbatim: "·").foregroundStyle(.tertiary).accessibilityHidden(true)
+            Button(Loc("关闭")) { confirmingClose = true }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
         }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
+        .font(.caption)
+        .frame(maxWidth: .infinity)
+        .alert(Loc("关闭 NOCK 钱包入口？"), isPresented: $confirmingClose) {
+            Button(Loc("关闭")) { withAnimation(.snappy) { hidden = true } }
+            Button(Loc("取消"), role: .cancel) {}
+        } message: {
+            Text(Loc("钱包页不再显示 NOCK 钱包，之后可以在「设置 → 钱包与安全」重新打开。"))
+        }
     }
 }
 

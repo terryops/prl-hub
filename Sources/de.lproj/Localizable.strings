@@ -1297,3 +1297,17 @@
 "不再提示这个版本" = "Für diese Version nicht mehr erinnern";
 "App Store 版本查询" = "App-Store-Versionsabfrage";
 "向 Apple 的 itunes.apple.com 查询 App Store 上的最新版本号，用来提示更新。请求不带地址，也不带任何身份信息。" = "Fragt bei Apples itunes.apple.com die neueste Version im App Store ab, um dich auf Updates hinzuweisen. Die Anfrage enthält keine Adresse und keine identifizierenden Daten.";
+
+/* 钱包页底部的 NOCK 钱包入口：关闭 / 在设置里重新打开 */
+"关闭 NOCK 钱包入口？" = "Link zur NOCK-Wallet schließen?";
+"钱包页不再显示 NOCK 钱包，之后可以在「设置 → 钱包与安全」重新打开。" = "Die NOCK-Wallet wird auf der Wallet-Seite nicht mehr angezeigt. Unter „Einstellungen → Wallet & Sicherheit“ kannst du sie wieder einblenden.";
+"在钱包页显示 NOCK 钱包" = "NOCK-Wallet auf der Wallet-Seite zeigen";
+
+/* 网页版：我的监控顶部提示卡 + 设置 → 网页版 */
+"电脑上也能看" = "Auch am Computer";
+"打开 pearlhub.net，监控、币价和提醒都在。" = "Öffne pearlhub.net für deine Monitore, Preise und Benachrichtigungen.";
+"在任何电脑的浏览器里看矿机监控、行情、矿池对比和收益计算，不用安装。" = "Miner-Monitore, Markt, Pool-Vergleich und Ertragsrechner im Browser jedes Computers – ohne Installation.";
+"用同一邮箱登录" = "Mit derselben E-Mail anmelden";
+"用 %@ 登录网页版，账号里的监控和提醒会自动同步过去。" = "Melde dich in der Webversion mit %@ an, dann werden die Monitore und Benachrichtigungen deines Kontos automatisch übernommen.";
+"在浏览器打开" = "Im Browser öffnen";
+"分享" = "Teilen";

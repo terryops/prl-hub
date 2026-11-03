@@ -183,6 +183,8 @@ struct AboutSettingsView: View {
 /// 设置 → 钱包 (only while unlocked) plus the remove-wallet confirmation.
 private struct WalletSettingsSection: View {
     @EnvironmentObject private var wallet: WalletStore
+    @ObservedObject private var nock = NockWalletStore.shared
+    @AppStorage(NockInlineLink.hiddenKey) private var nockLinkHidden = false
     @State private var confirmingReset = false
     @State private var resetError: String?
 
@@ -207,6 +209,13 @@ private struct WalletSettingsSection: View {
                 NavigationLink {
                     RecoverChangeView(store: wallet)
                 } label: { Label(Loc("找回搁浅的找零"), systemImage: "arrow.uturn.down.circle") }
+                // Brings back the wallet page's NOCK line once closed there. A wallet that
+                // uses NOCK shows its strip regardless, so the switch only appears for one that doesn't.
+                if !nock.inUse {
+                    Toggle(isOn: Binding(get: { !nockLinkHidden }, set: { nockLinkHidden = !$0 })) {
+                        Label(Loc("在钱包页显示 NOCK 钱包"), systemImage: "hexagon")
+                    }
+                }
                 Button { wallet.lock() } label: {
                     Label(Loc("锁定钱包"), systemImage: "lock").foregroundStyle(.primary)
                 }

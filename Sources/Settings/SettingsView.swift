@@ -159,6 +159,16 @@ private struct AccountSettingsSection: View {
                 }
             }
             .accessibilityIdentifier("settings-account")
+            NavigationLink {
+                WebVersionView()
+            } label: {
+                LabeledContent {
+                    Text(verbatim: "pearlhub.net")
+                } label: {
+                    SettingsMenuLabel(Loc("网页版"), systemImage: "desktopcomputer")
+                }
+            }
+            .accessibilityIdentifier("settings-web")
             WalletSettingsEntry()
         }
         .pearlListRowSurface()

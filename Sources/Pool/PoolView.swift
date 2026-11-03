@@ -20,6 +20,12 @@ struct PoolView: View {
     @AppStorage(MonitorLayout.key) private var layout: MonitorLayout = .cards
     /// The monitor opened from 一览, shown as its full card; nil = none.
     @State private var openWatch: UUID?
+    /// The 网页版 card above the cards was opened or closed: it never comes back.
+    @AppStorage(WebVersion.hintDismissedKey) private var webHintDismissed = false
+    @State private var showingWebVersion = false
+    /// The 掉线提醒 card was up at some point this session: the 网页版 card waits for a later
+    /// launch rather than taking its place the moment it's closed.
+    @State private var alertHintSeen = false
 
     /// Point at 掉线提醒 while the user has monitors and hasn't found it yet — until the
     /// card is opened or closed, or an alert is switched on (here or on another device).
@@ -29,6 +35,19 @@ struct PoolView: View {
         if ProcessInfo.processInfo.environment["SHOT_WATCH_ADDR"] != nil { return false }
         #endif
         return !alertHintDismissed && !offlineAlerts.hasAnyAlert && !store.watches.isEmpty
+    }
+
+    /// Say the web version exists — on iPhone / iPad (a Mac is the computer already), to
+    /// someone with monitors to look at, one hint card at a time.
+    private var showsWebHint: Bool {
+        #if os(iOS)
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["SHOT_WATCH_ADDR"] != nil { return false }
+        #endif
+        return !webHintDismissed && !store.watches.isEmpty && !showsAlertHint && !alertHintSeen
+        #else
+        return false
+        #endif
     }
 
     var body: some View {
@@ -60,6 +79,9 @@ struct PoolView: View {
                         if showsAlertHint {
                             OfflineAlertHintCard(onOpen: { alertHintDismissed = true; showingOfflineAlerts = true },
                                                  onDismiss: { alertHintDismissed = true })
+                        } else if showsWebHint {
+                            WebVersionHintCard(onOpen: { webHintDismissed = true; showingWebVersion = true },
+                                               onDismiss: { webHintDismissed = true })
                         }
                         // Cards: at most 2 per row, laid out by hand (an HStack per row)
                         // rather than LazyVGrid — a grid sizes each cell to its own
@@ -85,6 +107,7 @@ struct PoolView: View {
                 .animation(.snappy, value: store.watches)
                 .animation(.snappy, value: store.loading)
                 .animation(.snappy, value: showsAlertHint)
+                .animation(.snappy, value: showsWebHint)
                 .animation(.snappy, value: layout)
                 .padding(Pearl.Space.screen).frame(maxWidth: 1200).frame(maxWidth: .infinity)
             }
@@ -109,6 +132,16 @@ struct PoolView: View {
                 store.watchData[$0.id]?.found == true
             })
             .navigationDestination(isPresented: $showingOfflineAlerts) { OfflineAlertsView() }
+            .onChange(of: showsAlertHint, initial: true) { _, shown in if shown { alertHintSeen = true } }
+            .sheet(isPresented: $showingWebVersion) {
+                NavigationStack {
+                    WebVersionView()
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) { Button(Loc("完成")) { showingWebVersion = false } }
+                                .noGlassBackground()
+                        }
+                }
+            }
             .navigationDestination(item: $openWatch) { id in
                 WatchDetailView(store: store, id: id, onEdit: beginEdit,
                                 onDelete: { openWatch = nil; store.removeWatch($0.id) })
