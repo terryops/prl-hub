@@ -74,11 +74,15 @@ private func saneEH(_ eh: Double) -> Bool { eh > 1e-6 && eh < 1e6 }
 /// 这么推出来的两个数与 WhatToMine 分别差 1% 和 0%（24.68 vs 24.96 EH/s、0.02391 一致），
 /// 但难度与奖励取自链上原值、快一倍，也不依赖第三方站点继续维护这个币种。
 /// difficulty24/3/7 由整链难度序列按时间加权算出（见 averageDifficulty），与 WhatToMine 的
-/// 三个窗口实测相差均 <0.2%。返回已更新的字段名；空数组 = 这个源没用上，调用方回落。
+/// 三个窗口实测相差均 <0.2%——它们是窗口**均值**，经 applyDifficultyTrend 换成「那时的难度」。
+/// 返回已更新的字段名；空数组 = 这个源没用上，调用方回落。
 private func applyLordOfPearls(_ c: inout Config, live: Bool) async -> [String] {
+    // The Worker's 7-day block samples (the Web Market page's), fetched alongside the snapshot:
+    // 近7天 / 7天前 read the difficulty that long ago from them (applyDifficultyTrend).
+    async let history = try? SharedPublicData.shared.networkHistory(force: live)
     if let snapshot = try? await SharedPublicData.shared.overview(force: live),
        let network = snapshot.network, network.isUsable(at: Date()) {
-        return applySharedNetwork(&c, network)
+        return applySharedNetwork(&c, network, history: await history?.points ?? [])
     }
     guard !Task.isCancelled else { return [] }
     guard let s = try? await LordOfPearlsClient(live: live).publicStats(),
@@ -87,10 +91,9 @@ private func applyLordOfPearls(_ c: inout Config, live: Bool) async -> [String] 
           let nh = s.networkHashrate24h, saneEH(ehOf(nh)) else { return [] }
 
     var got = [Loc("全网算力")]
-    c.diffNow = diff
-    if let v = s.averageDifficulty(days: 1) { c.diff24 = v }
-    if let v = s.averageDifficulty(days: 3) { c.diff3  = v }
-    if let v = s.averageDifficulty(days: 7) { c.diff7  = v }
+    applyDifficultyTrend(&c, now: diff, at: Date().timeIntervalSince1970,
+                         means: (s.averageDifficulty(days: 1), s.averageDifficulty(days: 3), s.averageDifficulty(days: 7)),
+                         history: await history?.points ?? [])
     c.nethashEH = ehOf(nh)
     c.diffConst = nh / diff        // = 2^48 ÷ 出块时间，供 WhatToMine 回落时做量级校验
     if let reward = s.rewardPerBlock, reward > 0 {
@@ -101,13 +104,13 @@ private func applyLordOfPearls(_ c: inout Config, live: Bool) async -> [String] 
 }
 
 /// The calculator consumes the same chain snapshot and units as the pool table/Web.
-func applySharedNetwork(_ c: inout Config, _ network: SharedOverview.Network) -> [String] {
+func applySharedNetwork(_ c: inout Config, _ network: SharedOverview.Network,
+                        history: [SharedNetworkHistory.Point] = []) -> [String] {
     guard let diff = network.difficulty, diff > 0,
           let hash = network.hashrate, saneEH(ehOf(hash)) else { return [] }
-    c.diffNow = diff
-    if let v = network.difficulty24h, v > 0 { c.diff24 = v }
-    if let v = network.difficulty3d, v > 0 { c.diff3 = v }
-    if let v = network.difficulty7d, v > 0 { c.diff7 = v }
+    applyDifficultyTrend(&c, now: diff, at: network.ts ?? Date().timeIntervalSince1970,
+                         means: (network.difficulty24h, network.difficulty3d, network.difficulty7d),
+                         history: history)
     c.nethashEH = ehOf(hash)
     c.diffConst = hash / diff
     var got = [Loc("全网算力")]
@@ -118,6 +121,49 @@ func applySharedNetwork(_ c: inout Config, _ network: SharedOverview.Network) ->
     return got
 }
 
+/// The difficulty `window` seconds before `ts`. Every source's 24h / 3d / 7d figure — the Worker's
+/// difficulty24h/3d/7d (alerts/src/overview.js averageDifficulty), LordOfPearls' averageDifficulty,
+/// WhatToMine's difficulty24/3/7 — is a time-weighted MEAN over the window, not the difficulty that
+/// long ago: while difficulty climbs the mean sits near the window's midpoint, so reading it as the
+/// start roughly halved every change (2026-10-25: 近7天 +10.4% shown, 37.5M → 45.9M = +22.4%).
+/// Prefer the history sample nearest that time (within a twentieth of the window); without one, the
+/// start of a steady trend with that mean, 2 × mean − now (exact on a straight line). nil when
+/// neither gives a positive difficulty. Same rule as the Web's difficultyAgo (web/src/market.ts).
+func difficultyAgo(now: Double, mean: Double?, window: Double, at ts: Double,
+                   history: [SharedNetworkHistory.Point] = []) -> Double? {
+    let target = ts - window
+    if let near = history.filter({ $0.difficulty > 0 && $0.ts < ts })
+        .min(by: { abs($0.ts - target) < abs($1.ts - target) }),
+       abs(near.ts - target) <= window / 20 { return near.difficulty }
+    guard let mean, mean > 0, 2 * mean > now else { return nil }
+    return 2 * mean - now
+}
+
+/// One source's difficulty trend: the current difficulty and its 24h / 3d / 7d window means become
+/// diff24 / diff3 / diff7 = the difficulty that long ago (difficultyAgo), and the 7 days' change,
+/// linear over 30 days, the monthly growth (联网时自动填入；手动模式下用户仍可拖动覆盖；0 = 恒定).
+/// A window with neither a sample nor a mean keeps its last value; one whose mean is under half of
+/// now has no start (0, not shown) — a climb that steep is past the growth cap anyway.
+func applyDifficultyTrend(_ c: inout Config, now diff: Double, at ts: Double,
+                          means: (day: Double?, threeDays: Double?, week: Double?),
+                          history: [SharedNetworkHistory.Point] = []) {
+    c.diffNow = diff
+    let windows: [(Double, Double?, WritableKeyPath<Config, Double>)] = [
+        (86_400, means.day, \.diff24), (3 * 86_400, means.threeDays, \.diff3), (7 * 86_400, means.week, \.diff7)]
+    for (window, mean, key) in windows {
+        if let ago = difficultyAgo(now: diff, mean: mean, window: window, at: ts, history: history) {
+            c[keyPath: key] = ago
+        } else if let mean, mean > 0 {
+            c[keyPath: key] = 0
+        }
+    }
+    if c.diff7 > 0 {
+        c.diffGrowthMonthly = min(200, max(-20, (diff / c.diff7 - 1) * (30.0 / 7.0) * 100))
+    } else if let mean = means.week, mean > 0 {
+        c.diffGrowthMonthly = 200
+    }
+}
+
 /// 链上数字的回落源：WhatToMine。字段口径与上面一致，逻辑保持原样。
 private func applyWhatToMine(_ c: inout Config, _ o: [String: Any]) -> [String] {
     var got: [String] = []
@@ -125,10 +171,11 @@ private func applyWhatToMine(_ c: inout Config, _ o: [String: Any]) -> [String] 
     let diff  = num(o["difficulty24"]) ?? num(o["difficulty"])
     let nhRaw = num(o["nethash"])
 
-    if let v = num(o["difficulty"]),   v > 0 { c.diffNow = v }
-    if let v = num(o["difficulty24"]), v > 0 { c.diff24  = v }
-    if let v = num(o["difficulty3"]),  v > 0 { c.diff3   = v }
-    if let v = num(o["difficulty7"]),  v > 0 { c.diff7   = v }
+    // difficulty24/3/7 are WhatToMine's window means, like the Worker's (see difficultyAgo).
+    if let v = num(o["difficulty"]), v > 0 {
+        applyDifficultyTrend(&c, now: v, at: Date().timeIntervalSince1970,
+                             means: (num(o["difficulty24"]), num(o["difficulty3"]), num(o["difficulty7"])))
+    }
 
     var nethashHs: Double? = nil
     if let nh = nhRaw, nh > 0, saneEH(ehOf(nh)) {
@@ -162,12 +209,7 @@ func fetchLive(_ input: Config, live: Bool = true) async -> (Config, Bool, Strin
     var got = await applyLordOfPearls(&c, live: live)
     // 链上源不可达 → WhatToMine。
     if got.isEmpty, let o = await fetchWhatToMineCoin() { got = applyWhatToMine(&c, o) }
-    // 预估「难度月增长 %」：把"近7天难度趋势"(当前 vs 近7天均值，与设置页显示同口径)
-    // 线性折算到 30 天。联网时自动锁定填入；手动模式下用户仍可拖动覆盖。0 = 难度恒定。
-    if c.diffNow > 0, c.diff7 > 0 {
-        let monthly = (c.diffNow / c.diff7 - 1) * (30.0 / 7.0) * 100
-        c.diffGrowthMonthly = min(200, max(-20, monthly))
-    }
+    // 「难度月增长 %」由各源的 applyDifficultyTrend 填入（近7天的变化线性折算到 30 天）。
     // Price: the app-wide PRL price (SafeTrade, WhatToMine×BTC fallback), so the
     // monitor shows the same number as the wallet, Trade tab and widgets.
     // Count it as fetched only if it is actually fresh — offline, the manager still

@@ -289,7 +289,7 @@ struct PowerBar: View {
 /// One card under the 行情 stat row that charts the headline metrics over time:
 /// 币价 (real SafeTrade daily candles); 全网算力 MEASURED from sampled blocks (难度 × 2^48 ÷
 /// 实测出块时间 — the same series as the 全网走势 chart); 单位日产 and 难度 from the
-/// difficulty snapshots (now / 24h / 3d / 7d). Pick the metric with the segmented control.
+/// difficulty now and 24h / 3d / 7d back (applyDifficultyTrend). Pick the metric with the segmented control.
 struct MarketTrendCard: View {
     @ObservedObject var store: PRLStore
     @Binding var metric: Metric
@@ -467,7 +467,8 @@ struct MarketTrendCard: View {
         }
     }
 
-    /// 4-point trend derived from difficulty snapshots (现在 / 24h / 3天 / 7天).
+    /// 4-point trend from the difficulty now and 24h / 3天 / 7天 back (diff24/3/7 are the difficulty
+    /// at those times, not window means — see applyDifficultyTrend).
     /// 算力 ∝ 难度、单位日产 ∝ 1/难度，所以历史点 = 现值 × (diffₓ/diffNow)（inverse 时取倒数）；
     /// "现在" 点恰好等于上方卡片的数值。x = 天偏移（过去 → 0）。
     private func diffPoints(_ c: Config, base: Double, inverse: Bool) -> [HRPoint] {

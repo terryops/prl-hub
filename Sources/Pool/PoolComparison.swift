@@ -126,17 +126,60 @@ struct SharedOverview: Decodable, Sendable {
     }
 }
 
+/// `/v1/network/history?span=7d`: the service's sampled blocks over the last 7 days, the reply the
+/// Web's Market page reads. The calculator only takes each sample's time and difficulty, to read
+/// 近7天 / 7天前 against the difficulty that long ago (difficultyAgo). Samples without both are
+/// skipped; an unreadable reply has none, and the window means stand in.
+struct SharedNetworkHistory: Decodable, Sendable {
+    struct Point: Decodable, Sendable {
+        let ts: Double
+        let difficulty: Double
+        init(ts: Double, difficulty: Double) { self.ts = ts; self.difficulty = difficulty }
+    }
+    let points: [Point]
+
+    init(points: [Point]) { self.points = points }
+
+    private enum CodingKeys: String, CodingKey { case points }
+    private struct Wire: Decodable { let ts: Double?; let difficulty: Double? }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let wire = (try? c.decode([Wire?].self, forKey: .points)) ?? []
+        points = wire.compactMap { w in
+            guard let ts = w?.ts, ts > 0, let d = w?.difficulty, d > 0, d.isFinite else { return nil }
+            return Point(ts: ts, difficulty: d)
+        }
+    }
+}
+
 /// Pool overview and the calculator share one request and a five-minute cache.
 /// An explicit refresh bypasses the local TTL, while the service controls upstream polling.
+/// The 7-day network history has its own request and cache, same rules.
 actor SharedPublicData {
     static let shared = SharedPublicData()
     private let load: @Sendable () async throws -> SharedOverview
+    private let loadHistory: @Sendable () async throws -> SharedNetworkHistory
     private var cached: SharedOverview?
     private var fetchedAt: Date?
     private var inFlight: Task<SharedOverview, Error>?
+    private var history: (value: SharedNetworkHistory, at: Date)?
+    private var historyInFlight: Task<SharedNetworkHistory, Error>?
 
-    init(load: @escaping @Sendable () async throws -> SharedOverview = { try await SharedPublicData.fetch() }) {
+    init(load: @escaping @Sendable () async throws -> SharedOverview = { try await SharedPublicData.fetch() },
+         loadHistory: @escaping @Sendable () async throws -> SharedNetworkHistory = { try await SharedPublicData.fetchHistory() }) {
         self.load = load
+        self.loadHistory = loadHistory
+    }
+
+    func networkHistory(force: Bool = false, at date: Date = Date()) async throws -> SharedNetworkHistory {
+        if !force, let history, date.timeIntervalSince(history.at) < 300 { return history.value }
+        if let historyInFlight { return try await historyInFlight.value }
+        let task = Task { try await loadHistory() }
+        historyInFlight = task
+        defer { historyInFlight = nil }
+        let value = try await task.value
+        history = (value, date)
+        return value
     }
 
     func overview(force: Bool = false, at date: Date = Date()) async throws -> SharedOverview {
@@ -167,6 +210,18 @@ actor SharedPublicData {
             throw URLError(.badServerResponse)
         }
         return try JSONDecoder().decode(SharedOverview.self, from: data)
+    }
+
+    private static func fetchHistory() async throws -> SharedNetworkHistory {
+        var request = URLRequest(url: URL(string: "https://pearlhub.net/v1/network/history?span=7d")!)
+        request.timeoutInterval = 12
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 2_000_000 else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(SharedNetworkHistory.self, from: data)
     }
 }
 

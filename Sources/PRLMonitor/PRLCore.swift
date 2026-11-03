@@ -48,7 +48,7 @@ struct Config {
     var diffGrowthMonthly: Double = 0   // 难度(全网算力)月增长 %，0=恒定
     var diffConst: Double = 2.177e12    // 难度→算力 常数 (nethash ÷ difficulty24)
     var syncWPerTH: Double = 1.8        // 矿池同步设备的能效假设：每 TH/s(=1 Pearl) 多少瓦（用于估电费）
-    // 难度趋势快照（联网刷新，仅供查看，不参与算力推导；0=未知）
+    // 难度趋势：现在与 24h / 3天 / 7天前的难度（联网刷新，不是窗口均值，见 applyDifficultyTrend；仅供查看，不参与算力推导；0=未知）
     var diffNow: Double = 0, diff24: Double = 0, diff3: Double = 0, diff7: Double = 0
 }
 extension Config {

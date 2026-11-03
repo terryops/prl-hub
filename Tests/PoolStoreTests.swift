@@ -46,9 +46,11 @@ struct SharedPublicDataTests {
         #expect(config.nethashEH == 5)
         #expect(config.perUnit == 0.02)
         #expect(config.diffNow == 1000)
-        #expect(config.diff24 == 950)
-        #expect(config.diff3 == 900)
-        #expect(config.diff7 == 800)
+        // The snapshot's 950 / 900 / 800 are window means: each start is 2 × mean − now.
+        #expect(config.diff24 == 900)
+        #expect(config.diff3 == 800)
+        #expect(config.diff7 == 600)
+        #expect(config.diffGrowthMonthly == 200)
     }
 
     @Test func sharedRowsKeepPersonalSettlementObservationsLocal() throws {
