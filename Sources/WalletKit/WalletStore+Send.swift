@@ -118,7 +118,8 @@ extension WalletStore {
                 }
                 let sweep = try await sweepConverge(mnemonic: mnemonic, dir: dir, net: net, to: recipient,
                                                     amountSat: startSat, totalSat: totalInputSat,
-                                                    feePerKB: fee, utxosJSON: utxosJSON)
+                                                    feePerKB: fee, utxosJSON: utxosJSON,
+                                                    session: session, cancelled: Loc("钱包或网络已切换，已取消本次转账"))
                 hex = sweep.hex
                 paidSat = sweep.amountSat
             } else {

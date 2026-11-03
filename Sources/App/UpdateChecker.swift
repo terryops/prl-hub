@@ -44,7 +44,7 @@ final class UpdateChecker: ObservableObject {
     func checkIfDue() async {
         let d = UserDefaults.standard
         let now = Date().timeIntervalSince1970
-        guard !checking, now - d.double(forKey: Self.checkedKey) >= Self.interval else { return }
+        guard !checking, Self.isDue(lastChecked: d.double(forKey: Self.checkedKey), now: now) else { return }
         checking = true
         defer { checking = false }
         // A failed lookup leaves the stamp alone, so the next foreground tries again.
@@ -53,6 +53,12 @@ final class UpdateChecker: ObservableObject {
         d.set(found.version, forKey: Self.latestKey)
         d.set(found.minOS, forKey: Self.minOSKey)
         recompute()
+    }
+
+    /// Six hours since the last answer. A stamp from the future means the clock was set back:
+    /// check now rather than wait for the clock to catch up with it.
+    static func isDue(lastChecked: TimeInterval, now: TimeInterval) -> Bool {
+        lastChecked > now || now - lastChecked >= interval
     }
 
     func dismiss() {

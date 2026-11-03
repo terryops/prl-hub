@@ -64,6 +64,8 @@ enum WidgetBridge {
         // Only new figures move the freshness stamp: a rename or language switch re-publishes
         // the same (possibly hours-old) balance, which must not read as just refreshed.
         if dataChanged { s.updatedAt = now }
+        // An in-flight widget balance fetch started before this write must not land on it.
+        s.walletRev = (s.walletRev ?? 0) &+ 1
         WidgetStore.save(s)
         if dataChanged || labelsChanged { reloadHome() }
     }
@@ -80,29 +82,26 @@ enum WidgetBridge {
         s.changePRL = 0
         s.recentTx = []
         s.walletAt = nil
+        s.walletRev = (s.walletRev ?? 0) &+ 1
         WidgetStore.save(s)
         reloadHome()
     }
 
-    /// Pool store refreshed — replace the full set of watches (empty clears mining).
-    static func updatePools(_ pools: [WidgetPool]) {
-        var s = WidgetStore.load()
+    /// Pool store published its watches — the full set (empty clears mining). `current`: the
+    /// indices whose figures were just read (nil = all of them); the rest keep what the widget
+    /// already shows for that target. See `WidgetSnapshot.publishAppPools`.
+    static func updatePools(_ pools: [WidgetPool], current: Set<Int>? = nil) {
         let now = Date()
-        if s.pools == pools {
-            // Unchanged: only keep the "just published" stamp current (no reload).
-            guard isStale(s.poolsAt, now: now) else { return }
-            let wasStale = isStale(s.poolsAt, now: now, maxAge: WidgetMarketQuote.staleAfter)
-            s.poolsAt = now
-            WidgetStore.save(s)
-            if wasStale { reloadQuoteMining() }
-            return
+        var result = WidgetSnapshot.PoolsPublish.unchanged
+        WidgetStore.update { s in
+            result = s.publishAppPools(pools, current: current ?? Set(pools.indices), now: now)
+            return result != .unchanged
         }
-        s.pools = pools
-        s.poolsAt = now
-        s.updatedAt = now
-        WidgetStore.save(s)
-        reloadHome()
-        reloadQuoteMining()
+        switch result {
+        case .unchanged: break
+        case .restamp(let reloadQuote): if reloadQuote { reloadQuoteMining() }
+        case .changed: reloadHome(); reloadQuoteMining()
+        }
     }
 
     /// A fresh PRL price (only overwrites with a good value, never 0/unknown).
@@ -111,15 +110,8 @@ enum WidgetBridge {
     /// currency comes from `updateFiat`.
     static func updatePrice(prlUsd: Double?, prlUsdAt: Date? = nil) {
         var s = WidgetStore.load()
-        var changed = false
-        if let v = prlUsd, v > 0, v != s.prlUsd { s.prlUsd = v; changed = true }
-        let restamp = prlUsdAt.map { at in (prlUsd ?? 0) > 0 && at > (s.prlUsdAt ?? .distantPast) } ?? false
-        if restamp { s.prlUsdAt = prlUsdAt }
-        // A price written without its fetch time (e.g. a disk-cached one) must not
-        // inherit the previous value's fresh stamp — widgets would reuse it as new.
-        else if changed, prlUsdAt == nil, s.prlUsdAt != nil { s.prlUsdAt = nil }
+        let (changed, restamp) = s.publishAppPrice(prlUsd, at: prlUsdAt, now: Date())
         guard changed || restamp else { return }
-        if changed { s.updatedAt = Date() }
         WidgetStore.save(s)
         guard changed else { return }            // unchanged price → no reload (15–60 s polls)
         reloadLock()
@@ -132,7 +124,7 @@ enum WidgetBridge {
         var s = WidgetStore.load()
         let before = s
         guard s.applyMarketQuote(quote) else { return }
-        if before.prlUsd != s.prlUsd { s.updatedAt = max(s.updatedAt, quote.at) }
+        if before.prlUsd != s.prlUsd { s.updatedAt = max(valid(s.updatedAt) ?? .distantPast, quote.at) }
         WidgetStore.save(s)
         if before.marketQuote?.isFresh(maxAge: WidgetMarketQuote.staleAfter) != true
             || before.marketQuote?.change1h != quote.change1h
@@ -181,9 +173,22 @@ enum WidgetBridge {
         return true
     }
 
-    /// No stamp, or one at least `maxAge` old.
+    /// No stamp, one at least `maxAge` old, or one from the future (see `valid`).
     nonisolated static func isStale(_ at: Date?, now: Date, maxAge: TimeInterval = restampAfter) -> Bool {
-        at.map { now.timeIntervalSince($0) >= maxAge } ?? true
+        valid(at, now: now).map { now.timeIntervalSince($0) >= maxAge } ?? true
+    }
+
+    /// How far ahead of the clock a stamp may sit (a server timestamp a little ahead of
+    /// ours, an NTP nudge) and still count.
+    nonisolated static let clockSkew: TimeInterval = 60
+
+    /// The stamp, unless it lies further in the future than `clockSkew` — which only
+    /// happens when the clock was set back after it was written. Such a stamp would read
+    /// as "just now" until the clock caught up: every refresh skipped as unnecessary and
+    /// every newer figure rejected as older.
+    nonisolated static func valid(_ at: Date?, now: Date = Date()) -> Date? {
+        guard let at, at.timeIntervalSince(now) <= clockSkew else { return nil }
+        return at
     }
 
     // MARK: reloads
@@ -240,7 +245,9 @@ struct WidgetReloadThrottle {
 
     mutating func request(at now: Date) -> Action {
         if pending != nil { return .none }
-        if let last, now.timeIntervalSince(last) < interval {
+        // `now < last`: the clock was set back. Waiting for `last + interval` could take
+        // days, and every request until then would coalesce into that one reload.
+        if let last, now >= last, now.timeIntervalSince(last) < interval {
             let at = last.addingTimeInterval(interval)
             pending = at
             return .schedule(at: at)
@@ -253,5 +260,28 @@ struct WidgetReloadThrottle {
     mutating func fire(at now: Date) {
         pending = nil
         last = now
+    }
+}
+
+extension WidgetSnapshot {
+    /// The app's spot price. `at` is its fetch time; pass it only for a genuinely fresh value.
+    /// A price without one (a mirror of the app's cached value) never replaces a stamped price —
+    /// it may be older than one a widget fetched since — and never inherits that stamp either.
+    mutating func publishAppPrice(_ usd: Double?, at: Date?, now: Date) -> (changed: Bool, restamp: Bool) {
+        guard let v = usd, v.isFinite, v > 0 else { return (false, false) }
+        let stamped = WidgetBridge.valid(prlUsdAt, now: max(now, at ?? now))
+        guard let at else {
+            guard stamped == nil, v != prlUsd else { return (false, false) }
+            prlUsd = v
+            prlUsdAt = nil
+            updatedAt = now
+            return (true, false)
+        }
+        guard at > (stamped ?? .distantPast) else { return (false, false) }
+        let changed = v != prlUsd
+        prlUsd = v
+        prlUsdAt = at
+        if changed { updatedAt = now }
+        return (changed, true)
     }
 }

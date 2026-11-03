@@ -214,6 +214,24 @@ struct BlockbookClient {
         guard let s, let v = Decimal(string: s) else { return 0 }
         return v / pow(Decimal(10), decimals)
     }
+
+    /// A balance as Blockbook sends it — an integer count of grains, in a string. nil for
+    /// anything else: `Decimal(string:)` alone reads "12abc" as 12 and "" or "abc" as 0, which
+    /// would show a real-looking balance (and publish it to the widget) from a garbled answer.
+    static func strictPRL(_ s: String) -> Decimal? {
+        guard s.range(of: #"^-?[0-9]+$"#, options: .regularExpression) != nil,
+              let v = Decimal(string: s) else { return nil }
+        return v / pow(Decimal(10), decimals)
+    }
+
+    /// Confirmed + mempool delta of an `/xpub/` answer; nil if either is malformed (a
+    /// missing mempool delta is 0).
+    private static func balances(_ r: XpubResponse) -> (confirmed: Decimal, unconfirmed: Decimal)? {
+        guard let confirmed = r.balance.flatMap(strictPRL) else { return nil }
+        guard let raw = r.unconfirmedBalance else { return (confirmed, 0) }
+        guard let unconfirmed = strictPRL(raw) else { return nil }
+        return (confirmed, unconfirmed)
+    }
     private static func prlSum(_ values: [String?]) -> Decimal {
         let u = values.compactMap { $0 }.reduce(Decimal(0)) { $0 + (Decimal(string: $1) ?? 0) }
         return u / pow(Decimal(10), decimals)
@@ -233,8 +251,8 @@ struct BlockbookClient {
     func summaryFrom(xpub: String) async throws -> (summary: XpubSummary, base: String) {
         let r = try await fetch("/api/v2/xpub/\(xpub)?details=basic", timeout: 25, session: session) { d in
             let r = try JSONDecoder().decode(XpubResponse.self, from: d)
-            guard let balance = r.balance else { throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "no balance")) }
-            return XpubSummary(confirmed: Self.prl(balance), unconfirmed: Self.prl(r.unconfirmedBalance),
+            guard let b = Self.balances(r) else { throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "no balance")) }
+            return XpubSummary(confirmed: b.confirmed, unconfirmed: b.unconfirmed,
                                txCount: r.txs ?? 0, unconfirmedTxs: r.unconfirmedTxs ?? 0)
         }
         return (r.value, r.base)
@@ -249,10 +267,10 @@ struct BlockbookClient {
     /// displayed "sent" amount from counting our own change as money paid to others.
     func account(xpub: String, page: Int = 1, pageSize: Int = 10, knownChange: Set<String> = []) async throws -> XpubAccount {
         let r = try await get("/api/v2/xpub/\(xpub)?details=txs&tokens=used&page=\(page)&pageSize=\(pageSize)", as: XpubResponse.self)
-        guard let balance = r.balance else { throw URLError(.cannotParseResponse) }
+        guard let b = Self.balances(r) else { throw URLError(.cannotParseResponse) }
         let addresses = Set((r.tokens ?? []).compactMap { $0.name })
-        return XpubAccount(confirmed: Self.prl(balance),
-                           unconfirmed: Self.prl(r.unconfirmedBalance),
+        return XpubAccount(confirmed: b.confirmed,
+                           unconfirmed: b.unconfirmed,
                            txs: Self.mapTxs(r.transactions ?? [], mine: addresses.union(knownChange)),
                            addresses: addresses,
                            hasMorePages: (r.page ?? 1) < (r.totalPages ?? 1))

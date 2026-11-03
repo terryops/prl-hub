@@ -241,6 +241,26 @@ final class PriceAlertStore: ObservableObject {
         didSet { if unsynced != oldValue { defaults.set(unsynced, forKey: Self.unsyncedKey) } }
     }
     private var syncTask: Task<Void, Never>?
+    /// The last request queued for the worker (`inOrder`). Requests go out one at a
+    /// time: a PUT whose reply hasn't come back may already be on the worker, so the
+    /// next PUT — or the DELETE of a rotated token's record — waits for it instead of
+    /// overtaking it. (Cancelling a request only stops listening; it isn't unsent.)
+    private var lastRequest: Task<Void, Never>?
+    /// A sync waits its turn in `inOrder`; it sends whatever is current once it runs,
+    /// so one waiting is enough.
+    private var syncQueued = false
+    private var forgetQueued = false
+    /// Bumped as each PUT starts: a GET sent before it describes an older record.
+    private var puts = 0
+    /// Rotated-away APNs tokens whose record the worker still has to forget. Kept
+    /// (across launches) until a DELETE gets an answer.
+    private static let staleTokensKey = "alerts.staleTokens"
+    private var staleTokens: [String] {
+        didSet { if staleTokens != oldValue { defaults.set(staleTokens, forKey: Self.staleTokensKey) } }
+    }
+    /// How requests reach the worker: through the account session (WebLinkStore).
+    /// Swapped for a fake in tests.
+    var transport: @MainActor (URLRequest) async throws -> (Data, URLResponse) = { try await WebLinkStore.shared.data(for: $0) }
     private var windowPushTask: Task<Void, Never>?
     /// Bumped on every local edit. A server reply is only adopted if no edit
     /// happened while it was in flight — otherwise a slow reply (e.g. a GET that
@@ -265,6 +285,7 @@ final class PriceAlertStore: ObservableObject {
         window = Self.savedWindow(defaults)
         pushHere = d.object(forKey: Self.pushHereKey) as? Bool ?? true
         unsynced = d.bool(forKey: Self.unsyncedKey)
+        staleTokens = d.stringArray(forKey: Self.staleTokensKey) ?? []
         if d.data(forKey: Self.syncKey) == nil {
             // Rules saved before iCloud sync: stage them as this device's iCloud copy, so
             // CloudSync.start uploads them if iCloud has none yet — or, if another device
@@ -495,6 +516,7 @@ final class PriceAlertStore: ObservableObject {
     /// Launch hook: re-register if the user has alerts. Never prompts — the rules may
     /// have come from another device; the alerts page asks.
     func launch() {
+        forgetStaleTokens()
         if hasContent, ProStore.shared.isPro, pushHere { Task { await ensureRegistered(prompt: false) } }
         else if unsynced { scheduleSync() }   // e.g. the last alert was removed while offline
     }
@@ -509,9 +531,13 @@ final class PriceAlertStore: ObservableObject {
     func didRegister(tokenData: Data) {
         let hex = tokenData.map { String(format: "%02x", $0) }.joined()
         let changed = token != hex
-        if let old = token, changed { forget(token: old) }
+        // The old token's record is forgotten once any request to it has been answered.
+        // A token the system hands back again (A → B → A) is current, never forgotten.
+        if let old = token, changed, !staleTokens.contains(old) { staleTokens.append(old) }
+        staleTokens.removeAll { $0 == hex }
         token = hex
         defaults.set(hex, forKey: Self.tokenKey)
+        forgetStaleTokens()
         // Only a new token needs sending: with the old one still valid, ensureRegistered has
         // already scheduled the sync it wanted. Syncing here as well sent every change twice
         // whenever the system answered late — and switching a dozen 掉线提醒 monitors in a
@@ -526,6 +552,7 @@ final class PriceAlertStore: ObservableObject {
     /// Foreground hook: pick up a permission change made in system Settings and
     /// retry a sync that failed earlier (e.g. offline when a rule was added).
     func foreground() {
+        forgetStaleTokens()
         guard hasContent, ProStore.shared.isPro, pushHere else {
             if unsynced { scheduleSync() }   // nothing left here, but the worker hasn't heard
             return
@@ -552,9 +579,26 @@ final class PriceAlertStore: ObservableObject {
         syncTask = Task { [weak self] in
             // Coalesce bursts (toggling several rules in a row) into one PUT.
             try? await Task.sleep(nanoseconds: 400_000_000)
-            guard !Task.isCancelled else { return }
-            await self?.sync()
+            guard !Task.isCancelled, let self, !self.syncQueued else { return }
+            self.syncQueued = true
+            await self.inOrder { store in
+                store.syncQueued = false
+                await store.sync()
+            }
         }
+    }
+
+    /// Run `request` once everything queued before it has been answered (or has failed).
+    /// Not cancellable: once its turn comes, it is sent and its reply awaited.
+    private func inOrder(_ request: @escaping @MainActor @Sendable (PriceAlertStore) async -> Void) async {
+        let previous = lastRequest
+        let task = Task { @MainActor [weak self] in
+            await previous?.value
+            guard let self else { return }
+            await request(self)
+        }
+        lastRequest = task
+        await task.value
     }
 
     /// What goes to the worker: live alerts first, so the cap never drops one of
@@ -593,9 +637,12 @@ final class PriceAlertStore: ObservableObject {
         return body
     }
 
-    func sync() async {
+    /// Send the device record now. Called through `inOrder` (scheduleSync, sendTest), so
+    /// it never overlaps another request to the worker.
+    private func sync() async {
         guard let token else { return }
         syncState = .syncing
+        puts += 1
         let sent = localVersion
         let tz = TimeZone.current.identifier
         let body = Self.registrationBody(
@@ -609,7 +656,7 @@ final class PriceAlertStore: ObservableObject {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
         do {
-            let (data, resp) = try await WebLinkStore.shared.data(for: req)
+            let (data, resp) = try await transport(req)
             guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
                 syncState = .failed(Loc("服务器暂时不可用，稍后自动重试"))
                 return
@@ -630,12 +677,13 @@ final class PriceAlertStore: ObservableObject {
     /// picks up alerts that fired (and so switched themselves off) meanwhile.
     func refresh() async {
         guard let token, ProStore.shared.isPro, pushHere, hasContent, syncState != .syncing else { return }
-        let asked = localVersion
+        let asked = localVersion, putsBefore = puts
         var req = URLRequest(url: Self.endpoint.appendingPathComponent("devices/\(token)"))
         req.timeoutInterval = 10
-        guard let (data, resp) = try? await WebLinkStore.shared.data(for: req),
+        // A PUT that started meanwhile has replied (or will) with a newer record.
+        guard let (data, resp) = try? await transport(req),
               (resp as? HTTPURLResponse)?.statusCode == 200,
-              asked == localVersion, syncState != .syncing else { return }
+              asked == localVersion, putsBefore == puts, syncState != .syncing else { return }
         adoptServerState(data, fromPut: false)
     }
 
@@ -670,22 +718,48 @@ final class PriceAlertStore: ObservableObject {
         if behind && (!fromPut || firedMore) { scheduleSync() }
     }
 
-    /// A rotated token: drop the stale server record so it doesn't linger.
-    private func forget(token old: String) {
-        var req = URLRequest(url: Self.endpoint.appendingPathComponent("devices/\(old)"))
-        req.httpMethod = "DELETE"
-        Task { _ = try? await WebLinkStore.shared.data(for: req) }
+    /// Rotated tokens: drop their stale server records so they don't linger — after any
+    /// request to them still in flight, and again at the next launch or foreground if the
+    /// worker couldn't be reached.
+    private func forgetStaleTokens() {
+        guard !forgetQueued, staleTokens.contains(where: { $0 != token }) else { return }
+        forgetQueued = true
+        Task {
+            await inOrder { store in
+                store.forgetQueued = false
+                await store.deleteStaleTokens()
+            }
+        }
+    }
+
+    private func deleteStaleTokens() async {
+        var tried: Set<String> = []
+        // Re-read after every request: a rotation while one was out adds (or, A → B → A,
+        // takes back) a token.
+        while let old = staleTokens.first(where: { $0 != token && !tried.contains($0) }) {
+            tried.insert(old)
+            var req = URLRequest(url: Self.endpoint.appendingPathComponent("devices/\(old)"))
+            req.httpMethod = "DELETE"
+            req.timeoutInterval = 15
+            // Offline, or the worker in trouble: try again later. Any other answer (done,
+            // already gone, not this account's record) is final.
+            guard let (_, resp) = try? await transport(req), let code = (resp as? HTTPURLResponse)?.statusCode,
+                  code < 500, code != 429 else { continue }
+            staleTokens.removeAll { $0 == old }
+        }
+        staleTokens.removeAll { $0 == token }
     }
 
     enum TestResult { case sent, failed(String) }
 
     func sendTest() async -> TestResult {
         guard let token else { return .failed(Loc("尚未获得推送权限")) }
-        await sync()   // make sure the worker knows this device before asking it to push
+        // Make sure the worker knows this device before asking it to push.
+        await inOrder { await $0.sync() }
         var req = URLRequest(url: Self.endpoint.appendingPathComponent("devices/\(token)/test"))
         req.httpMethod = "POST"
         req.timeoutInterval = 15
-        guard let (_, resp) = try? await WebLinkStore.shared.data(for: req),
+        guard let (_, resp) = try? await transport(req),
               let code = (resp as? HTTPURLResponse)?.statusCode else {
             return .failed(Loc("无法连接提醒服务器，请检查网络"))
         }

@@ -37,14 +37,11 @@ struct QuoteMiningLockProvider: TimelineProvider {
             }
             let (usd, pools) = await (usdFetch, poolFetch)
             let now = Date()
-            var snap = WidgetStore.load()
-            var changed = snap.applyPoolRefresh(pools, from: initial, at: now)
-            if let usd, usd.at > (snap.prlUsdAt ?? .distantPast) {
-                snap.prlUsd = usd.usd
-                snap.prlUsdAt = usd.at
-                changed = true
+            let snap = WidgetStore.update { s in
+                let pooled = s.applyPoolRefresh(pools, from: initial, at: now)
+                let priced = usd.map { s.applyPrice($0, now: now) } ?? false
+                return pooled || priced
             }
-            if changed { WidgetStore.save(snap) }
 
             // Price and mining have independent clocks: one successful fetch
             // must not make the other source's old figures look current.
@@ -68,8 +65,9 @@ struct QuoteMiningLockView: View {
     private var locale: Locale { widgetLocale(entry.snap.languageCode) }
     private var priceStale: Bool { stale(entry.snap.prlUsdAt) }
     private var poolsStale: Bool { stale(entry.snap.poolsAt) }
+    // A stamp from the future (clock set back since) is no evidence of fresh figures.
     private func stale(_ stamp: Date?) -> Bool {
-        stamp.map { entry.date.timeIntervalSince($0) >= WidgetMarketQuote.staleAfter } ?? true
+        WidgetBridge.isStale(stamp, now: entry.date, maxAge: WidgetMarketQuote.staleAfter)
     }
     private func loc(_ key: String) -> String { WLoc(key, entry.snap.languageCode) }
 

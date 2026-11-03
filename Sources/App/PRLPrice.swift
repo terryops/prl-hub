@@ -51,9 +51,10 @@ final class PRLPriceManager: ObservableObject {
         return NSDecimalNumber(decimal: prl).doubleValue * usd
     }
 
-    /// Fetch only when we've never fetched or the cache is older than `maxAge`.
+    /// Fetch only when we've never fetched or the cache is older than `maxAge`. A stamp
+    /// from the future (the clock was set back) counts as stale, not as fresh forever.
     func refreshIfStale() async {
-        if let at = lastUpdated, Date().timeIntervalSince(at) < Self.maxAge, usd != nil { return }
+        if let at = lastUpdated, (0..<Self.maxAge).contains(Date().timeIntervalSince(at)), usd != nil { return }
         await refresh()
     }
 

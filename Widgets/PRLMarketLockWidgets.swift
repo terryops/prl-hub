@@ -49,8 +49,7 @@ struct MarketLockProvider: TimelineProvider {
         nonisolated(unsafe) let completion = completion
         Task {
             let quote = await WidgetFetch.sharedMarketQuote(WidgetStore.load())
-            var snap = WidgetStore.load()
-            if let quote, snap.applyMarketQuote(quote) { WidgetStore.save(snap) }
+            let snap = WidgetStore.update { s in quote.map { s.applyMarketQuote($0) } ?? false }
             let now = Date()
             var dates = [now]
             // Fade an old quote on time even if WidgetKit defers the next fetch.
@@ -85,7 +84,8 @@ struct MarketLockView: View {
     private var locale: Locale { widgetLocale(entry.snap.languageCode) }
     private var price: String { priceLine(entry.snap) ?? "—" }
     private var stamp: Date? { entry.snap.marketQuote?.at ?? entry.snap.prlUsdAt }
-    private var stale: Bool { stamp.map { entry.date.timeIntervalSince($0) >= WidgetMarketQuote.staleAfter } ?? true }
+    // A stamp from the future (clock set back since) is no evidence of a fresh quote.
+    private var stale: Bool { WidgetBridge.isStale(stamp, now: entry.date, maxAge: WidgetMarketQuote.staleAfter) }
     private var change: Double? { metric.change(in: entry.snap) }
     private func percent(_ value: Double?, decimals: Int = 2) -> String {
         WidgetPriceChange.text(value, locale: locale, decimals: decimals)

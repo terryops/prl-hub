@@ -45,13 +45,8 @@ struct LockProvider: TimelineProvider {
         nonisolated(unsafe) let completion = completion
         Task {
             let usd = await WidgetFetch.sharedPrlUsd(WidgetStore.load())
-            var snap = WidgetStore.load()
-            if let usd, usd.at > (snap.prlUsdAt ?? .distantPast) {
-                snap.prlUsd = usd.usd
-                // Share a price it fetched itself, so the app / home widget can reuse it.
-                snap.prlUsdAt = usd.at
-                WidgetStore.save(snap)
-            }
+            // Share a price it fetched itself, so the app / home widget can reuse it.
+            let snap = WidgetStore.update { s in usd.map { s.applyPrice($0) } ?? false }
 
             // One entry now, plus one at each of the next two midnights, so the date flips on
             // time even when the system defers the next reload (overnight, low budget). Price is

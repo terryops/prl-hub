@@ -302,7 +302,7 @@ final class WebLinkStore: NSObject, ObservableObject, ASWebAuthenticationPresent
 
     // MARK: sync
 
-    private enum Failure: Error { case network, server, refused, tooLarge, conflict, requiresPro }
+    enum Failure: Error { case network, server, refused, tooLarge, conflict, requiresPro }
 
     func sync(full: Bool = true) async {
         guard let code = credentials?.userId else { return }
@@ -312,16 +312,20 @@ final class WebLinkStore: NSObject, ObservableObject, ASWebAuthenticationPresent
             running = false
             if again { again = false; localChanged() }
         }
+        // This session's sync. Signing out and back in — even to the same account — starts
+        // another session, and nothing from this one may land on it: an in-flight request
+        // of the old one fails as `.refused`, which is no reason to say the login expired.
+        let at = generation
         state = .syncing
         do {
             try await syncPro(code, full: full)
-            guard credentials?.userId == code else { return }
+            guard at == generation, credentials?.userId == code else { return }
             if full { await keepTicket() }
             guard accountPro == true else { state = .idle; return }
             try await syncConfig(code)
-            if credentials?.userId == code { state = .synced(Date()) }
+            if at == generation, credentials?.userId == code { state = .synced(Date()) }
         } catch {
-            guard credentials?.userId == code else { return }
+            guard at == generation, credentials?.userId == code else { return }
             switch error as? Failure {
             case .requiresPro:
                 if var current = credentials {
@@ -354,8 +358,14 @@ final class WebLinkStore: NSObject, ObservableObject, ASWebAuthenticationPresent
             // An unavailable route or a receipt already linked to another account leaves
             // the account entitlement unchanged. Offer Apple purchases even when
             // PRL already provides Pro so the independent sources stay linked.
-            if let o = try? await call(code, "account/entitlements/apple", method: "POST", body: ["jws": jws]) {
+            do {
+                let o = try await call(code, "account/entitlements/apple", method: "POST", body: ["jws": jws])
                 pro = o["pro"] as? Bool ?? pro
+            } catch {
+                // Only the worker's verdict waits `offerEvery`. One that never came (offline,
+                // a 5xx) is offered again on the next sync, or the account would miss a
+                // purchase for an hour after a single dropped request.
+                if !Self.offerAnswered(error) { offered = nil }
             }
         }
         guard at == generation, var current = credentials, current.userId == code else { return }
@@ -364,6 +374,13 @@ final class WebLinkStore: NSObject, ObservableObject, ASWebAuthenticationPresent
         credentials = current; accountPro = pro
         ProStore.shared.updateAccount(code, verifiedPro: pro)
         proNeedsRefresh = ProStore.shared.jws != jws
+    }
+
+    /// Whether an offered purchase got the worker's answer (taken, or refused: a bad or
+    /// revoked receipt, one linked to another account, a sign-in that isn't fresh enough).
+    nonisolated static func offerAnswered(_ error: Error) -> Bool {
+        guard let failure = error as? Failure else { return false }
+        return failure != .network && failure != .server
     }
 
     private func syncConfig(_ code: String) async throws {

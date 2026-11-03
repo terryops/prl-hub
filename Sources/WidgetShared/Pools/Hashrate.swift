@@ -22,7 +22,8 @@ func parseHashrate(_ s: String) -> Double {
     // Strip grouping separators ("1,234.56 TH/s") before parsing so a comma-grouped
     // value isn't silently treated as 0.
     let numStr = String(parts.first ?? "").replacingOccurrences(of: ",", with: "")
-    guard let v = Double(numStr) else { return 0 }
+    // "nan" / "inf" parse as Doubles; a negative rate is no rate. Neither may reach a total.
+    guard let v = Double(numStr), v.isFinite, v >= 0 else { return 0 }
     let unit = (parts.count > 1 ? String(parts[1]) : "H/s").uppercased()
     let mult: [String: Double] = ["EH/S": 1e18, "PH/S": 1e15, "TH/S": 1e12,
                                   "GH/S": 1e9, "MH/S": 1e6, "KH/S": 1e3, "H/S": 1]
@@ -38,14 +39,14 @@ extension Double {
 /// Pool APIs are inconsistent about JSON types — amounts and timestamps arrive as strings in
 /// one field and numbers in its sibling, sometimes within one response, and F2Pool renders
 /// money with grouping commas ("1,234.5"). Decode any of those to a Double; anything else
-/// (null, an object) reads as 0 rather than failing the whole payload.
+/// (null, an object, "nan" / "inf") reads as 0 rather than failing the whole payload.
 struct FlexDouble: Decodable, Sendable {
     let value: Double
     init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
         if let d = try? c.decode(Double.self) { value = d }
         else if let s = try? c.decode(String.self),
-                let d = Double(s.replacingOccurrences(of: ",", with: "")) { value = d }
+                let d = Double(s.replacingOccurrences(of: ",", with: "")), d.isFinite { value = d }
         else { value = 0 }
     }
 }

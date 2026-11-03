@@ -160,8 +160,9 @@ final class PoolStore: ObservableObject {
         watches.append(w); saveWatches()
         Task {
             async let income: Void = fetchOnchainIncome(force: false)
-            adopt(await fetchWatchData(w), for: w)
+            let read = adopt(await fetchWatchData(w), for: w)
             await income
+            pushWidgetSnapshot(fresh: read ? [w.id] : [])
         }
     }
 
@@ -171,6 +172,7 @@ final class PoolStore: ObservableObject {
         pruneOnchain()
         OfflineAlertStore.shared.forget(id)
         saveWatches()
+        pushWidgetSnapshot()   // drop it from the widget now, not at the next refresh
     }
 
     /// Reorder a watch during a drag (drag-to-reorder “我的监控”). The move itself is live
@@ -213,9 +215,9 @@ final class PoolStore: ObservableObject {
             let w = watches[i]
             Task {
                 async let income: Void = fetchOnchainIncome(force: false)
-                adopt(await fetchWatchData(w), for: w)
+                let read = adopt(await fetchWatchData(w), for: w)
                 await income
-                pushWidgetSnapshot()
+                pushWidgetSnapshot(fresh: read ? [w.id] : [])
             }
         } else {
             watchData[id] = nil
@@ -231,6 +233,7 @@ final class PoolStore: ObservableObject {
         let trimmed = alias.trimmingCharacters(in: .whitespacesAndNewlines)
         watches[i].alias = trimmed.isEmpty ? nil : trimmed
         saveWatches()
+        pushWidgetSnapshot()   // the new name only; the figures stay as the widget has them
     }
 
     /// Edit an existing watch's pool / address / alias in place — for when a miner
@@ -248,14 +251,18 @@ final class PoolStore: ObservableObject {
         let trimmed = alias.trimmingCharacters(in: .whitespacesAndNewlines)
         watches[i].alias = trimmed.isEmpty ? nil : trimmed
         saveWatches()
-        guard changed else { return }   // alias-only edit: keep the cached data
+        guard changed else { pushWidgetSnapshot(); return }   // alias-only edit: keep the cached data
         watchData[id] = nil
         pruneOnchain()
+        // Re-pointed: the widget drops the old target's figures at once (the new one reads
+        // "—" until its first fetch lands) instead of showing them until the next refresh.
+        pushWidgetSnapshot()
         let w = watches[i]
         Task {
             async let income: Void = fetchOnchainIncome(force: false)
-            adopt(await fetchWatchData(w), for: w)
+            let read = adopt(await fetchWatchData(w), for: w)
             await income
+            pushWidgetSnapshot(fresh: read ? [w.id] : [])
         }
     }
 
@@ -263,9 +270,12 @@ final class PoolStore: ObservableObject {
     /// that was already in flight when the user switched a watch from AlphaPool to Kryptex
     /// (same id) would otherwise land the OLD pool's numbers on the new card. nil = a
     /// cancelled fetch: the card keeps its current state.
-    private func adopt(_ d: WatchData?, for w: PoolWatch) {
-        guard let d, watches.contains(where: { $0.sameTarget(as: w) }) else { return }
+    /// Returns whether it brought new figures (a pool answer, not an error) for the widget.
+    @discardableResult
+    private func adopt(_ d: WatchData?, for w: PoolWatch) -> Bool {
+        guard let d, watches.contains(where: { $0.sameTarget(as: w) }) else { return false }
         watchData[w.id] = d
+        return d.error == nil
     }
 
     // MARK: refresh
@@ -291,11 +301,12 @@ final class PoolStore: ObservableObject {
         async let income: Void = fetchOnchainIncome(force: force)
 
         let current = watches.filter(\.isEnabled)   // a paused watch costs no network
+        var read = Set<UUID>()
         await withTaskGroup(of: (PoolWatch, WatchData?).self) { group in
             for w in current { group.addTask { (w, await fetchWatchData(w)) } }
             // Skip a watch the user removed or re-pointed mid-refresh, and skip nil (a
             // cancelled fetch) so navigating away can't overwrite a card with 失败.
-            for await (w, d) in group { adopt(d, for: w) }
+            for await (w, d) in group { if adopt(d, for: w) { read.insert(w.id) } }
         }
 
         await income
@@ -304,14 +315,19 @@ final class PoolStore: ObservableObject {
         if let c = CurrencyManager.shared.rate("CNY") { usdCny = c }
         loading = false
 
-        pushWidgetSnapshot()
+        pushWidgetSnapshot(fresh: read)
     }
 
     /// Mirror ALL pool watches + fiat rates into the shared App Group so the
     /// home-screen Mining widget can show every miner (2+) and refresh itself.
-    private func pushWidgetSnapshot() {
+    /// `fresh`: the watches whose figures were just read. Every other watch (a failed fetch,
+    /// or one that wasn't fetched just now) keeps the figures the widget already has for its
+    /// target — the widget's own refresh may be newer than this store's copy — and a publish
+    /// that isn't fresh for every watch doesn't mark the pool figures current.
+    private func pushWidgetSnapshot(fresh: Set<UUID> = []) {
         WidgetBridge.updatePrice(prlUsd: prlUsd)
-        let pools = watches.filter(\.isEnabled).map { w -> WidgetPool in
+        let enabled = watches.filter(\.isEnabled)
+        let pools = enabled.map { w -> WidgetPool in
             // The SAME live total the widget computes on its own refresh (PoolMinerStats.liveRate).
             let s = watchData[w.id]?.stats
             return WidgetPool(label: w.displayName,
@@ -322,7 +338,7 @@ final class PoolStore: ObservableObject {
                               online: s?.onlineCount ?? 0,
                               total: s?.workers.count ?? 0)
         }
-        WidgetBridge.updatePools(pools)
+        WidgetBridge.updatePools(pools, current: Set(enabled.indices.filter { fresh.contains(enabled[$0].id) }))
     }
 
     // MARK: per-address on-chain income (see ChainIncome)

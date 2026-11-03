@@ -1,5 +1,10 @@
 import SwiftUI
 import StoreKit
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 /// Public places the app points people to.
 enum AppLinks {
@@ -73,6 +78,33 @@ enum ReviewPrompt {
         return last <= 0 || now - last >= minDaysBetweenAsks * 86400
     }
 
+    /// Whether the app is in front right now. A request from the background is ignored by the
+    /// system, so it must not spend this version's ask.
+    @MainActor static var appIsActive: Bool {
+        #if os(iOS)
+        UIApplication.shared.applicationState == .active
+        #else
+        NSApplication.shared.isActive
+        #endif
+    }
+
+    /// The ask itself, after the beat: only if it wasn't called off, the app is still in front
+    /// and the gates still pass is it recorded, and only then requested. Recording first (as
+    /// before) spent the version's ask and the 120-day pause on a prompt nobody could see.
+    @MainActor
+    @discardableResult
+    static func ask(after delay: Duration,
+                    active: () -> Bool,
+                    eligible: () -> Bool = { ReviewPrompt.isEligible },
+                    record: () -> Void = { ReviewPrompt.markAsked() },
+                    request: () -> Void) async -> Bool {
+        try? await Task.sleep(for: delay)
+        guard !Task.isCancelled, active(), eligible() else { return false }
+        record()
+        request()
+        return true
+    }
+
     /// Record that the prompt was requested. (Requested, not shown — the system never says.)
     static func markAsked() {
         let d = UserDefaults.standard
@@ -103,23 +135,36 @@ extension View {
 private struct ReviewPromptModifier: ViewModifier {
     let trigger: Bool
     @Environment(\.requestReview) private var requestReview
+    @Environment(\.scenePhase) private var scenePhase
     /// Once per view lifetime, so a value that flickers true→false→true (a refresh landing
     /// between fetches) can't queue a second request.
     @State private var asked = false
+    /// The request waiting out its beat. Leaving the app or this screen calls it off.
+    @State private var pending: Task<Void, Never>?
 
     func body(content: Content) -> some View {
         content
             .onChange(of: trigger) { _, now in ask(now) }
             .onAppear { ask(trigger) }
+            .onChange(of: scenePhase) { _, phase in if phase != .active { callOff() } }
+            .onDisappear { callOff() }
     }
 
     private func ask(_ now: Bool) {
-        guard now, !asked, ReviewPrompt.isEligible else { return }
+        guard now, !asked, scenePhase == .active, ReviewPrompt.isEligible else { return }
         asked = true
-        ReviewPrompt.markAsked()
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.5))
-            requestReview()
+        pending = Task { @MainActor in
+            _ = await ReviewPrompt.ask(after: .seconds(1.5), active: { ReviewPrompt.appIsActive },
+                                       request: { requestReview() })
         }
+    }
+
+    /// Nothing was recorded for a request called off during its beat, so a later success in
+    /// front may try again (the gates still apply; one already asked fails them).
+    private func callOff() {
+        guard let task = pending else { return }
+        task.cancel()
+        pending = nil
+        asked = false
     }
 }

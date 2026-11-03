@@ -92,10 +92,14 @@ final class ProStore: ObservableObject {
     }
 
     func purchase() async {
-        await loadProduct()
-        guard let product else { message = Loc("暂时无法连接 App Store，请稍后再试"); return }
+        // Busy from the tap, not from when the product has loaded: a second tap while it
+        // loads must neither start a second purchase nor end the first one's busy state.
+        guard !busy else { return }
         busy = true
         defer { busy = false }
+        message = nil
+        await loadProduct()
+        guard let product else { message = Loc("暂时无法连接 App Store，请稍后再试"); return }
         do {
             switch try await product.purchase() {
             case .success(let result):
@@ -118,8 +122,10 @@ final class ProStore: ObservableObject {
     }
 
     func restore() async {
+        guard !busy else { return }
         busy = true
         defer { busy = false }
+        message = nil
         try? await AppStore.sync()
         await refresh()
         message = isPro ? nil : Loc("没有找到可恢复的购买")
@@ -152,6 +158,10 @@ final class ProStore: ObservableObject {
         // Publish source changes even when another source keeps Pro enabled: alerts
         // must switch between account authorization and a local Apple receipt.
         isPro = entitlements.unlocked
+        // Unlocked by any route — a 待确认 purchase approved later on Transaction.updates, a
+        // purchase that threw here but completed anyway, an account verdict: the line the
+        // paywall or the membership page still shows is out of date.
+        if isPro, message != nil { message = nil }
         let hadSync = CloudSync.canSync()
         UserDefaults.standard.set(entitlements.account, forKey: "pro.accountSync")
         if !hadSync && CloudSync.canSync() { CloudSync.refresh() }

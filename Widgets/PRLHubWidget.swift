@@ -62,7 +62,8 @@ func widgetHasPro(_ snap: WidgetSnapshot) async -> Bool {
 /// so "5 分钟前" is still bright and "6 分钟前" dims. Precomputed per timeline entry alongside
 /// the label, so the dimming flips on the same minute boundary as the text.
 func freshnessIsRecent(stamp: Date, asOf now: Date) -> Bool {
-    guard stamp > .distantPast else { return false }
+    // A stamp from the future (clock set back since) has no meaningful age.
+    guard stamp > .distantPast, WidgetBridge.valid(stamp, now: now) != nil else { return false }
     return Int(now.timeIntervalSince(stamp) / 60) <= 5
 }
 
@@ -70,7 +71,7 @@ func freshnessIsRecent(stamp: Date, asOf now: Date) -> Bool {
 /// timeline entry so the widget's age advances by the MINUTE without a self-updating
 /// `.relative` Text ticking every second. Empty when nothing has ever loaded.
 func freshnessAge(stamp: Date, asOf now: Date, languageCode: String? = nil) -> String {
-    guard stamp > .distantPast else { return "" }
+    guard stamp > .distantPast, WidgetBridge.valid(stamp, now: now) != nil else { return "" }
     // Follow the in-app language (published in the snapshot), not the device language,
     // so the stamp reads "5 min. ago" when the app is in English on a Chinese Mac.
     let fmt = FreshnessFormatter.shared(languageCode)
@@ -165,47 +166,36 @@ struct PearlProvider: TimelineProvider {
 
             // The fetches above can take many seconds, during which the app may have removed
             // or switched the wallet (clearWallet), changed the pool watches, or simply
-            // published newer figures. Merge into the snapshot as it is NOW, and only where
-            // the app hasn't written since this fetch started — writing back the copy read
+            // published newer figures — and the other placed widgets may have saved their own
+            // refresh. Merge into the snapshot as it is NOW (under the store's lock), and only
+            // where nobody has written since this fetch started — writing back the copy read
             // at the start would resurrect a removed wallet, and a slow self-fetch (e.g.
-            // blockbook's pre-broadcast balance) must not replace the app's newer value.
-            var snap = WidgetStore.load()
-            let before = snap
-
-            // Track whether ANY self-fetch actually succeeded — the freshness timestamp
-            // must only advance on success, otherwise a fully-offline refresh keeps the
-            // stale balance/hashrate but stamps it "now", so it reads as just-refreshed.
-            var didRefresh = false
-            // Wallet: self-fetch covers only the external xpub balance; add back the
-            // app-published stranded internal-chain change so the widget can't show LESS
-            // than the app's authoritative total. (recentTx still comes from the app's
-            // last write — direction/amount need the app's full chain logic.)
-            if let bal, let xpub, snap.xpub == xpub, snap.network == network, snap.walletAt == initial.walletAt {
-                snap.balancePRL = bal + snap.changePRL; didRefresh = true
+            // blockbook's pre-broadcast balance) must not replace a newer value.
+            let fetchedAt = Date()
+            let snap = WidgetStore.update { s in
+                let before = s
+                // Track whether ANY self-fetch actually succeeded — the freshness timestamp
+                // must only advance on success, otherwise a fully-offline refresh keeps the
+                // stale balance/hashrate but stamps it "now", so it reads as just-refreshed.
+                var didRefresh = false
+                // Wallet: self-fetch covers only the external xpub balance; the merge adds back
+                // the app-published stranded internal-chain change so the widget can't show LESS
+                // than the app's authoritative total. (recentTx still comes from the app's
+                // last write — direction/amount need the app's full chain logic.)
+                if let bal, s.applyWalletRefresh(balance: bal, from: initial) { didRefresh = true }
+                // A price this widget fetched itself (a reused one carries the app's stamp).
+                if let usd, s.applyPrice(usd, now: fetchedAt) { didRefresh = true }
+                // Failed pools keep their current values; only a complete refresh re-stamps them.
+                if s.applyPoolRefresh(poolResults, from: initial, at: fetchedAt) { didRefresh = true }
+                // Figures the app confirmed recently are as current as a fetch would be. (A
+                // stamp from the future — clock set back — says nothing about the age.)
+                var asOf = [WidgetBridge.valid(s.updatedAt, now: fetchedAt) ?? .distantPast]
+                if didRefresh { asOf.append(fetchedAt) }
+                if walletFresh, let t = s.walletAt { asOf.append(t) }
+                if poolsFresh, let t = s.poolsAt { asOf.append(t) }
+                s.updatedAt = asOf.max() ?? s.updatedAt
+                return didRefresh || s.updatedAt != before.updatedAt
             }
-            // A price this widget fetched itself (a reused one carries the app's stamp).
-            if let usd, usd.at > (snap.prlUsdAt ?? .distantPast) {
-                snap.prlUsd = usd.usd; snap.prlUsdAt = usd.at; didRefresh = true
-            }
-
-            let sameWatches = snap.pools.map { "\($0.kind)|\($0.address)" } == poolsIn.map { "\($0.kind)|\($0.address)" }
-            if sameWatches, snap.poolsAt == initial.poolsAt {
-                for (i, live) in poolResults {
-                    guard let live, snap.pools.indices.contains(i) else { continue }
-                    snap.pools[i].hashrate = live.hashrate
-                    snap.pools[i].hashrateRaw = live.hashrateRaw
-                    snap.pools[i].online = live.online
-                    snap.pools[i].total = live.total
-                    didRefresh = true
-                }
-            }
-            // Figures the app confirmed recently are as current as a fetch would be.
-            var asOf = [snap.updatedAt]
-            if didRefresh { asOf.append(Date()) }
-            if walletFresh, let t = snap.walletAt { asOf.append(t) }
-            if poolsFresh, let t = snap.poolsAt { asOf.append(t) }
-            snap.updatedAt = asOf.max() ?? snap.updatedAt
-            if didRefresh || snap.updatedAt != before.updatedAt { WidgetStore.save(snap) }
 
             // Freshness is the last SUCCESSFUL refresh (not the timeline build time), so the
             // shown age reflects how current the figures really are. When nothing was ever
@@ -358,9 +348,11 @@ private struct FreshnessBadge: View {
 private struct SmallCombined: View {
     @Environment(\.widgetColors) private var colors
     let snap: WidgetSnapshot
-    private var online: Int { snap.pools.reduce(0) { $0 + $1.online } }
-    private var total: Int { snap.pools.reduce(0) { $0 + $1.total } }
-    private var raw: Double { snap.pools.reduce(0) { $0 + $1.hashrateRaw } }
+    // One pool + address watched twice is still one set of rigs.
+    private var pools: [WidgetPool] { WidgetMiningSummary.uniqueTargets(snap.pools) }
+    private var online: Int { pools.reduce(0) { $0 + $1.online } }
+    private var total: Int { pools.reduce(0) { $0 + $1.total } }
+    private var raw: Double { pools.reduce(0) { $0 + $1.hashrateRaw } }
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("PRL/USD").font(.caption2.weight(.medium)).foregroundStyle(colors.secondary)

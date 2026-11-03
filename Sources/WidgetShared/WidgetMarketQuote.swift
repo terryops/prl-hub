@@ -62,13 +62,17 @@ enum WidgetPriceChange {
 
 extension WidgetSnapshot {
     /// Merge after a fetch completes, preserving newer app quotes and wallet data.
+    /// Stamps from the future (the clock was set back since) don't count as newer; "the
+    /// future" is measured from the later of the clock and the quote's own time.
     @discardableResult
-    mutating func applyMarketQuote(_ quote: WidgetMarketQuote) -> Bool {
+    mutating func applyMarketQuote(_ quote: WidgetMarketQuote, now: Date = Date()) -> Bool {
+        let ref = max(now, quote.at)
         guard quote.usd.isFinite, quote.usd > 0,
               quote.at.timeIntervalSince1970 > 0,
-              quote.at >= (marketQuote?.at ?? .distantPast), quote != marketQuote else { return false }
+              quote.at >= (WidgetBridge.valid(marketQuote?.at, now: ref) ?? .distantPast),
+              quote != marketQuote else { return false }
         marketQuote = quote
-        if quote.at >= (prlUsdAt ?? .distantPast) {
+        if quote.at >= (WidgetBridge.valid(prlUsdAt, now: ref) ?? .distantPast) {
             prlUsd = quote.usd
             prlUsdAt = quote.at
         }

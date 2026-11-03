@@ -215,11 +215,14 @@ extension WalletStore {
     /// Sweep every rediscovered stranded-change UTXO to `destination` in one tx,
     /// folding any residual change back in so nothing re-strands. Requires device auth.
     func recoverChange(to destination: String) async -> (ok: Bool, message: String) {
+        // Captured before the prompt: a wallet switch, lock or removal while it is up must not
+        // let this authorisation sweep the wallet opened in the meantime to this destination.
+        let session = chainLoadToken
         guard await authenticate(reason: Loc("确认找回搁浅的找零")) else { return (false, Loc("认证未通过")) }
+        guard chainLoadToken == session else { return (false, Loc("钱包或网络已切换，已取消本次找回")) }
         let destination = destination.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard PRLAddress.isValid(destination, network: network) else { return (false, Loc("收款地址格式不正确")) }
         guard let mnemonic else { return (false, Loc("钱包未就绪")) }
-        let session = chainLoadToken
         // Change already committed to a pending send can't be swept again.
         let locked = Set(sendLocks.values.flatMap(\.keys))
         let sets = recoverable.compactMap { s -> RecoverableUTXOSet? in
@@ -245,7 +248,8 @@ extension WalletStore {
             guard startSat > 0 else { return (false, Loc("找零金额过小，不足以支付手续费")) }
             hex = try await sweepConverge(mnemonic: mnemonic, dir: dir, net: net, to: destination,
                                           amountSat: startSat, totalSat: total,
-                                          feePerKB: feePerKB, utxosJSON: utxosJSON).hex
+                                          feePerKB: feePerKB, utxosJSON: utxosJSON,
+                                          session: session, cancelled: Loc("钱包或网络已切换，已取消本次找回")).hex
         } catch {
             return (false, error.localizedDescription)
         }
@@ -282,12 +286,17 @@ extension WalletStore {
     /// output — so a full-balance send/recovery leaves nothing on the internal change
     /// chain. Shared by `prepareSend()` (MAX) and `recoverChange()`. Returns the signed tx
     /// and what it pays the destination.
+    ///
+    /// Throws `WalletError(cancelled)` once `session` is no longer the current chain session:
+    /// removing the wallet queues its db for deletion behind the build in flight, and a further
+    /// build would re-create that db (its key material) after the wallet was removed.
     func sweepConverge(mnemonic: String, dir: String, net: String, to destination: String,
                                amountSat: Int64, totalSat: Int64, feePerKB: Int64,
-                               utxosJSON: String) async throws -> (hex: String, amountSat: Int64) {
+                               utxosJSON: String, session: UUID, cancelled: String) async throws -> (hex: String, amountSat: Int64) {
         var amountSat = amountSat
         var hex = ""
         for _ in 0..<5 {
+            guard chainLoadToken == session else { throw WalletError(cancelled) }
             let payment = amountSat
             hex = try await WalletDBQueue.shared.run {
                 try OysterBridge.buildSignedTx(mnemonic: mnemonic, dataDir: dir, network: net,

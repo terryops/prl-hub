@@ -65,8 +65,16 @@ struct WidgetSnapshot: Codable {
 
     // Mining (every watch)
     var pools: [WidgetPool] = []
-    /// When the app last published the pool figures — same role as `walletAt`.
+    /// When every pool figure was last known current (an app publish or a complete widget
+    /// refresh) — same role as `walletAt`. A partial refresh leaves it alone.
     var poolsAt: Date?
+
+    /// Bumped on every write of the pool / wallet figures, by the app and the widgets alike.
+    /// A fetch merges only if nobody wrote that source since it started, so two refreshes
+    /// that finish out of order can't put the older result over the newer one. (Timestamps
+    /// can't do this: they tie, and they go backwards when the clock is set back.)
+    var poolsRev: Int?
+    var walletRev: Int?
 
     // The app's resolved UI language as an .lproj code ("en", "zh-Hant", …). The
     // widget looks its labels up in that table and points its date / relative-time
@@ -107,15 +115,29 @@ enum WidgetStore {
     // is thread-safe, just not marked Sendable).
     nonisolated(unsafe) static let defaults = UserDefaults(suiteName: appGroup)
 
-    static func load() -> WidgetSnapshot {
+    static func load(from defaults: UserDefaults? = WidgetStore.defaults) -> WidgetSnapshot {
         guard let data = defaults?.data(forKey: key),
               let snap = try? JSONDecoder().decode(WidgetSnapshot.self, from: data)
         else { return WidgetSnapshot() }
         return snap
     }
 
-    static func save(_ snap: WidgetSnapshot) {
+    static func save(_ snap: WidgetSnapshot, to defaults: UserDefaults? = WidgetStore.defaults) {
         guard let data = try? JSONEncoder().encode(snap) else { return }
         defaults?.set(data, forKey: key)
+    }
+
+    private static let lock = NSLock()
+
+    /// Read the snapshot as it is now, let `body` merge into it, and save if it says so —
+    /// under one lock. Several widget timelines run in parallel in the extension; with a plain
+    /// load … save, one of them saving in between is silently undone by the other.
+    @discardableResult
+    static func update(in defaults: UserDefaults? = WidgetStore.defaults,
+                       _ body: (inout WidgetSnapshot) -> Bool) -> WidgetSnapshot {
+        lock.lock(); defer { lock.unlock() }
+        var snap = load(from: defaults)
+        if body(&snap) { save(snap, to: defaults) }
+        return snap
     }
 }

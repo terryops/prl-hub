@@ -28,10 +28,25 @@ enum WidgetFetch {
         return try? JSONSerialization.jsonObject(with: data)
     }
 
-    private static func double(_ v: Any?) -> Double {
-        if let s = v as? String { return Double(s) ?? 0 }
-        if let n = v as? NSNumber { return n.doubleValue }
-        return 0
+    /// A finite number from a JSON string or number; nil for anything else (a bool, an
+    /// object, "abc"), so a malformed field can't read as a real 0.
+    private static func number(_ v: Any?) -> Double? {
+        let d: Double?
+        if let s = v as? String { d = Double(s) }
+        else if let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() { d = n.doubleValue }
+        else { d = nil }
+        return d.flatMap { $0.isFinite ? $0 : nil }
+    }
+
+    /// Total (confirmed + unconfirmed) PRL from a Blockbook `/xpub` answer. nil unless the
+    /// balance is a number: `{}`, an error body or a garbled field must keep the last balance,
+    /// not show 0.
+    static func xpubBalancePRL(_ obj: [String: Any]) -> Double? {
+        guard let confirmed = number(obj["balance"]) else { return nil }
+        let unconfirmed = obj["unconfirmedBalance"] == nil ? 0 : number(obj["unconfirmedBalance"])
+        guard let unconfirmed else { return nil }
+        let total = (confirmed + unconfirmed) / 1e8
+        return total >= 0 ? total : nil
     }
 
     /// Total balance (confirmed + unconfirmed) for an account xpub, in PRL.
@@ -47,10 +62,8 @@ enum WidgetFetch {
         for base in bases {
             let headers = base == own ? [NodeAccess.header: NodeAccess.key] : [:]
             guard let obj = await json("\(base)/api/v2/xpub/\(xpub)?details=basic", headers: headers) as? [String: Any],
-                  obj["balance"] != nil else { continue }
-            let confirmed = double(obj["balance"])
-            let unconfirmed = double(obj["unconfirmedBalance"])
-            return (confirmed + unconfirmed) / 1e8
+                  let total = xpubBalancePRL(obj) else { continue }
+            return total
         }
         return nil
     }
@@ -59,7 +72,8 @@ enum WidgetFetch {
     /// else a fresh fetch — so the widgets show the same number as the app.
     /// Returns the value and when it was fetched.
     static func sharedPrlUsd(_ snap: WidgetSnapshot) async -> (usd: Double, at: Date)? {
-        if snap.prlUsd > 0, let at = snap.prlUsdAt, Date().timeIntervalSince(at) < WidgetBridge.freshFor { return (snap.prlUsd, at) }
+        if snap.prlUsd > 0, let at = snap.prlUsdAt,
+           !WidgetBridge.isStale(at, now: Date(), maxAge: WidgetBridge.freshFor) { return (snap.prlUsd, at) }
         guard let quote = await sharedMarketQuote(snap) else { return nil }
         return (quote.usd, quote.at)
     }

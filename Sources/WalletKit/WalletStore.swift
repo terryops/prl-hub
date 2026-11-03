@@ -608,11 +608,20 @@ final class WalletStore: ObservableObject {
         if mnemonic != nil { Task { await loadChain() } }
     }
 
+    #if DEBUG
+    /// Tests only: stands in for the system prompt, so the wallet changing while the prompt
+    /// is up can be driven deterministically. Never set outside tests.
+    var authenticateOverride: (@MainActor (String) async -> Bool)?
+    #endif
+
     /// Device auth (Face ID / Touch ID / passcode / login password). Gates the
     /// sensitive actions: unlocking, revealing the seed and authorising a send.
     /// Fails CLOSED — if the device has no lock configured at all (so no auth can
     /// be evaluated), the action is denied rather than silently allowed.
     func authenticate(reason: String) async -> Bool {
+        #if DEBUG
+        if let authenticateOverride { return await authenticateOverride(reason) }
+        #endif
         let ctx = LAContext()
         var err: NSError?
         guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) else {
