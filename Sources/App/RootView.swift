@@ -116,6 +116,7 @@ struct RootView: View {
             CloudSync.start()
             // Signed in on another device: follow it (sign in once, on every device).
             Task { await account.join(automatic: true) }
+            Task { await UpdateChecker.shared.checkIfDue() }   // the wallet page's 新版本 banner
             await currency.refreshIfStale()   // daily-cached USD rate table
         }
         // Re-pull from iCloud on every foreground so keys/config saved on another
@@ -127,6 +128,7 @@ struct RootView: View {
                 PriceLiveActivity.shared.foreground()
                 WebLinkStore.shared.foreground()
                 Task { await currency.refreshIfStale() }
+                Task { await UpdateChecker.shared.checkIfDue() }
             }
         }
         .onChange(of: paletteStored) { _, _ in publishWidgetAppearance() }

@@ -1290,3 +1290,10 @@
 "价格涨破或跌破 %@ 时都会通知你" = "Anda akan diberi tahu saat harga menembus %@, naik maupun turun.";
 "另得 %@ 约 %@%%" = "Plus %@ ≈%@%%";
 "「另得 %1$@」：该矿池对同一份算力另发 %1$@（联合挖矿），百分比约为占 PRL 收益的比例；需在矿池账户里另填 %1$@ 收款地址才会发放。未计入预估收益和真实费用。" = "“Plus %1$@”: pool ini juga membayar %1$@ untuk hashrate yang sama; persentasenya kira-kira porsi terhadap pendapatan PRL. Hanya dibayarkan setelah Anda menambahkan alamat pembayaran %1$@ di akun pool. Tidak termasuk dalam Estimasi hasil maupun Biaya nyata.";
+
+/* New-version banner (wallet page) + its line on 安全性说明 */
+"有新版本 %@" = "Versi %@ tersedia";
+"更新" = "Perbarui";
+"不再提示这个版本" = "Jangan ingatkan versi ini lagi";
+"App Store 版本查询" = "Pengecekan versi App Store";
+"向 Apple 的 itunes.apple.com 查询 App Store 上的最新版本号，用来提示更新。请求不带地址，也不带任何身份信息。" = "Menanyakan versi terbaru di App Store ke itunes.apple.com milik Apple, untuk memberi tahu Anda saat ada pembaruan. Permintaan ini tidak membawa alamat maupun informasi identitas.";

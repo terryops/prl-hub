@@ -5,6 +5,7 @@ import SwiftUI
 struct DashboardView: View {
     @ObservedObject var store: WalletStore
     @StateObject private var price = PRLPriceManager.shared
+    @ObservedObject private var updates = UpdateChecker.shared
     @EnvironmentObject private var currency: CurrencyManager
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
@@ -145,6 +146,12 @@ struct DashboardView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Pearl.Space.lg) {
+                // A newer App Store version: above everything, until updated or closed.
+                if let version = updates.available {
+                    UpdateBanner(version: version, surface: cardSurface)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
                 // Balance card → brand hero banner (compact)
                 // Every row keeps a FIXED slot (placeholder until its data loads) so
                 // the hero never changes height — the layout settles first, then the
@@ -296,6 +303,7 @@ struct DashboardView: View {
             .frame(maxWidth: 560)
             .frame(maxWidth: .infinity)
             .animation(.snappy, value: store.syncError)
+            .animation(.snappy, value: updates.available)
             // Top-aligned on iOS: keep the content its NATURAL height so the refreshable
             // ScrollView has a real scroll range and pull-to-refresh snaps back. Forcing
             // height == viewport (geo.size.height OR containerRelativeFrame) leaves no
