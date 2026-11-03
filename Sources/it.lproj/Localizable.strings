@@ -1268,7 +1268,7 @@
 "用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。" = "Usa la stessa frase di recupero: importala nel wallet ufficiale Nockchain o in Iris e vedrai lo stesso indirizzo NOCK.";
 "确认发送 %@" = "Conferma invio di %@";
 "节点拒绝了请求：%@" = "Il nodo ha rifiutato la richiesta: %@";
-"记录由本机保存：收到的每一笔从本机第一次看到它时算起，换手机或重装后只能看到当前持有的部分。" = "La cronologia è salvata su questo dispositivo: ogni pagamento ricevuto viene registrato quando questo dispositivo lo vede per la prima volta. Su un nuovo telefono o dopo una reinstallazione compare solo ciò che possiedi ora.";
+"记录从区块浏览器 nockscan.com 读取，换设备或重装后也能看到。" = "La cronologia viene letta dall'explorer di blocchi nockscan.com, quindi resta visibile su un altro dispositivo o dopo una reinstallazione.";
 "详情" = "Dettagli";
 "请核对地址" = "Controlla l’indirizzo";
 "请输入金额" = "Inserisci un importo";

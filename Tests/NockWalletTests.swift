@@ -313,3 +313,135 @@ struct NockFailoverTests {
         }
     }
 }
+
+/// History from nockscan: what this device never saw (another device's sends, coins spent
+/// before this install) shows up, and what it did see isn't counted twice.
+struct NockScanHistoryTests {
+    private let t0 = Date(timeIntervalSince1970: 1_792_577_061)
+
+    private func entry(_ id: String, _ kind: NockScan.Entry.Kind, height: UInt64, amount: UInt64, fee: UInt64 = 0,
+                       to: [String] = []) -> NockScan.Entry {
+        NockScan.Entry(txId: id, kind: kind, height: height, time: t0, amount: amount, fee: fee, counterparties: to)
+    }
+    private func noteRow(_ name: String, _ kind: NockTx.Kind = .received, height: UInt64, amount: UInt64) -> NockTx {
+        NockTx(id: "note:\(name)", kind: kind, amount: amount, fee: nil, counterparty: nil, txId: nil, height: height,
+               time: t0.addingTimeInterval(-600), timeExact: false, status: .confirmed)
+    }
+    private func sendRow(_ id: String, amount: UInt64, fee: UInt64?, status: NockTx.Status, height: UInt64? = nil) -> NockTx {
+        NockTx(id: id, kind: .sent, amount: amount, fee: fee, counterparty: "r", txId: id, height: height,
+               time: t0.addingTimeInterval(-60), timeExact: true, status: status)
+    }
+    private func note(_ id: String, kind: String, height: UInt64) -> NockNote {
+        NockNote(json: ["nameFirst": id, "nameLast": "x", "assets": "1", "raw": "", "originPage": height,
+                        "kind": kind, "unlockHeight": 0, "spendable": true])!
+    }
+
+    /// The reply for 9mhAX…QV2 on 2026-10-22 (50 NOCK in, all of it back out), plus a mining reward.
+    @Test func parsesTheAddressReply() throws {
+        let json = #"""
+        {"address":"9mhAX","ownerType":"pkh","totalTransactions":3,"currentBalance":0,
+         "transactions":[
+          {"txId":"AHHTf","blockHeight":169049,"timestamp":1792577748,"type":"sent","amount":3276800,"fee":258048,
+           "counterparties":["2ToQh"],"isCoinbase":false},
+          {"txId":"9pDtL","blockHeight":169044,"timestamp":1792577061,"type":"received","amount":3276800,"fee":0,
+           "counterparties":["2ToQh"],"isCoinbase":false},
+          {"txId":"coinbase-8x","blockHeight":169000,"timestamp":1792570000,"type":"received","amount":107374183,
+           "fee":0,"counterparties":[],"isCoinbase":true},
+          {"txId":"odd","blockHeight":1,"timestamp":1,"type":"burned","amount":1}],
+         "pagination":{"limit":50,"offset":0,"hasMore":true}}
+        """#
+        let page = try NockScan.parse(Data(json.utf8))
+        #expect(page.hasMore)
+        #expect(page.entries.map(\.kind) == [.sent, .received, .mined])
+        #expect(page.entries[0] == NockScan.Entry(txId: "AHHTf", kind: .sent, height: 169_049,
+                                                  time: Date(timeIntervalSince1970: 1_792_577_748),
+                                                  amount: 3_276_800, fee: 258_048, counterparties: ["2ToQh"]))
+        #expect(throws: (any Error).self) { try NockScan.parse(Data("{}".utf8)) }
+    }
+
+    /// A device that never saw the address: both rows appear; a send shows what the recipient got.
+    @Test func aNewDeviceGetsTheWholeHistory() {
+        let rows = NockWalletStore.merge([], scan: [
+            entry("AHHTf", .sent, height: 169_049, amount: 3_276_800, fee: 258_048, to: ["2ToQh"]),
+            entry("9pDtL", .received, height: 169_044, amount: 3_276_800, to: ["2ToQh"]),
+        ])
+        #expect(rows.count == 2)
+        let sent = rows.first { $0.kind == .sent }
+        #expect(sent?.amount == 3_276_800 - 258_048 && sent?.fee == 258_048 && sent?.counterparty == "2ToQh")
+        #expect(sent?.status == .confirmed && sent?.timeExact == true && sent?.height == 169_049)
+        let got = rows.first { $0.kind == .received }
+        #expect(got?.txId == "9pDtL" && got?.amount == 3_276_800 && got?.counterparty == nil)
+    }
+
+    /// A note this device recorded becomes the transaction that brought it — one row, not two.
+    @Test func aRecordedNoteBecomesItsTransaction() {
+        let rows = NockWalletStore.merge([noteRow("n1", height: 100, amount: 500)],
+                                         scan: [entry("T1", .received, height: 100, amount: 500)])
+        #expect(rows.map(\.id) == ["T1"])
+        #expect(rows[0].timeExact && rows[0].time == t0)
+        // Two notes from one payment collapse into it too.
+        let two = NockWalletStore.merge([noteRow("a", height: 100, amount: 200), noteRow("b", height: 100, amount: 300)],
+                                        scan: [entry("T1", .received, height: 100, amount: 500)])
+        #expect(two.map(\.id) == ["T1"])
+    }
+
+    /// Amounts that don't add up: keep this device's rows, don't risk counting the coins twice.
+    @Test func unmatchedNotesStay() {
+        let rows = NockWalletStore.merge([noteRow("n1", height: 100, amount: 400)],
+                                         scan: [entry("T1", .received, height: 100, amount: 500)])
+        #expect(rows.map(\.id) == ["note:n1"])
+    }
+
+    /// This device's own send keeps its recipient amount; nockscan adds the block.
+    @Test func ownSendKeepsItsAmount() {
+        let rows = NockWalletStore.merge([sendRow("S1", amount: 1_000, fee: nil, status: .confirmed)],
+                                         scan: [entry("S1", .sent, height: 120, amount: 1_100, fee: 100)])
+        #expect(rows.count == 1)
+        #expect(rows[0].amount == 1_000 && rows[0].fee == 100 && rows[0].height == 120 && rows[0].time == t0)
+        // Still pending here: settling it is reconcileSends' job, not the merge's.
+        let pending = NockWalletStore.merge([sendRow("S2", amount: 1_000, fee: 100, status: .pending)],
+                                            scan: [entry("S2", .sent, height: 121, amount: 1_100, fee: 100)])
+        #expect(pending[0].status == .pending && pending[0].height == nil)
+    }
+
+    /// Change of a send made on another device arrived here as a "received" note: it goes.
+    @Test func changeOfAnotherDevicesSendIsNotIncome() {
+        let rows = NockWalletStore.merge([noteRow("change", height: 130, amount: 9_000)],
+                                         scan: [entry("S9", .sent, height: 130, amount: 1_100, fee: 100)])
+        #expect(rows.map(\.id) == ["S9"])
+    }
+
+    /// Mining rewards match their own notes, and their "coinbase-…" id isn't offered as a txid.
+    @Test func miningRewards() {
+        let rows = NockWalletStore.merge([noteRow("cb", .mined, height: 140, amount: 7)],
+                                         scan: [entry("coinbase-Q", .mined, height: 140, amount: 7)])
+        #expect(rows.count == 1 && rows[0].id == "coinbase-Q" && rows[0].kind == .mined && rows[0].txId == nil)
+    }
+
+    /// Running it again changes nothing.
+    @Test func mergingTwiceIsTheSame() {
+        let scan = [entry("T1", .received, height: 100, amount: 500), entry("S9", .sent, height: 130, amount: 1_100, fee: 100)]
+        let once = NockWalletStore.merge([noteRow("n1", height: 100, amount: 500)], scan: scan)
+        #expect(NockWalletStore.merge(once, scan: scan) == once)
+    }
+
+    /// A note arriving after nockscan already listed its transaction doesn't add a second row.
+    @Test func aNoteNockscanAlreadyListedAddsNoRow() {
+        let history = NockWalletStore.merge([], scan: [entry("T1", .received, height: 100, amount: 500),
+                                                       entry("S9", .sent, height: 130, amount: 1_100, fee: 100)])
+        #expect(NockWalletStore.scanCovers(note("a", kind: "simple", height: 100), in: history))
+        #expect(NockWalletStore.scanCovers(note("chg", kind: "simple", height: 130), in: history))   // that send's change
+        #expect(!NockWalletStore.scanCovers(note("b", kind: "simple", height: 101), in: history))
+        #expect(!NockWalletStore.scanCovers(note("cb", kind: "coinbase", height: 100), in: history))
+    }
+
+    /// The live reply for the address in the 2026-10-22 report (run with NOCK_LIVE=1).
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["NOCK_LIVE"] != nil))
+    func liveAddressHistory() async throws {
+        let page = try await NockScan().page(address: "9mhAXQk6Bt2NwHY5p4XZHGyus28swdGRjsuAqCewrvbVmdBzQVtoQV2",
+                                             limit: NockScan.pageSize, offset: 0)
+        #expect(page.entries.map(\.txId).contains("AHHTfSRDWE2k6DBUJL1BWwntYiMbXFQpQordooYjLFWZwVvV5JfvodK"))
+        let none = try await NockScan().page(address: NockWalletStore.quoteAddress, limit: 10, offset: 0)
+        #expect(none.entries.isEmpty && !none.hasMore)
+    }
+}

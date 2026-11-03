@@ -1268,7 +1268,7 @@
 "用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。" = "Aynı kurtarma ifadesi kullanılır: resmi Nockchain cüzdanına veya Iris’e içe aktarırsanız aynı NOCK adresini görürsünüz.";
 "确认发送 %@" = "%@ Gönderimini Onayla";
 "节点拒绝了请求：%@" = "Düğüm isteği reddetti: %@";
-"记录由本机保存：收到的每一笔从本机第一次看到它时算起，换手机或重装后只能看到当前持有的部分。" = "Geçmiş bu cihazda tutulur: gelen her ödeme, bu cihaz onu ilk gördüğünde kaydedilir. Yeni telefonda veya yeniden kurulumdan sonra yalnızca şu an sahip olduklarınız görünür.";
+"记录从区块浏览器 nockscan.com 读取，换设备或重装后也能看到。" = "Geçmiş, nockscan.com blok gezgininden okunur; yeni bir cihazda veya yeniden yüklemeden sonra da görünür.";
 "详情" = "Ayrıntılar";
 "请核对地址" = "Adresi kontrol edin";
 "请输入金额" = "Bir tutar girin";

@@ -20,8 +20,8 @@ struct NockClient {
         URL(string: "http://216.158.95.10:5556")!,
     ]
     /// Block explorer for "view on explorer" links.
-    static func explorerURL(tx txId: String) -> URL? { URL(string: "https://nockscan.net/tx/\(txId)") }
-    static func explorerURL(address: String) -> URL? { URL(string: "https://nockscan.net/address/\(address)") }
+    static func explorerURL(tx txId: String) -> URL? { URL(string: "https://nockscan.com/tx/\(txId)") }
+    static func explorerURL(address: String) -> URL? { URL(string: "https://nockscan.com/address/\(address)") }
 
     /// How long a node that failed sits at the back of the line.
     static let bench: TimeInterval = 5 * 60
@@ -396,5 +396,82 @@ struct NockNote: Codable, Hashable, Identifiable {
         kind = j["kind"] as? String ?? "foreign"
         unlockHeight = (j["unlockHeight"] as? NSNumber)?.uint64Value ?? 0
         spendable = j["spendable"] as? Bool ?? false
+    }
+}
+
+/// nockscan's address index — the only place a NOCK address's whole history lives (the nodes
+/// know just the notes held now). Read-only and best effort: the wallet works without it, it
+/// only fills in the rows this device never saw (another device's sends, coins already spent
+/// before this install). The request carries the NOCK address; nothing else.
+struct NockScan {
+    static let api = URL(string: "https://nockscan.com/api/v1/")!
+    /// The largest page the API serves (asking for more still returns 200).
+    static let pageSize = 200
+
+    struct Entry: Equatable {
+        enum Kind { case received, mined, sent }
+        let txId: String
+        let kind: Kind
+        let height: UInt64
+        let time: Date
+        /// nicks. Received: what arrived. Sent: what left the address — the recipients' share
+        /// plus the fee (change that came back is not counted).
+        let amount: UInt64
+        let fee: UInt64
+        /// Senders of a receipt, recipients of a send.
+        let counterparties: [String]
+    }
+
+    struct Page: Equatable {
+        let entries: [Entry]
+        let hasMore: Bool
+    }
+
+    let session: URLSession
+    init(session: URLSession = .shared) { self.session = session }
+
+    /// Newest first.
+    func page(address: String, limit: Int, offset: Int) async throws -> Page {
+        var c = URLComponents(url: Self.api.appendingPathComponent("address"), resolvingAgainstBaseURL: false)!
+        c.queryItems = [URLQueryItem(name: "address", value: address),
+                        URLQueryItem(name: "limit", value: String(limit)),
+                        URLQueryItem(name: "offset", value: String(offset))]
+        var req = URLRequest(url: c.url!)
+        req.timeoutInterval = 20
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        let data: Data, response: URLResponse
+        do { (data, response) = try await session.data(for: req) }
+        catch { throw NockClient.RPCError.transport(error.localizedDescription) }
+        guard let http = response as? HTTPURLResponse else { throw NockClient.RPCError.malformed }
+        // An address no transaction has touched yet.
+        if http.statusCode == 404 { return Page(entries: [], hasMore: false) }
+        guard http.statusCode == 200 else { throw NockClient.RPCError.http(http.statusCode) }
+        return try Self.parse(data)
+    }
+
+    static func parse(_ data: Data) throws -> Page {
+        guard let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let txs = o["transactions"] as? [[String: Any]] else { throw NockClient.RPCError.malformed }
+        func number(_ v: Any?) -> UInt64? {
+            if let n = v as? NSNumber, n.doubleValue >= 0 { return n.uint64Value }
+            if let s = v as? String { return UInt64(s) }
+            return nil
+        }
+        let entries = txs.compactMap { t -> Entry? in
+            guard let id = t["txId"] as? String, !id.isEmpty, let type = t["type"] as? String,
+                  let height = number(t["blockHeight"]), let ts = number(t["timestamp"]),
+                  let amount = number(t["amount"]) else { return nil }
+            let kind: Entry.Kind
+            switch type {
+            case "sent": kind = .sent
+            case "received": kind = (t["isCoinbase"] as? Bool) == true ? .mined : .received
+            default: return nil
+            }
+            return Entry(txId: id, kind: kind, height: height, time: Date(timeIntervalSince1970: TimeInterval(ts)),
+                         amount: amount, fee: number(t["fee"]) ?? 0,
+                         counterparties: t["counterparties"] as? [String] ?? [])
+        }
+        let more = (o["pagination"] as? [String: Any])?["hasMore"] as? Bool ?? false
+        return Page(entries: entries, hasMore: more && !txs.isEmpty)
     }
 }

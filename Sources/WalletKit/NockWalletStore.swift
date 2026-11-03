@@ -104,8 +104,19 @@ final class NockWalletStore: ObservableObject {
     /// An unconfirmed send the node no longer knows after this long has been dropped.
     nonisolated static let dropAfter: TimeInterval = 30 * 60
     nonisolated static let historyLimit = 1_000
+    /// How often nockscan is asked again while nothing new arrived (a new note, a settled send
+    /// or a pull to refresh ask at once), and how often the whole history is re-read.
+    nonisolated static let scanEvery: TimeInterval = 5 * 60
+    nonisolated static let fullScanEvery: TimeInterval = 24 * 3600
 
     private let client = NockClient()
+    private let scan = NockScan()
+    /// Last nockscan read this session (nil: not yet — the first load reads it).
+    private var scanAt: Date?
+    /// A NOCK page was opened this session: read the history even when this device has no sign
+    /// of NOCK use.
+    private var historyRequested = false
+    private var forceScanNext = false
     private var walletID: String?
     private var generation = 0
     private var loadTask: Task<Void, Never>?
@@ -146,6 +157,8 @@ final class NockWalletStore: ObservableObject {
         var syncedAt: Date?
         /// The receive page showed this wallet's NOCK address (the user went to get it).
         var addressShown = false
+        /// Last time nockscan's history for the address was read to the end (or to the limit).
+        var fullScanAt: Date?
 
         init() {}
         // Lenient: a field added later must not make an older saved state unreadable.
@@ -159,6 +172,7 @@ final class NockWalletStore: ObservableObject {
             pending = try c.decodeIfPresent([PendingSend].self, forKey: .pending) ?? []
             syncedAt = try c.decodeIfPresent(Date.self, forKey: .syncedAt)
             addressShown = try c.decodeIfPresent(Bool.self, forKey: .addressShown) ?? false
+            fullScanAt = try c.decodeIfPresent(Date.self, forKey: .fullScanAt)
         }
     }
     nonisolated static let seenRetention: TimeInterval = 3 * 86_400
@@ -180,6 +194,9 @@ final class NockWalletStore: ObservableObject {
             walletID = id
             generation += 1
             loadTask?.cancel(); loadTask = nil; loadAgain = false; lastLoadAt = nil; retriedFirstLoad = false
+            // historyRequested stays: the page asking may have appeared before this switch
+            // was delivered (the subscription hops through the main run loop).
+            scanAt = nil; forceScanNext = false
             account = nil; backendReady = false; syncError = nil; tipHeight = nil
             state = id.flatMap(Self.loadState) ?? State()
             publishState()
@@ -220,6 +237,7 @@ final class NockWalletStore: ObservableObject {
         walletID = nil   // so the switch to the next wallet doesn't write this state back
         generation += 1
         loadTask?.cancel(); loadTask = nil; loadAgain = false; lastLoadAt = nil
+        scanAt = nil; forceScanNext = false
         account = nil; backendReady = false; syncError = nil; tipHeight = nil; notes = []
         state = State()
         publishState()
@@ -267,9 +285,19 @@ final class NockWalletStore: ObservableObject {
         await load()
     }
 
+    /// The NOCK page is on screen: its history is wanted even when nothing on this device says
+    /// the wallet uses NOCK (it may all have come and gone on another device).
+    func wantHistory() {
+        guard !historyRequested else { return }
+        historyRequested = true
+        if scanAt == nil { lastLoadAt = nil }   // so the page's refreshIfStale reads it now
+    }
+
     /// Single-flight: callers join the running load; a call mid-load schedules one more pass.
-    func load() async {
+    /// `forceScan` (pull to refresh) also re-reads the history from nockscan.
+    func load(forceScan: Bool = false) async {
         guard account != nil else { return }
+        if forceScan { forceScanNext = true }
         if let task = loadTask {
             loadAgain = true
             await task.value
@@ -304,13 +332,15 @@ final class NockWalletStore: ObservableObject {
             for n in a.notes + b.notes { byID[n.id] = n }
             let tip = max(a.height, b.height)
             let current = byID.values.sorted { $0.originPage > $1.originPage }
+            let openBefore = state.pending.filter { $0.status == .pending }.count
             await reconcileSends(notes: current, gen: gen, account: account)
             guard isCurrent(gen, account) else { return }
             notes = current
             tipHeight = tip
             state.tip = tip
             recomputeBalance()
-            addArrivals(current, tip: tip)
+            let arrived = addArrivals(current, tip: tip)
+            let settled = state.pending.filter { $0.status == .pending }.count < openBefore
             backendReady = true
             balanceIsCached = false
             syncError = nil
@@ -318,7 +348,14 @@ final class NockWalletStore: ObservableObject {
             state.syncedAt = lastSyncedAt
             lastLoadAt = Date()
             persist()
-            // The balance is up; the rows' real block times follow (one request per ~21 h of blocks).
+            // The balance is up; then the history nockscan has that this device never saw.
+            if inUse || historyRequested,
+               forceScanNext || arrived || settled || scanAt.map({ Date().timeIntervalSince($0) > Self.scanEvery }) ?? true {
+                forceScanNext = false
+                await scanHistory(gen: gen, account: account)
+                guard isCurrent(gen, account) else { return }
+            }
+            // The rows' real block times follow (one request per ~21 h of blocks).
             await fillBlockTimes(tip: tip, gen: gen, account: account)
         } catch {
             guard isCurrent(gen, account) else { return }
@@ -413,15 +450,19 @@ final class NockWalletStore: ObservableObject {
     }
 
     /// A row per note seen for the first time (our own change excepted), timed from its height
-    /// until `fillBlockTimes` puts the block's own time in.
-    private func addArrivals(_ notes: [NockNote], tip: UInt64) {
+    /// until `fillBlockTimes` puts the block's own time in. True when a row was added.
+    @discardableResult
+    private func addArrivals(_ notes: [NockNote], tip: UInt64) -> Bool {
         let ownChange = Set(state.pending.flatMap(\.changeNotes))
         let rows = Set(state.history.map(\.id))
         let now = Date()
+        var added = false
         for n in notes {
             let firstSight = state.seen[n.id] == nil
             state.seen[n.id] = now
-            guard firstSight, !ownChange.contains(n.id), !rows.contains("note:\(n.id)") else { continue }
+            guard firstSight, !ownChange.contains(n.id), !rows.contains("note:\(n.id)"),
+                  !Self.scanCovers(n, in: state.history) else { continue }
+            added = true
             state.history.append(NockTx(id: "note:\(n.id)", kind: n.isMiningReward ? .mined : .received,
                                         amount: n.assets, fee: nil, counterparty: nil, txId: nil,
                                         height: n.originPage, time: blockTimes[n.originPage] ?? estimatedTime(height: n.originPage, tip: tip),
@@ -430,9 +471,97 @@ final class NockWalletStore: ObservableObject {
         // A spent note never comes back (names are unique): forget it after a few days. A busy
         // address keeps its most recent rows only.
         state.seen = state.seen.filter { now.timeIntervalSince($0.value) < Self.seenRetention }
+        capHistory()
+        history = sortedHistory(state.history)
+        return added
+    }
+
+    private func capHistory() {
         let sorted = sortedHistory(state.history)
         if sorted.count > Self.historyLimit { state.history = Array(sorted.prefix(Self.historyLimit)) }
+    }
+
+    // MARK: History from nockscan
+
+    /// Reads the address's history from nockscan and folds it in. A full pass (first time, then
+    /// daily) walks back to the history limit; otherwise it stops at the first page that reaches
+    /// rows already here. A failed read changes nothing and is retried on the next load.
+    private func scanHistory(gen: Int, account: NockCore.Account) async {
+        let full = state.fullScanAt.map { Date().timeIntervalSince($0) > Self.fullScanEvery } ?? true
+        let known = Set(state.history.map(\.id))
+        var entries: [NockScan.Entry] = []
+        var reachedEnd = false
+        while entries.count < Self.historyLimit {
+            guard let page = try? await scan.page(address: account.address, limit: full ? NockScan.pageSize : 25,
+                                                  offset: entries.count) else { break }
+            guard isCurrent(gen, account) else { return }
+            entries += page.entries
+            if !page.hasMore || entries.count >= Self.historyLimit { reachedEnd = true; break }
+            if !full && page.entries.contains(where: { known.contains($0.txId) }) { break }
+        }
+        guard reachedEnd || !entries.isEmpty else { return }
+        scanAt = Date()
+        if full && reachedEnd { state.fullScanAt = scanAt }
+        state.history = Self.merge(state.history, scan: entries)
+        capHistory()
         history = sortedHistory(state.history)
+        persist()
+    }
+
+    /// Folds nockscan's rows into the history. A row already here keeps what only this device
+    /// knows (a send's recipient amount; a send still pending or failed is `reconcileSends`'
+    /// business). Notes this device recorded become the transaction that brought them: one
+    /// note of that amount at that height, or all of that kind there together — if they don't
+    /// add up, this device's rows stay and nockscan's is left out rather than counted twice.
+    /// Notes that arrived at the height of a send made elsewhere were its change, not income.
+    nonisolated static func merge(_ history: [NockTx], scan entries: [NockScan.Entry]) -> [NockTx] {
+        var rows = history
+        var done = Set<String>()
+        for e in entries where done.insert(e.txId).inserted {
+            if let i = rows.firstIndex(where: { $0.id == e.txId }) {
+                guard rows[i].status == .confirmed else { continue }
+                rows[i].height = e.height
+                rows[i].time = e.time
+                rows[i].timeExact = true
+                if rows[i].kind == .sent, rows[i].fee == nil { rows[i].fee = e.fee }
+                continue
+            }
+            switch e.kind {
+            case .sent:
+                rows.append(NockTx(id: e.txId, kind: .sent, amount: e.amount >= e.fee ? e.amount - e.fee : e.amount,
+                                   fee: e.fee, counterparty: e.counterparties.first, txId: e.txId, height: e.height,
+                                   time: e.time, timeExact: true, status: .confirmed))
+            case .received, .mined:
+                let kind: NockTx.Kind = e.kind == .mined ? .mined : .received
+                let notes = rows.indices.filter { rows[$0].id.hasPrefix("note:") && rows[$0].kind == kind && rows[$0].height == e.height }
+                var drop: [Int] = []
+                if let one = notes.first(where: { rows[$0].amount == e.amount }) {
+                    drop = [one]
+                } else if !notes.isEmpty {
+                    guard notes.reduce(UInt64(0), { $0 + rows[$1].amount }) == e.amount else { continue }
+                    drop = notes
+                }
+                for i in drop.sorted(by: >) { rows.remove(at: i) }
+                // A mining reward's id ("coinbase-…") isn't a transaction anyone can look up.
+                rows.append(NockTx(id: e.txId, kind: kind, amount: e.amount, fee: nil, counterparty: nil,
+                                   txId: kind == .mined ? nil : e.txId, height: e.height,
+                                   time: e.time, timeExact: true, status: .confirmed))
+            }
+        }
+        let sendHeights = Set(entries.filter { $0.kind == .sent }.map(\.height))
+        rows.removeAll { $0.id.hasPrefix("note:") && $0.kind == .received && $0.height.map(sendHeights.contains) == true }
+        return rows
+    }
+
+    /// A note nockscan already accounted for: a row of its kind at its height, or a send there
+    /// (the note is that send's change). If it was in fact a second payment in the same block,
+    /// nockscan lists it under its own txid and the next read adds it.
+    nonisolated static func scanCovers(_ n: NockNote, in history: [NockTx]) -> Bool {
+        let kind: NockTx.Kind = n.isMiningReward ? .mined : .received
+        return history.contains { row in
+            !row.id.hasPrefix("note:") && row.status == .confirmed && row.height == n.originPage
+                && (row.kind == kind || (row.kind == .sent && kind == .received))
+        }
     }
 
     /// Real block times for rows still on an estimate: the last ~3.5 days of blocks in at most

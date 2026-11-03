@@ -198,9 +198,10 @@ struct NockWalletView: View {
         // A small title: this is a page inside the wallet, not a second wallet tab.
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .refreshable { await nock.load(); await price.refreshIfStale() }
+        .refreshable { await nock.load(forceScan: true); await price.refreshIfStale() }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
+            nock.wantHistory()
             await nock.refreshIfStale()
             await price.refreshIfStale()
             while !Task.isCancelled {
@@ -760,7 +761,7 @@ struct NockActivityView: View {
                             }
                         }
                         .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
-                        Text(Loc("记录由本机保存：收到的每一笔从本机第一次看到它时算起，换手机或重装后只能看到当前持有的部分。"))
+                        Text(Loc("记录从区块浏览器 nockscan.com 读取，换设备或重装后也能看到。"))
                             .pearlExplanation(.footnote)
                             .padding(.horizontal, Pearl.Space.xs)
                     }
@@ -772,8 +773,8 @@ struct NockActivityView: View {
         }
         .pearlScreenBackground()
         .navigationTitle(Loc("NOCK 记录"))
-        .task { await nock.refreshIfStale() }
-        .refreshable { await nock.load() }
+        .task { nock.wantHistory(); await nock.refreshIfStale() }
+        .refreshable { await nock.load(forceScan: true) }
     }
 }
 
