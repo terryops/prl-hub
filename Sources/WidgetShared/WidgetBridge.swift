@@ -19,10 +19,6 @@ import WidgetKit
 @MainActor
 enum WidgetBridge {
     static let homeKind = "PRLHubWidget"
-    /// The three-pool medium widget: same snapshot and Pro gate as `homeKind`, so it
-    /// reloads whenever that one does.
-    static let homePoolsKind = "PRLHubPoolsWidget"
-    static let homeKinds = [homeKind, homePoolsKind]
     static let lockKind = "PRLHubLockWidget"
     static let quoteKind = "PRLHubQuoteWidget"
     static let change1hKind = "PRLHubChange1hWidget"
@@ -173,14 +169,14 @@ enum WidgetBridge {
         guard s.isPro != isPro else { return }
         s.isPro = isPro
         WidgetStore.save(s)
-        reloadHomeKinds()
+        reload(kind: homeKind)
     }
 
     /// Appearance changes refresh immediately, independently of the data throttle.
     @discardableResult
     static func updateAppearance(palette: String, icon: String, mode: String) -> Bool {
         guard WidgetAppearance(palette: palette, icon: icon, mode: mode).save() else { return false }
-        reloadHomeKinds()
+        reload(kind: homeKind)
         reloadLock()
         return true
     }
@@ -199,12 +195,12 @@ enum WidgetBridge {
     static func reloadHome() {
         switch homeThrottle.request(at: Date()) {
         case .reloadNow:
-            reloadHomeKinds()
+            reload(kind: homeKind)
         case .schedule(let at):
             Task {
                 try? await Task.sleep(for: .seconds(max(0, at.timeIntervalSinceNow)))
                 homeThrottle.fire(at: Date())
-                reloadHomeKinds()
+                reload(kind: homeKind)
             }
         case .none:
             break
@@ -222,10 +218,6 @@ enum WidgetBridge {
         #if os(iOS)
         reload(kind: quoteMiningKind)
         #endif
-    }
-
-    private static func reloadHomeKinds() {
-        for kind in homeKinds { reload(kind: kind) }
     }
 
     private static func reload(kind: String) {

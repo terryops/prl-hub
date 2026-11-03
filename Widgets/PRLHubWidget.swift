@@ -33,30 +33,6 @@ struct PearlWidget: Widget {
     }
 }
 
-/// The medium widget with three pool watches instead of two: the same price | balance
-/// header, then a three-column panel — each pool's hashrate and rigs online, no names.
-/// Medium only, Pro like the other medium / large sizes. A separate gallery entry, so
-/// the original layout stays as it is.
-struct PearlPoolsWidget: Widget {
-    let kind = "PRLHubPoolsWidget"
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: PearlProvider(demo: .demoThreePools)) { entry in
-            WidgetPresentation(appearance: entry.appearance) {
-                if entry.locked {
-                    PearlWidgetLocked(languageCode: entry.snap.languageCode)
-                } else {
-                    MediumThreePools(snap: entry.snap, age: entry.age, fresh: entry.fresh)
-                }
-            }
-            .containerBackground(for: .widget) { WidgetBackground(appearance: entry.appearance) }
-            .environment(\.locale, widgetLocale(entry.snap.languageCode))
-        }
-        .configurationDisplayName("Pearl Hub")
-        .description("币价、余额和三个矿池的算力（需高级版）")
-        .supportedFamilies([.systemMedium])
-    }
-}
-
 struct PearlEntry: TimelineEntry {
     let date: Date
     let snap: WidgetSnapshot
@@ -123,16 +99,13 @@ private enum FreshnessFormatter {
 }
 
 struct PearlProvider: TimelineProvider {
-    /// What the gallery previews (and the placeholder shows).
-    var demo: WidgetSnapshot = .demo
-
-    func placeholder(in context: Context) -> PearlEntry { PearlEntry(date: Date(), snap: demo) }
+    func placeholder(in context: Context) -> PearlEntry { PearlEntry(date: Date(), snap: .demo) }
 
     func getSnapshot(in context: Context, completion: @escaping (PearlEntry) -> Void) {
         let now = Date()
         // The gallery previews what Pro gets; a placed widget shows what this user gets.
         if context.isPreview {
-            completion(PearlEntry(date: now, snap: demo))
+            completion(PearlEntry(date: now, snap: .demo))
             return
         }
         nonisolated(unsafe) let completion = completion
@@ -269,7 +242,14 @@ struct PearlWidgetView: View {
         switch family {
         case .systemSmall: SmallCombined(snap: snap)
         case .systemLarge: LargeCombined(snap: snap, age: age, fresh: fresh)
-        default:           MediumCombined(snap: snap, age: age, fresh: fresh)
+        default:
+            // Two columns fit two pools with room to spare; from three up the medium
+            // switches to the three-column panel (no names, smaller type).
+            if snap.pools.count >= 3 {
+                MediumThreePools(snap: snap, age: age, fresh: fresh)
+            } else {
+                MediumCombined(snap: snap, age: age, fresh: fresh)
+            }
         }
     }
 }
@@ -563,7 +543,7 @@ private struct LargeCombined: View {
     }
 }
 
-// MARK: medium, three pools — price | balance header, then a three-column pool panel
+// MARK: medium with three or more pools — price | balance header, three-column pool panel
 
 private struct MediumThreePools: View {
     @Environment(\.widgetColors) private var colors
@@ -612,11 +592,7 @@ private struct MediumThreePools: View {
 
             WidgetDivider().padding(.vertical, 11)
 
-            if pools.isEmpty {
-                Link(destination: WidgetDeepLink.wallet.url) { TxStrip(snap: snap) }
-            } else {
-                Link(destination: WidgetDeepLink.pools.url) { ThreePoolPanel(pools: pools) }
-            }
+            Link(destination: WidgetDeepLink.pools.url) { ThreePoolPanel(pools: pools) }
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -663,7 +639,7 @@ private enum RigsTone {
     }
 }
 
-/// Rigs online as a pill (every size of both home widgets), like the app's 一览 tiles:
+/// Rigs online as a pill (every size of the home widget), like the app's 一览 tiles:
 /// quiet when all are up, hard-hat gold when some are down, rose when none are. On classic blue a tint vanishes into the
 /// gradient, so trouble there is a solid pill.
 private struct RigsPill: View {
@@ -721,8 +697,9 @@ private struct PriceBig: View {
     }
 }
 
-/// Mining (medium) — one rounded panel with each pool as an equal column split by a
-/// hairline: bigger and tidier than loose rows. Shows up to 2 pools.
+/// Mining (medium, one or two pools) — one rounded panel with each pool as an equal
+/// column split by a hairline: bigger and tidier than loose rows. Three or more pools
+/// get `ThreePoolPanel` instead.
 private struct MiningPanel: View {
     @Environment(\.widgetColors) private var colors
     let pools: [WidgetPool]

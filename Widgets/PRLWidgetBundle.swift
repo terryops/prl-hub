@@ -5,7 +5,6 @@ import SwiftUI
 //
 // Widgets the user adds separately:
 //   • Pearl Hub  — home screen / desktop: balance + fiat, recent transfers, pool hashrate.
-//   • Pearl Hub (three pools) — medium: price | balance, then three pool columns.
 //   • PRL 币价   — iOS Lock Screen: today's date, weekday and the live PRL price.
 //   • PRL 报价 / 1h / 24h — iOS Lock Screen: quote and rolling price changes.
 //   • 报价与矿池监控 — iOS Lock Screen: price, total hashrate and online workers.
@@ -17,7 +16,6 @@ import SwiftUI
 struct PearlWidgetBundle: WidgetBundle {
     var body: some Widget {
         PearlWidget()
-        PearlPoolsWidget()
         #if os(iOS)
         PearlLockWidget()
         PearlQuoteWidget()
@@ -200,20 +198,6 @@ extension WidgetSnapshot {
         ]
         s.poolsAt = Date()
         s.updatedAt = Date()
-        return s
-    }
-
-    /// The three-pool medium widget's gallery sample.
-    static var demoThreePools: WidgetSnapshot {
-        var s = demo
-        s.pools = [
-            WidgetPool(label: "F2Pool", kind: "F2Pool", address: "demo1",
-                       hashrate: "1.46 PH/s", hashrateRaw: 1.46e15, online: 7, total: 7),
-            WidgetPool(label: "Pearl Fortune", kind: "Pearl Fortune", address: "prl1demo",
-                       hashrate: "740.90 TH/s", hashrateRaw: 7.409e14, online: 2, total: 2),
-            WidgetPool(label: "Kryptex", kind: "Kryptex", address: "prl1demo2",
-                       hashrate: "312.40 TH/s", hashrateRaw: 3.124e14, online: 3, total: 3),
-        ]
         return s
     }
 }
