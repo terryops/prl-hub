@@ -13,6 +13,8 @@ struct RootView: View {
     // verification run can land on a tab without driving the tab bar. Same shape as
     // PoolStore's SHOT_WATCH_ADDR seeding, and compiled out of release entirely.
     @State private var tab = RootView.initialTab
+    /// The 钱包 tab's tag (a tapped 到账提醒 opens it).
+    static let walletTab = 0
     @State private var widgetPaywall = false   // the locked widget was tapped
 
     private static var initialTab: Int {
@@ -134,6 +136,10 @@ struct RootView: View {
         .onChange(of: paletteStored) { _, _ in publishWidgetAppearance() }
         .onChange(of: iconStored) { _, _ in publishWidgetAppearance() }
         .onChange(of: appearance) { _, _ in publishWidgetAppearance() }
+        .onReceive(NotificationCenter.default.publisher(for: PushRoute.didChange)) { _ in
+            if let t = PushRoute.take() { tab = t }
+        }
+        .onAppear { if let t = PushRoute.take() { tab = t } }
         .onReceive(NotificationCenter.default.publisher(for: .cloudSyncDidUpdate)) { _ in
             contacts.reload()
             wallet.adoptSyncedMeta()   // wallet name / network synced from another device

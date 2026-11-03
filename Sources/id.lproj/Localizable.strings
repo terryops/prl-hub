@@ -1340,3 +1340,14 @@
 "保本全网算力" = "Hashrate jaringan impas";
 "扣抽水后" = "Setelah biaya pool";
 "功耗" = "Daya";
+
+/* 到账提醒 */
+"到账提醒" = "Peringatan Dana Masuk";
+"通知权限已关闭，到账提醒无法送达" = "Notifikasi nonaktif, jadi peringatan dana masuk tidak bisa dikirim";
+"这个地址收到 PRL，1 个区块确认后就推送通知，不用打开 App。从这个地址转出的交易和找零不算。" = "Saat alamat ini menerima PRL, Anda mendapat notifikasi setelah 1 konfirmasi blok tanpa membuka aplikasi. Pengiriman dari alamat ini dan kembaliannya tidak dihitung.";
+"推送时段之外到账的，到时段开始时再通知你。" = "Dana yang masuk di luar jam notifikasi akan diberitahukan saat jam itu dimulai.";
+"开启后服务器会保存这个地址，只用来查到账；不涉及助记词或私钥。" = "Setelah aktif, server menyimpan alamat ini hanya untuk memeriksa dana masuk. Frasa pemulihan dan kunci privat tidak terlibat.";
+"更换地址" = "Ganti Alamat";
+"我的地址" = "Alamat Saya";
+"开启到账提醒" = "Aktifkan Peringatan Dana Masuk";
+"已开启" = "Aktif";

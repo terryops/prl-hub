@@ -14,6 +14,16 @@ struct SettingsView: View {
         #endif
     }
 
+    @State private var shotIncomeAlerts = SettingsView.shotIncomeAlerts
+
+    private static var shotIncomeAlerts: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["SHOT_INCOME_ALERTS"] == "1"
+        #else
+        return false
+        #endif
+    }
+
     @State private var shotPriceAlerts = SettingsView.shotPriceAlerts
 
     private static var shotPriceAlerts: Bool {
@@ -101,6 +111,7 @@ struct SettingsView: View {
             #endif
             .navigationDestination(isPresented: $shotOfflineAlerts) { OfflineAlertsView() }
             .navigationDestination(isPresented: $shotPriceAlerts) { PriceAlertsView() }
+            .navigationDestination(isPresented: $shotIncomeAlerts) { IncomeAlertsView() }
             .navigationDestination(isPresented: $shotWebLink) { WebLinkView() }
             .navigationDestination(isPresented: $shotSecurity) { SecurityInfoView() }
         }
@@ -314,6 +325,7 @@ private struct GatewaySettingsSection: View {
 private struct NotificationSettingsSection: View {
     @ObservedObject private var alerts = PriceAlertStore.shared
     @ObservedObject private var offline = OfflineAlertStore.shared
+    @ObservedObject private var income = IncomeAlertStore.shared
     @ObservedObject private var pro = ProStore.shared
     @ObservedObject private var live = PriceLiveActivity.shared
 
@@ -349,6 +361,21 @@ private struct NotificationSettingsSection: View {
                 }
             }
             .accessibilityIdentifier("settings-offline-alerts")
+            NavigationLink {
+                IncomeAlertsView()
+            } label: {
+                LabeledContent {
+                    if !pro.isPro {
+                        PearlBadge(text: Loc("高级版"), tint: Pearl.accent)
+                    } else if income.wire != nil && alerts.incomeRegistered {
+                        // Only when this device really sends it (pushes on here, Pro proven to the server).
+                        Text(Loc("已开启"))
+                    }
+                } label: {
+                    SettingsMenuLabel(Loc("到账提醒"), systemImage: "arrow.down.circle")
+                }
+            }
+            .accessibilityIdentifier("settings-income-alerts")
             if PriceLiveActivity.supported {
                 NavigationLink {
                     LiveActivitySettingsView()

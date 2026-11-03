@@ -150,7 +150,8 @@ struct DeviceRegistrationBodyTests {
         let watches = OfflineAlertWire.list(watches: [garage, f2], minutes: [garage.id: 15, f2.id: 60], again: [garage.id: 60])
 
         let body = PriceAlertStore.registrationBody(
-            rules: [above.wire, move.wire], watches: watches, window: PushWindow(start: 480, end: 1380),
+            rules: [above.wire, move.wire], watches: watches, income: .on(IncomeAlertWire(addr: addr, label: "Main")),
+            window: PushWindow(start: 480, end: 1380),
             timeZone: "Asia/Shanghai", env: "production", topic: "com.prl.wizard", lang: "zh-Hans", proJWS: "PRO_JWS")
         let sample = try JSONSerialization.jsonObject(with: try Fixture.data("alerts_put_body.json"))
         #expect(NSDictionary(dictionary: body).isEqual(sample))
@@ -168,5 +169,39 @@ struct DeviceRegistrationBodyTests {
         let cleared = PriceAlertStore.registrationBody(rules: [], watches: [], window: nil, timeZone: "UTC",
                                                        env: "sandbox", topic: "com.prl.wizard", lang: "en", proJWS: nil)
         #expect((cleared["watches"] as? [Any])?.isEmpty == true)
+        #expect(body["income"] == nil)
+        let off = PriceAlertStore.registrationBody(rules: [], watches: [], income: .off, window: nil, timeZone: "UTC",
+                                                   env: "sandbox", topic: "com.prl.wizard", lang: "en", proJWS: nil)
+        #expect(off["income"] is NSNull)
+    }
+}
+
+/// 到账提醒: what the address field takes, and what is kept.
+struct IncomeAlertTests {
+    private let addr = "prl1p8wznc8tkhlkjaq7v8ycugz93rgs8uezq6px7873934kh35nk9q2qlz0q9m"
+
+    @Test func takesAMainnetAddressHoweverItWasPasted() {
+        #expect(IncomeAlertStore.normalize(addr) == addr)
+        #expect(IncomeAlertStore.normalize("  \(addr.uppercased())\n") == addr)
+        #expect(IncomeAlertStore.normalize("pearl:\(addr)?amount=1") == addr)
+        #expect(IncomeAlertStore.normalize(String(addr.dropLast()) + "x") == nil, "bad checksum")
+        #expect(IncomeAlertStore.normalize("tprl1p8wznc8tkhlkjaq7v8ycugz93rgs8uezq6px7873934kh35nk9q2qlz0q9m") == nil)
+        #expect(IncomeAlertStore.normalize("") == nil)
+    }
+
+    @Test func storedAsItIsSentAndDroppedWhenUnreadable() {
+        let d = UserDefaults(suiteName: "IncomeAlertTests-\(UUID().uuidString)")!
+        #expect(IncomeAlertStore.load(d) == nil)
+        IncomeAlertStore.store(IncomeAlertSetting(addr: addr, label: "Main", on: false), defaults: d)
+        #expect(IncomeAlertStore.load(d) == IncomeAlertSetting(addr: addr, label: "Main", on: false))
+        #expect(NSDictionary(dictionary: IncomeAlertWire(addr: addr).payload).isEqual(["addr": addr]))
+        d.set(Data("{\"addr\":\"nope\"}".utf8), forKey: IncomeAlertStore.key)
+        #expect(IncomeAlertStore.load(d) == nil)
+        IncomeAlertStore.store(nil, defaults: d)
+        #expect(d.object(forKey: IncomeAlertStore.key) == nil)
+    }
+
+    @Test func syncsOverICloud() {
+        #expect(CloudSync.syncedKeys.contains(IncomeAlertStore.key))
     }
 }

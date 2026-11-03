@@ -30,6 +30,8 @@ enum CloudSync {
     static let syncedKeys = [
         // pool monitor (+ which monitors have a 掉线提醒, after how many minutes, and its reminder)
         "pool.watches", "pool.alerts", "pool.alertsAgain",
+        // 到账提醒: the one address watched for payments, and its name
+        "income.alert",
         // exchange / trade — NON-secret only. The API key/secret are stored in the
         // iCloud Keychain (E2E-encrypted), never in this plaintext KVS.
         "safetrade.period", "safetrade.withdrawAddresses",

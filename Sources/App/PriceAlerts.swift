@@ -423,9 +423,11 @@ final class PriceAlertStore: ObservableObject {
     /// The 掉线提醒 monitors ride on the same device record. (Not touched from init:
     /// the two singletons would wait on each other.)
     private var offline: OfflineAlertStore { .shared }
+    /// …and so does the 到账提醒 address.
+    private var income: IncomeAlertStore { .shared }
 
-    /// Whether there is anything here to push for — price alerts or 掉线提醒.
-    private var hasContent: Bool { !rules.isEmpty || !offline.wire.isEmpty }
+    /// Whether there is anything here to push for — price alerts, 掉线提醒 or 到账提醒.
+    private var hasContent: Bool { !rules.isEmpty || !offline.wire.isEmpty || income.wire != nil }
 
     /// 掉线提醒 changed what it wants watched (a choice, a monitor edited, iCloud).
     func contentChanged(prompt: Bool) {
@@ -651,10 +653,25 @@ final class PriceAlertStore: ObservableObject {
         return list.isEmpty || ProStore.shared.jws != nil || ProStore.shared.hasAccountPro ? list : nil
     }
 
+    /// Whether this device sends the worker its 到账提醒 address: on, Pro proven, pushes on here.
+    var incomeRegistered: Bool {
+        if case .on = wireIncome { return true }
+        return false
+    }
+
+    /// The 到账提醒 address for the worker, under the same rule as the monitors: the worker takes
+    /// it only with a signed Apple purchase or a verified account purchase.
+    private var wireIncome: IncomeAlertField {
+        guard ProStore.shared.isPro, pushHere, let w = income.wire else { return .off }
+        return ProStore.shared.jws != nil || ProStore.shared.hasAccountPro ? .on(w) : .unsaid
+    }
+
     /// The device record as the worker's PUT /v1/devices/:token takes it (alerts/src/index.js
     /// putDevice; Tests/Fixtures/alerts_put_body.json is checked against both ends).
     /// `watches` nil = say nothing about the 掉线提醒 monitors; the worker keeps what it has.
+    /// `income` likewise for the 到账提醒 address: `.unsaid` leaves the key out, `.off` sends null.
     nonisolated static func registrationBody(rules: [PriceAlertRule.Wire], watches: [OfflineAlertWire]?,
+                                             income: IncomeAlertField = .unsaid,
                                              window: PushWindow?, timeZone: String, env: String, topic: String,
                                              lang: String, proJWS: String?) -> [String: Any] {
         var body: [String: Any] = [
@@ -666,6 +683,11 @@ final class PriceAlertStore: ObservableObject {
             "rules": rules.map(\.payload),
         ]
         if let watches { body["watches"] = watches.map(\.payload) }
+        switch income {
+        case .unsaid: break
+        case .off: body["income"] = NSNull()
+        case .on(let w): body["income"] = w.payload
+        }
         if let proJWS { body["pro_jws"] = proJWS }
         return body
     }
@@ -680,7 +702,7 @@ final class PriceAlertStore: ObservableObject {
         let sent = localVersion
         let tz = TimeZone.current.identifier
         let body = Self.registrationBody(
-            rules: wireRules, watches: wireWatches, window: window, timeZone: tz, env: Self.apnsEnvironment,
+            rules: wireRules, watches: wireWatches, income: wireIncome, window: window, timeZone: tz, env: Self.apnsEnvironment,
             topic: Bundle.main.bundleIdentifier ?? "com.prl.wizard", lang: Self.pushLanguage,
             // The signed Pro purchase, so the worker can check the entitlement itself.
             proJWS: ProStore.shared.isPro ? ProStore.shared.jws : nil)

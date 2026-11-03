@@ -19,6 +19,32 @@ final class PushDelegate: NSObject, UNUserNotificationCenterDelegate {
         // A price alert that just arrived has switched itself off server-side.
         Task { @MainActor in await PriceAlertStore.shared.refresh() }
     }
+
+    /// A tapped 到账提醒 opens the wallet.
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        let payment = response.notification.request.content.userInfo["income"] != nil
+        if payment { Task { @MainActor in PushRoute.open(tab: RootView.walletTab) } }
+        completionHandler()
+    }
+}
+
+/// Where a tapped notification asks the app to go: held until RootView takes it, so a tap that
+/// launches the app still lands there.
+@MainActor
+enum PushRoute {
+    static let didChange = Notification.Name("pushRouteDidChange")
+    private static var pendingTab: Int?
+
+    static func open(tab: Int) {
+        pendingTab = tab
+        NotificationCenter.default.post(name: didChange, object: nil)
+    }
+
+    static func take() -> Int? {
+        defer { pendingTab = nil }
+        return pendingTab
+    }
 }
 
 #if os(iOS)

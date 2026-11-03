@@ -1340,3 +1340,14 @@
 "保本全网算力" = "Hashrate de red de equilibrio";
 "扣抽水后" = "Tras comisión del pool";
 "功耗" = "Consumo";
+
+/* 到账提醒 */
+"到账提醒" = "Alertas de cobro";
+"通知权限已关闭，到账提醒无法送达" = "Las notificaciones están desactivadas; las alertas de cobro no llegarán";
+"这个地址收到 PRL，1 个区块确认后就推送通知，不用打开 App。从这个地址转出的交易和找零不算。" = "Cuando esta dirección reciba PRL, te avisaremos tras 1 confirmación de bloque, sin abrir la app. Los envíos desde esta dirección y su cambio no cuentan.";
+"推送时段之外到账的，到时段开始时再通知你。" = "Un cobro que llegue fuera de tu horario de avisos se notifica cuando este empiece.";
+"开启后服务器会保存这个地址，只用来查到账；不涉及助记词或私钥。" = "Al activarla, el servidor guarda esta dirección solo para comprobar los cobros. Nunca intervienen tu frase de recuperación ni tus claves privadas.";
+"更换地址" = "Cambiar dirección";
+"我的地址" = "Mis direcciones";
+"开启到账提醒" = "Activar alertas de cobro";
+"已开启" = "Activadas";
