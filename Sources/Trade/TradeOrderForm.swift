@@ -40,7 +40,7 @@ struct OrderFormView: View {
 
     /// The market order's price cap: the last price ± the chosen slippage (a floor for a sell).
     private var marketCap: Decimal? {
-        store.marketPriceCap(side: side, slippagePercent: TradeSlippage.clamped(slippage))
+        store.marketPriceCap(side: side, slippagePercent: TradeSlippage.clamped(slippage), amount: PRLAmount.parse(volume))
     }
     /// Shown with the market's price decimals ("1.50", like every other price here).
     private var marketCapText: String? {
@@ -61,7 +61,7 @@ struct OrderFormView: View {
         let quote = usdt?.balanceValue ?? 0
         if ordType == "market" {
             guard let d = store.depth else { return 0 }
-            return SafeTradeBook.affordableAmount(quote: quote, asks: d.asks, tick: tick)
+            return SafeTradeBook.affordableAmount(quote: quote, asks: d.asks, tick: tick, takerFee: rules.takerFee)
         }
         let p = priceNum > 0 ? priceNum : (store.ticker?.buy).flatMap(Double.init) ?? 0   // `buy` = best ask
         guard p > 0 else { return 0 }
@@ -74,7 +74,9 @@ struct OrderFormView: View {
     }
 
     private var ruleProblem: SafeTradeMarketRules.Problem? {
-        rules.problem(amountText: volume, priceText: ordType == "limit" ? price : nil)
+        let refPrice = ordType == "limit" ? nil
+            : (marketAvg.flatMap { Decimal(string: String($0)) } ?? store.ticker?.last.flatMap { Decimal(string: $0) })
+        return rules.problem(amountText: volume, priceText: ordType == "limit" ? price : nil, referencePrice: refPrice)
     }
     private var insufficient: Bool {
         if side == "sell" { return volNum > (pearl?.balanceValue ?? 0) }
@@ -178,6 +180,12 @@ struct OrderFormView: View {
         .onAppear { store.wantsDepth = ordType == "market" }
         .onDisappear { store.wantsDepth = false }
         .onChange(of: ordType) { _, t in store.wantsDepth = t == "market" }
+        .onChange(of: store.exchange) { _, _ in
+            price = ""
+            volume = ""
+            confirming = false
+            focusedField = nil
+        }
         #if os(iOS)
         .toolbar {
             // 数字键盘上方的「完成」按钮，点一下即可收起键盘。

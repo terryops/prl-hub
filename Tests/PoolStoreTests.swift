@@ -145,7 +145,7 @@ struct SharedPublicDataTests {
         let pools = PoolsOverviewStore.build(decoded)
         let hero = try #require(pools.first { $0.name == "HeroMiners" })
         #expect(hero.feeType == "PROP" && !hero.isPPS)
-        #expect(close(try #require(hero.realFeePercent), -0.77))           // negative is kept
+        #expect(hero.realFeePercent == nil)                             // HeroMiners requires rolling evidence, including its uncertainty.
         let pearlhash = try #require(pools.first { $0.name == "PearlHash" })
         #expect(pearlhash.payoutComparisons.map(\.scheme) == ["—"])
         #expect(close(try #require(pearlhash.realFeePercent), 3.5))
@@ -179,6 +179,71 @@ struct SharedPublicDataTests {
         let pf = try fortune(pplns: ["realFeePercent": 10, "realFeePeriod": good, "realFeeEstimated": "yes"])
         #expect(pf.payoutComparisons[1].realFeePercent == 10)
         #expect(pf.payoutComparisons[1].realFeeEstimated)
+    }
+
+    /// The ⓘ beside a PPLNS / PROP Real Cost: the fee, the row's orphans over the week and the rest,
+    /// each at the 2 decimals the table shows, adding up to the figure (PF on 2026-11-02). A PPS payout
+    /// has no parts; orphans the app can't read leave out that line, never the breakdown or the snapshot.
+    /// Jetski, 2026-11-03: its PPLNS Real Cost is "—" because the week is worth 47.8 blocks of the 100 the service
+    /// needs; the ⓘ beside the dash says so. Same rule as Web's realCostFewBlocks.
+    @Test func aDashRealCostSaysWhenTheWeekIsTooFewBlocks() throws {
+        func pf(_ expectedBlocks: Any?, realFee: Double? = nil) throws -> PoolOverview {
+            let rows = PoolsOverviewStore.build(try snapshot { rows in
+                let i = try #require(rows.firstIndex { $0["name"] as? String == "Pearl Fortune" })
+                if let expectedBlocks { rows[i]["luck"] = ["7d": ["ratio": 0.65, "expectedBlocks": expectedBlocks, "blocks": 31] as [String: Any]] as [String: Any] }
+                if let realFee {
+                    var payouts = try #require(rows[i]["payouts"] as? [[String: Any]])
+                    payouts[1].merge(["realFeePercent": realFee, "realFeeEstimated": true,
+                                      "realFeePeriod": ["start": 100, "end": 200]] as [String: Any]) { $1 }
+                    rows[i]["payouts"] = payouts
+                }
+            })
+            return try #require(rows.first { $0.name == "Pearl Fortune" })
+        }
+        let jetski = try pf(47.82405635451607)
+        #expect(jetski.payoutComparisons.map(\.scheme) == ["PPS", "PPLNS"])
+        #expect(jetski.realCostFewBlocks(jetski.payoutComparisons[1]) == 47.82405635451607)
+        #expect(jetski.realCostFewBlocks(jetski.payoutComparisons[0]) == nil)     // PPS: a settlement, not a sample
+        #expect(PoolOverview.realCostMinBlocks == 100)
+        // A figure, a big enough week or no week: something else explains it.
+        for row in [try pf(47.8, realFee: 1), try pf(100), try pf(279), try pf(nil), try pf(0), try pf("47")] {
+            #expect(row.realCostFewBlocks(row.payoutComparisons[1]) == nil)
+        }
+    }
+
+    @Test func aSharedRealCostBreaksDownIntoFeeOrphansAndTheRest() throws {
+        func pf(orphans: Any?) throws -> PoolOverview {
+            let decoded = try snapshot { rows in
+                let i = try #require(rows.firstIndex { $0["name"] as? String == "Pearl Fortune" })
+                var payouts = try #require(rows[i]["payouts"] as? [[String: Any]])
+                payouts[1].merge(["fee": 2, "realFeePercent": 3.470538202021678, "realFeeEstimated": true,
+                                  "realFeePeriod": ["start": 100, "end": 200]] as [String: Any]) { $1 }
+                rows[i]["payouts"] = payouts
+                if let orphans { rows[i]["orphans"] = orphans }
+            }
+            return try #require(PoolsOverviewStore.build(decoded).first { $0.name == "Pearl Fortune" })
+        }
+        let live = try pf(orphans: ["start": 1, "end": 2, "blocks": 322, "orphans": 4, "source": "chain"] as [String: Any])
+        let parts = try #require(live.payoutComparisons[1].realFeeBreakdown)
+        #expect(parts.fee == 2 && parts.orphanPercent == 1.24 && parts.other == 0.23 && parts.total == 3.47)
+        #expect(parts.orphans == PoolOrphans(SharedOverview.Orphans(blocks: 322, orphans: 4)))
+        #expect(live.payoutComparisons[0].realFeeBreakdown == nil)
+        let unreadable: [Any] = ["many", ["blocks": 0, "orphans": 0], ["blocks": 10, "orphans": 11],
+                                 ["blocks": 10, "orphans": -1], ["blocks": "10", "orphans": 1], NSNull()]
+        for orphans in unreadable {
+            let row = try pf(orphans: orphans)
+            let parts = try #require(row.payoutComparisons[1].realFeeBreakdown, "\(orphans)")
+            #expect(parts.orphans == nil && parts.orphanPercent == nil)
+            #expect(parts.other == 1.47)
+        }
+        #expect(try pf(orphans: nil).payoutComparisons[1].realFeeBreakdown?.other == 1.47)
+        // The rest can be negative, and an even split reads 0, never "−0".
+        let below = try #require(RealFeeBreakdown(fee: 1, realCost: 0.5,
+                                                  orphans: PoolOrphans(SharedOverview.Orphans(blocks: 100, orphans: 1))))
+        #expect(below.orphanPercent == 1 && below.other == -1.5)
+        let even = try #require(RealFeeBreakdown(fee: 1, realCost: 1.001, orphans: nil))
+        #expect(even.other == 0 && even.other.sign == .plus)
+        #expect(RealFeeBreakdown(fee: nil, realCost: 3, orphans: nil) == nil)
     }
 
     private func snapshot(luck: Any, forPool name: String = "Pearl Fortune") throws -> SharedOverview {
@@ -759,5 +824,204 @@ struct MergeBonusTests {
         #expect(PoolMergeBonus(coin: "NOCK", minPercent: .nan, maxPercent: 2) == nil)
         #expect(PoolMergeBonus(coin: "NOCK", minPercent: 1, maxPercent: .infinity) == nil)
         #expect(PoolMergeBonus(coin: "NOCKNOCKNOCKNOCK", minPercent: 1, maxPercent: 2) == nil)
+    }
+}
+
+/// Peryn's Founding Miner fee: the service's `founding` on a payout reaches it for the ⓘ beside the fee,
+/// a malformed one is dropped (never the payout), and the fee, cost and yield stay everyone's.
+@MainActor
+struct FoundingFeeTests {
+    private struct Contract: Decodable { let snapshot: SharedOverview }
+
+    /// The shared fixture with PF's payouts given `founding` (PPS, PPLNS), as the service sends it for Peryn.
+    private func fortune(_ founding: [Any?]) throws -> PoolOverview {
+        var document = try #require(try JSONSerialization.jsonObject(with: Fixture.data("shared_overview.json")) as? [String: Any])
+        var value = try #require(document["snapshot"] as? [String: Any])
+        var rows = try #require(value["rows"] as? [[String: Any]])
+        let i = try #require(rows.firstIndex { $0["name"] as? String == "Pearl Fortune" })
+        var payouts = try #require(rows[i]["payouts"] as? [[String: Any]])
+        for (index, terms) in founding.enumerated() { if let terms { payouts[index]["founding"] = terms } }
+        rows[i]["payouts"] = payouts
+        value["rows"] = rows; document["snapshot"] = value
+        let decoded = try JSONDecoder().decode(Contract.self, from: JSONSerialization.data(withJSONObject: document)).snapshot
+        return try #require(PoolsOverviewStore.build(decoded).first { $0.name == "Pearl Fortune" })
+    }
+
+    @Test func theServicesFoundingFeeReachesEachPayout() throws {
+        let plain = try fortune([nil, nil])
+        #expect(plain.payoutComparisons.allSatisfy { $0.founding == nil })
+        let pool = try fortune([["fee": 0.5], ["fee": 0, "afterFP8Months": 6]])
+        #expect(pool.payoutComparisons[0].founding == PoolFounding(fee: 0.5, afterFP8Months: nil))
+        #expect(pool.payoutComparisons[1].founding == PoolFounding(fee: 0, afterFP8Months: 6))
+        #expect(pool.payoutComparisons[1].founding?.afterFP8Months == 6)
+        // A label only: the fee shown, the cost and the take-home yield are everyone's.
+        #expect(pool.payoutComparisons.map(\.feePercent) == plain.payoutComparisons.map(\.feePercent))
+        #expect(pool.payoutComparisons.map(\.costPercent) == plain.payoutComparisons.map(\.costPercent))
+        #expect(pool.netYield == plain.netYield)
+    }
+
+    @Test func aMalformedFoundingFeeIsDroppedNotThePayout() throws {
+        let bad: [Any] = [["fee": -1], ["fee": 101], ["fee": "0"], ["afterFP8Months": 6], "0.5", 0.5, NSNull()]
+        for value in bad {
+            let pool = try fortune([value, nil])
+            #expect(pool.payoutComparisons.count == 2, "\(value)")
+            #expect(pool.payoutComparisons[0].founding == nil, "\(value)")
+            #expect(pool.payoutComparisons[0].feePercent == 4, "\(value)")
+        }
+        // A duration that isn't a whole number of months keeps the fee and drops the duration.
+        let odd = try fortune([["fee": 0, "afterFP8Months": 1.5], nil])
+        #expect(odd.payoutComparisons[0].founding == PoolFounding(fee: 0, afterFP8Months: nil))
+    }
+}
+
+/// Peryn's PPS+ Real Cost per fee tier: the service's `realFeeTier` + `realFeeTiers` reach the measured payout for the
+/// ⓘ beside the figure (the shown tier first), a malformed pair is dropped (never the payout), and the fallback path
+/// picks the tier the service would.
+@MainActor
+struct RealFeeTierTests {
+    private struct Contract: Decodable { let snapshot: SharedOverview }
+    private static let measurement: [String: Any] = ["pool": "Pearl Fortune", "scheme": "PPS", "tier": "founding",
+        "netPRL": 99.22, "expectedPRL": 100, "start": 100, "end": 200, "measuredAt": 250, "estimated": true,
+        "sampleCount": 5, "theoryBasis": "hashrate_chain"]
+
+    /// The shared fixture with PF's PPS payout given the tier fields, as the service sends them for Peryn's PPS+.
+    private func fortune(tier: Any?, tiers: Any?) throws -> PoolOverview {
+        var document = try #require(try JSONSerialization.jsonObject(with: Fixture.data("shared_overview.json")) as? [String: Any])
+        var value = try #require(document["snapshot"] as? [String: Any])
+        var rows = try #require(value["rows"] as? [[String: Any]])
+        let i = try #require(rows.firstIndex { $0["name"] as? String == "Pearl Fortune" })
+        var payouts = try #require(rows[i]["payouts"] as? [[String: Any]])
+        if let tier { payouts[0]["realFeeTier"] = tier }
+        if let tiers { payouts[0]["realFeeTiers"] = tiers }
+        rows[i]["payouts"] = payouts
+        rows[i]["realFeeMeasurement"] = Self.measurement
+        value["rows"] = rows; document["snapshot"] = value
+        let decoded = try JSONDecoder().decode(Contract.self, from: JSONSerialization.data(withJSONObject: document)).snapshot
+        return try #require(PoolsOverviewStore.build(decoded).first { $0.name == "Pearl Fortune" })
+    }
+
+    @Test func bothTiersReachTheMeasuredPayoutShownTierFirst() throws {
+        let pool = try fortune(tier: "founding", tiers: ["founding": 0.78, "standard": 1.26])
+        let tiers = try #require(pool.payoutComparisons[0].realFeeTiers)
+        #expect(tiers.entries == [.init(tier: .founding, percent: 0.78), .init(tier: .standard, percent: 1.26)])
+        #expect(abs(try #require(pool.payoutComparisons[0].realFeePercent) - 0.78) < 1e-9)
+        #expect(pool.payoutComparisons[1].realFeeTiers == nil)
+        let standard = try fortune(tier: "standard", tiers: ["founding": NSNull(), "standard": 1.26])
+        #expect(standard.payoutComparisons[0].realFeeTiers?.entries == [.init(tier: .standard, percent: 1.26), .init(tier: .founding, percent: nil)])
+    }
+
+    @Test func aMalformedTierPairIsDroppedNotThePayout() throws {
+        for (tier, tiers) in [("gold", ["founding": 1.0]), (nil, ["founding": 1.0]), ("founding", nil), ("founding", "1")] as [(Any?, Any?)] {
+            let pool = try fortune(tier: tier, tiers: tiers)
+            #expect(pool.payoutComparisons.count == 2)
+            #expect(pool.payoutComparisons[0].realFeeTiers == nil)
+            #expect(pool.payoutComparisons[0].realFeePercent != nil)
+        }
+    }
+
+    @Test func theFallbackPicksTheFoundingTierOnlyWhileTheFoundingFeeIsShown() throws {
+        func tiered(_ tier: String, net: Double) -> PPSFeeMeasurement {
+            var o = PPSFeeMeasurement(pool: "Peryn", scheme: "PPS+", netPRL: net, expectedPRL: 100, start: 100, end: 200,
+                                      measuredAt: 300, estimated: true, sampleCount: 5, theoryBasis: "hashrate_chain")
+            o.tier = tier
+            return o
+        }
+        let data = try JSONEncoder().encode([tiered("standard", net: 98.74), tiered("founding", net: 99.22)])
+        var pool = PoolOverview(id: "peryn", name: "Peryn", site: "https://peryn.ai/", gradient: Pearl.wash, feeType: "PPS+")
+        #expect(abs(try #require(PoolsOverviewStore.applyMeasurements([pool], data: data).first?.realFeePercent) - 1.26) < 1e-9)
+        var payout = PoolPayoutComparison(scheme: "PPS+", feePercent: 1, grossPerPH: nil, theoreticalPerPH: nil, estimated: true)
+        payout.founding = PoolFounding(fee: 0.5, afterFP8Months: nil)
+        pool.sharedPayouts = [payout]
+        #expect(abs(try #require(PoolsOverviewStore.applyMeasurements([pool], data: data).first?.realFeePercent) - 0.78) < 1e-9)
+    }
+}
+
+
+@MainActor
+struct RollingPoolCostTests {
+    private func payload() throws -> [String: Any] {
+        // Exact public payout produced by the independent 27-day historical replay.
+        let json = #"""
+        {
+          "scheme": "PROP",
+          "fee": 0,
+          "grossPerPH": 12,
+          "solo": false,
+          "estimated": true,
+          "realFeePercent": 4.327139899798215,
+          "realFeeEstimate": {
+            "id": "https://pearl.herominers.com/",
+            "pool": "HeroMiners",
+            "scheme": "PPLNS",
+            "theoryBasis": "accepted_share_rounds",
+            "start": 1791849600,
+            "end": 1794182400,
+            "measuredAt": 1794200827.620391,
+            "estimated": true,
+            "targetDays": 30,
+            "blocksSample": 652,
+            "poolBlocks": 656,
+            "orphans": 4,
+            "work": 681.4889816371497,
+            "feePercent": 0,
+            "foundYield": 0.962598101621662,
+            "foundYield95": [
+              0.8903360227046202,
+              1.0391630391138142
+            ],
+            "ratio": 0.9567286010020178,
+            "cost95": [
+              -3.30687577922415,
+              11.53085272501575
+            ],
+            "confidence": 0.95,
+            "confidenceMethod": "poisson_count_only",
+            "sourceVersion": 2
+          },
+          "realFeeEstimated": true,
+          "realFeePeriod": {
+            "start": 1791849600,
+            "end": 1794182400
+          }
+        }
+        """#
+        return try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+    }
+
+    private func comparison(_ payout: [String: Any]) throws -> PoolPayoutComparison {
+        let original = try #require(JSONSerialization.jsonObject(with: Fixture.data("shared_overview.json")) as? [String: Any])
+        var snapshot = try #require(original["snapshot"] as? [String: Any])
+        var row = try #require((snapshot["rows"] as? [[String: Any]])?.first)
+        row["id"] = "https://pearl.herominers.com/"; row["url"] = "https://pearl.herominers.com/"
+        row["name"] = "HeroMiners"; row["scheme"] = "PROP"; row["solo"] = false
+        row["payouts"] = [payout]
+        snapshot["rows"] = [row]
+        let wire = try JSONDecoder().decode(SharedOverview.self, from: JSONSerialization.data(withJSONObject: snapshot))
+        return try #require(PoolsOverviewStore.build(wire).first?.payoutComparisons.first)
+    }
+
+    @Test func historicalRollingEstimateKeepsItsIntervalAndAvoidsTheLuckFreeBreakdown() throws {
+        let payout = try comparison(payload())
+        let rolling = try #require(payout.sharedEstimate?.rolling)
+        #expect(rolling.days == 27)
+        #expect(rolling.poolBlocks == 656 && rolling.orphans == 4 && rolling.blocksSample == 652)
+        #expect(rolling.lossUnconfirmed)
+        #expect(close(try #require(payout.realFeePercent), 4.327139899798249))
+        #expect(rolling.cost95[0] < 0 && rolling.cost95[1] > 10)
+        #expect(payout.realFeeBreakdown == nil)
+        #expect(payout.rollingRequired)
+    }
+
+    @Test func malformedOrLegacyRollingDataDoesNotBecomeZeroCost() throws {
+        var value = try payload()
+        value["realFeeEstimate"] = "bad metadata"
+        #expect(try comparison(value).realFeePercent == nil)
+        value.removeValue(forKey: "realFeeEstimate")
+        #expect(try comparison(value).realFeePercent == nil)
+        value = try payload()
+        var detail = try #require(value["realFeeEstimate"] as? [String: Any])
+        detail["ratio"] = 0.955
+        value["realFeeEstimate"] = detail
+        #expect(try comparison(value).realFeePercent == nil)
     }
 }

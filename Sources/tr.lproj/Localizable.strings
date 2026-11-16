@@ -1142,6 +1142,12 @@
 "这是按各矿池标注的样本时间段，计算的实际结算收益相对理论收益的折损率。" = "Bu, her havuzda gösterilen örneklem döneminde hesaplanan kesinleşmiş gelirin teorik gelire göre eksik kalan yüzdesidir.";
 "这是 %@ 期间，实际结算收益相对理论收益的折损率。" = "Bu, %@ döneminde kesinleşmiş gelirin teorik gelire göre eksik kalan yüzdesidir.";
 "这是 %@ 期间按矿池出块和公示池费估算的折损率，已扣除出块运气，剩下的是池费和矿池损耗的算力。" = "Bu, %@ döneminde havuz blokları ve duyurulan havuz ücretiyle, blok bulma şansı çıkarılarak tahmin edilen gelir eksikliği yüzdesidir: geriye yalnızca ücret ve havuzun kaybettiği iş kalır.";
+"孤块" = "Yetim bloklar";
+"%1$@/%2$@ 块" = "%1$@/%2$@ blok";
+"其他" = "Diğer";
+"%@ · 已扣除出块运气" = "%@ · blok bulma şansı çıkarıldı";
+"孤块：近 7 天该池找到、但没被链收录的块，没有奖励。" = "Yetim bloklar: havuzun son 7 günde bulduğu ama zincirin tutmadığı bloklar; ödül getirmez.";
+"其他：矿池损耗的算力和统计误差。" = "Diğer: havuzun kaybettiği iş ve ölçüm hatası.";
 
 "左右滑动查看完整对比" = "Tüm sütunları karşılaştırmak için yana kaydırın";
 "提醒频率" = "Uyarı sıklığı";
@@ -1360,3 +1366,102 @@
 "其他地址…" = "Başka adres…";
 "用同一套助记词收发 NOCK（Nockchain）。打开后钱包页底部会出现 NOCK 钱包。" = "Aynı kurtarma ifadesiyle NOCK (Nockchain) gönderip alın. Açtığınızda NOCK Cüzdanı cüzdan sayfasının altında görünür.";
 "到账提醒：地址收到 PRL 就通知你" = "Gelen ödeme alarmları: adresinize PRL geldiği anda haberiniz olsun";
+
+/* Pools: Peryn's Founding Miner fee, in the ⓘ beside the fee */
+"创始矿工费率" = "Kurucu üye ücreti";
+"创始矿工 %@。报名到 Pearl FP8 升级截止。" = "Kurucu üyeler: %@. Kayıtlar Pearl’ün FP8 yükseltmesinde kapanır.";
+"创始矿工 %@，到 Pearl FP8 升级后 %@ 个月。报名到 Pearl FP8 升级截止。" = "Kurucu üyeler: %@, Pearl’ün FP8 yükseltmesine kadar ve sonrasında %@ ay boyunca. Kayıtlar yükseltmede kapanır.";
+
+/* Pools: Peryn's Real Cost per fee tier, in the ⓘ beside it */
+"创始矿工地址" = "Kurucu üye adresleri";
+"普通地址" = "Diğer adresler";
+
+/* Pools: why a PPLNS / PROP Real Cost is "—" (too few blocks), in the ⓘ beside it */
+"%1$@ 近 7 天的算力只够出约 %2$@ 块，块太少，扣不准出块运气。满 %3$@ 块才显示真实费用。" = "%1$@ havuzunun son 7 günlük hashrate’i yalnızca yaklaşık %2$@ bloğa yetiyor; blok bulma şansını çıkarmak için çok az. Gerçek maliyet %3$@ bloktan itibaren gösterilir.";
+
+/* Rolling share-work output estimates. */
+"%@ 天统计估计" = "%@ günlük istatistiksel tahmin";
+"发现 %1$@ 个块，其中 %2$@ 个孤块；已接受 share 工作量对应约 %3$@ 个理论块。" = "%1$@ blok bulundu; %2$@ tanesi yetim. Kabul edilen share işi teorik olarak %3$@ bloğa karşılık gelir.";
+"发现块效率：%1$@；95%% 计数误差参考区间：%2$@～%3$@。" = "Bulunan blok verimi: %1$@. Yalnızca sayım rastgeleliği için %%95 aralık: %2$@–%3$@.";
+"成本的 95%% 计数误差参考区间：%1$@～%2$@。" = "Maliyet: yalnızca sayım rastgeleliği için %%95 aralık %1$@–%2$@.";
+"尚未确认长期折损；观测产出仍包含出块运气的影响。" = "Kalıcı bir verim kaybı doğrulanmadı; gözlenen üretim hâlâ blok şansından etkilenir.";
+"以矿池记录的已接受 share 工作量为基准，手续费 %@ 与孤块损失各计一次。区间不包含算力上报和矿池计数误差。" = "Havuzun kaydettiği kabul edilmiş share işi esas alınır. %@ ücret ve yetim blok kayıpları birer kez sayılır. Aralık, telemetri ve havuz raporlama hatalarını içermez.";
+"暂无可用的滚动估计；需要至少五个完整 UTC 日、100 个块及其工作量记录。" = "Güncel hareketli tahmin yok. Tur işi kayıtlarıyla birlikte en az beş tam UTC günü ve 100 blok gereklidir.";
+"HeroMiners 使用最近 30 天内的完整 UTC 日记录，至少需要五天和 100 个块，区间包含出块运气。其他 PPLNS／PROP 估算需要最近七天内至少五天观测、逐块 effort，且理论工作量足够产生至少 100 个块。" = "HeroMiners en az beş gün ve 100 blok olmak üzere 30 tam UTC gününe kadar veri kullanır; aralık blok şansını içerir. Diğer PPLNS/PROP tahminleri son yedi günde beş gözlem günü, blok effort verisi ve en az 100 beklenen blok gerektirir.";
+
+"Real Cost 以矿工实报工作量为基准，包含矿工费、工作量认可损失与结算扣减，不计入出块运气。" = "Real Cost, madencinin bildirdiği işi temel alır; madenci ücretlerini, tanınmayan işi ve ödeme kesintilerini içerir, blok şansını içermez.";
+
+"完整成本尚未核实。同一时段的矿工工作量、认可工作量或最终分账证据尚不完整；未知不代表 0%。" = "Toplam maliyet doğrulanmadı. Aynı döneme ait bildirilen iş, kabul edilen iş veya nihai dağıtım kanıtları eksik. Bilinmiyor, %0 demek değildir.";
+
+"以下产出观察包含出块运气，不用于 Real Cost。" = "Aşağıdaki blok üretimi şans içerir ve Real Cost olarak kullanılmaz.";
+
+"结算成本只衡量矿池认可工作量到结算收入这一段，不代表完整成本。" = "Ödeme maliyeti yalnızca havuzun kabul ettiği işten ödemeye kadar olan kısmı kapsar, toplam maliyeti değil.";
+
+"已测得的结算成本：%@（矿池认可工作量口径）。" = "Ölçülen ödeme maliyeti: %@ (havuzun kabul ettiği iş temelinde).";
+
+/* Gate & Global Volume Share */
+"Gate API 密钥" = "Gate API anahtarı";
+"未配置 Gate API 密钥" = "Gate API anahtarı yapılandırılmadı";
+"Gate 请求地址无效" = "Gate istek URL'si geçersiz";
+"Gate 可用余额不足" = "Gate'deki kullanılabilir bakiye yetersiz";
+"Gate 暂停了这条链的提现" = "Gate bu ağda çekimleri duraklattı";
+"Gate 暂停了 %@ 提现" = "Gate, %@ çekimlerini duraklattı";
+"Gate 暂时没有开放 %@ 的充值网络" = "Gate'de şu anda açık bir %@ yatırma ağı yok";
+"读取 Gate 充值信息失败：%@" = "Gate yatırma bilgileri yüklenemedi: %@";
+"Gate 还在生成充值地址，请稍后下拉刷新。" = "Gate yatırma adresini hâlâ oluşturuyor. Biraz sonra aşağı çekerek yenileyin.";
+"Gate 提示：%@" = "Gate uyarısı: %@";
+"Gate 正在生成充值地址…" = "Gate yatırma adresini oluşturuyor…";
+"Gate 没有返回 %@ 的提现网络" = "Gate, %@ için çekim ağı döndürmedi";
+"读取 Gate 提现信息失败：%@" = "Gate çekim bilgileri yüklenemedi: %@";
+"Gate 地址簿有 %d 个地址（%@），但没有可用于 %@ 的。" = "Gate adres defterinizde %d adres var (%@), ancak hiçbiri %@ için kullanılamıyor.";
+"提现已提交，Gate 处理后会广播上链" = "Çekim talebi gönderildi. Gate işledikten sonra zincire yayınlayacak.";
+"暂时无法确认下单结果，请到 Gate 网站核对，或稍后点「重新核对」。" = "Emrin sonucu şu anda doğrulanamıyor; Gate web sitesinden kontrol edin veya daha sonra “Yeniden Kontrol Et”e dokunun.";
+"暂时无法确认提现结果，请到 Gate 网站核对提现记录，或稍后点「重新核对」。" = "Çekimin sonucu şu anda doğrulanamıyor; Gate web sitesindeki çekim geçmişini kontrol edin veya daha sonra “Yeniden Kontrol Et”e dokunun.";
+"Gate 不认这个 API 密钥：Key 或 Secret 不对，或者密钥已停用。" = "Gate bu API anahtarını tanımıyor: Key veya Secret yanlış ya da anahtar devre dışı bırakılmış.";
+"签名已过期：本机时间和 Gate 相差太多，请打开「自动设置时间」后重试。" = "İmzanın süresi doldu: bu cihazın saati Gate'in saatinden çok farklı. Tarih ve saat ayarlarında “Otomatik Ayarla” seçeneğini açıp yeniden deneyin.";
+"Gate 拒绝了这个请求（%@）" = "Gate isteği reddetti (%@)";
+"App 直接连接 api.gateio.ws，中间不经过我们或任何第三方。Secret 只在你的设备上用来给请求签名，本身从不发送出去。" = "Uygulama api.gateio.ws ile doğrudan bağlantı kurar; hiçbir veri bizim veya herhangi bir üçüncü tarafın üzerinden geçmez. Secret yalnızca cihazınızda istekleri imzalamak için kullanılır, kendisi hiçbir yere gönderilmez.";
+"已保存，但验证未通过：本机时间和 Gate 相差太多，请打开「自动设置时间」。" = "Kaydedildi ancak doğrulanamadı: bu cihazın saati Gate'in saatinden çok farklı. Tarih ve saat ayarlarında “Otomatik Ayarla” seçeneğini açın.";
+"已保存，但请求被 Gate 的防火墙拦截（网络或代理），换个网络后在交易页确认。" = "Kaydedildi ancak istek Gate'in güvenlik duvarı tarafından engellendi (ağ veya proxy). Başka bir ağa geçip Al-Sat sekmesinden yeniden kontrol edin.";
+"已保存，但暂时无法连接 Gate（网络问题）。请检查网络后在交易页确认。" = "Kaydedildi ancak şu anda Gate'e ulaşılamıyor (ağ sorunu). Bağlantınızı kontrol edin ve Al-Sat sekmesinden doğrulayın.";
+"打开 Gate API 页面" = "Gate API sayfasını aç";
+"下单金额最少 %@ USDT" = "Minimum emir tutarı %@ USDT";
+"Gate 拒绝了当前网络：这个 API 密钥绑定了 IP 白名单，而你现在的 IP 不在名单里。" = "Gate bu ağı reddetti: Bu API anahtarında IP beyaz listesi var ve mevcut IP adresiniz listede değil.";
+"请求被 Gate 的防火墙拦截，通常是当前网络或代理的出口被拦，换个网络再试。" = "Gate güvenlik duvarı tarafından engellendi — genellikle mevcut ağ veya VPN/proxy çıkışı engellenmiştir. Başka bir ağ deneyin.";
+"开启安全验证" = "Güvenlik Doğrulamasını Etkinleştirin";
+"勾选权限" = "İzinleri Seçin";
+"绑定 IP 白名单" = "IP Beyaz Listesi Bağlayın";
+"复制 Key 和 Secret" = "Key ve Secret'ı Kopyalayın";
+"获取 Gate API 密钥" = "Gate API Anahtarı Alın";
+"已保存，但当前网络的 IP 不在这把密钥的白名单里。到交易页查看当前 IP（可能是 IPv6 地址），把它加进 Gate 白名单。" = "Kaydedildi ancak mevcut IP adresiniz bu anahtarın beyaz listesinde değil. Al-Sat sekmesinde görünen IP'yi (IPv6 olabilir) Gate beyaz listesine ekleyin.";
+"已保存，但验证未通过：API Key/Secret 可能不正确，或未开启现货/只读权限。请在 Gate 后台核对密钥权限与 IP 白名单。" = "Kaydedildi ancak doğrulama başarısız: API Key/Secret hatalı olabilir veya Spot/Okuma izinleri kapalıdır. Gate'de izinleri ve IP beyaz listesini kontrol edin.";
+"这是 IPv6 地址：白名单里如果只有 IPv4，可能需要把这个 IPv6 地址也加进 Gate 白名单。" = "Bu bir IPv6 adresidir: Beyaz listenizde yalnızca IPv4 varsa bu IPv6 adresini de Gate beyaz listesine ekleyin.";
+"把上面这个 IP 加进这把密钥的 IP 白名单即可。" = "Yukarıdaki IP adresini bu anahtarın IP beyaz listesine ekleyin.";
+"在哪里设置 IP 白名单" = "IP beyaz listesi nerede ayarlanır";
+"Gate 拒绝了这个 API 密钥的提现请求（%@）。请到 Gate「API 管理」为这把密钥开启「提现」权限，并绑定当前公网 IP 白名单。" = "Gate bu API anahtarının çekim isteğini reddetti (%@). Gate API Yönetimi'nde Çekim iznini açın ve mevcut genel IP adresinizi bağlayın.";
+"Gate 地址簿" = "Gate Adres Defteri";
+"Gate 地址簿「%@」" = "Gate Adres Defteri \"%@\"";
+"选填（交易所要求时填写）" = "İsteğe bağlı (alıcı borsa istiyorsa girin)";
+"Gate API 提现无需邮箱或谷歌验证码，但要求该 API 密钥已开启「提现」权限且绑定当前公网 IP 白名单；提交前需通过本机生物识别验证。" = "Gate API çekimleri e-posta veya 2FA kodu gerektirmez; ancak anahtarda Çekim izni, IP beyaz listesi ve gönderim öncesi cihaz biyometrik doğrulaması gerekir.";
+"全网交易量" = "Küresel Hacim";
+"DEX %.1f%%" = "DEX %.1f%%";
+"24h 全网成交" = "24s Toplam Hacim";
+"查看全部 (%d)" = "Tümünü Gör (%d)";
+"暂无市场数据" = "Piyasa verisi yok";
+"填写 API 密钥" = "API anahtarını gir";
+"登录 gate.com 或 Gate App，确保账户已开启谷歌验证（2FA）和资金密码。" = "gate.com veya Gate uygulamasına giriş yapın; 2FA ve fon şifresinin etkin olduğundan emin olun.";
+"创建 API v4 密钥" = "API v4 anahtarı oluşturun";
+"选「绑定 IP」并填入当前网络的公网 IP（多个 IP 用英文逗号隔开，最多 20 个）：" = "«IP Bağla»yı seçin ve mevcut genel IP adresinizi girin (birden fazla IP’yi virgülle ayırın, en fazla 20):";
+"开启提现权限时 Gate 强制要求绑定 IP；不开提现也可暂不绑定（有效期 90 天）。手机网络可能在 IPv4 与 IPv6 之间切换，换网络后提示 IP 不在白名单时把新 IP 补进去即可。新建或修改白名单约 1–5 分钟生效。" = "Çekim izni açıkken Gate IP bağlamayı zorunlu tutar; çekim kapalıysa IP bağlamadan da kullanabilirsiniz (90 gün geçerli). Mobil ağlar IPv4 ile IPv6 arasında geçiş yapabilir; Al-Sat sekmesi IP uyarısı verirse gösterilen yeni IP’yi ekleyin. Yeni anahtar veya beyaz liste değişikliklerinin etkinleşmesi yaklaşık 1–5 dakika sürer.";
+"提交并确认风险提示，输入资金密码和二次验证码后，立即复制显示的 API Key 和 Secret（Secret 只显示这一次）。" = "Gönderip risk uyarısını onaylayın, fon şifrenizi ve 2FA kodunu girin; ardından gösterilen API Key ve Secret’ı hemen kopyalayın (Secret yalnızca bir kez gösterilir).";
+"回到「设置 → 交易」，在 Gate 区域粘贴 API Key 和 Secret 并保存，App 会马上验证权限与白名单状态。" = "«Ayarlar → Al-Sat» sayfasına dönün, Gate bölümüne API Key ve Secret’ı yapıştırıp kaydedin; uygulama izinleri ve IP beyaz listesini hemen doğrular.";
+"SafeTrade 与 Gate API 密钥" = "SafeTrade ve Gate API anahtarları";
+"只存在你的钥匙串里（开着 iCloud 钥匙串时由 Apple 端到端加密同步）；交易请求由 App 签名后直接发往 safetrade.com 或 api.gateio.ws。" = "Yalnızca Anahtar Zincirinizde saklanır (iCloud Anahtar Zinciri açıkken Apple tarafından uçtan uca şifreli eşitlenir); işlem istekleri cihazda imzalanıp doğrudan safetrade.com veya api.gateio.ws adresine gönderilir.";
+"SafeTrade、Gate、CoinGecko、WhatToMine、MiningPoolStats、open.er-api.com 等公开数据源，请求不带地址。" = "SafeTrade, Gate, CoinGecko, WhatToMine, MiningPoolStats ve open.er-api.com gibi açık veri kaynakları; isteklerde adres gönderilmez.";
+"回到「设置 → 交易」，粘贴 API Key 和 API Secret 并保存，App 会马上验证能否使用。" = "Ayarlar → Al-Sat bölümüne dönün, API Key ve API Secret bilgilerini yapıştırıp kaydedin; uygulama çalışıp çalışmadıklarını hemen doğrular.";
+"网页端右上角头像进入「API 管理」（手机 App 在左上角头像 →「安全中心 / 更多 → API 管理」），点「创建 API Key」，在「账户类型」弹窗里选「交易账户」，备注随便填（如 Pearl Hub），API Key 类型选「API v4 Key」。" = "Web’de sağ üstteki profil menüsünden «API Yönetimi»ni açın (mobil uygulamada: sol üst profil → «Güvenlik / Daha Fazla → API Yönetimi»), «API Anahtarı Oluştur»a dokunun, «Hesap Türü» penceresinde «İşlem Hesabı»nı seçin, açıklamaya istediğiniz adı (ör. Pearl Hub) yazın ve «API v4 Key»i seçin.";
+"「账户类型」弹窗有三种：选「交易账户」。不要选「模拟交易」（虚拟盘，无法读写实盘资产），也不要选「第三方应用」（仅限 Gate 预设的合作托管平台固定服务器 IP，Pearl Hub 由你的设备本机直连 Gate）。" = "«Hesap Türü» penceresinde üç seçenek vardır: «İşlem Hesabı»nı seçin. «Demo İşlem»i (yalnızca sanal bakiye) veya «Üçüncü Taraf Uygulama»yı (Gate’e kayıtlı aracı platformların sabit sunucu IP’leri içindir; Pearl Hub doğrudan kendi cihazınızdan bağlanır) seçmeyin.";
+"开启「现货 → 读写」（仅查余额可选「只读」）和「钱包 → 只读」（查充值地址、提币手续费与地址簿必需）；「提现 → 读写」按需开启，其余合约、杠杆等全部保持关闭。" = "«Spot → Okuma ve Yazma» (yalnızca bakiye için «Salt Okunur») ve «Cüzdan → Salt Okunur» (yatırma adresi, çekim ücreti ve adres defteri için zorunlu) izinlerini açın. «Çekim → Okuma ve Yazma» iznini yalnızca gerekirse açın; vadeli, marjin ve diğer tüm izinleri kapalı tutun.";
+"只开「现货 + 提现」而不勾「钱包 → 只读」会导致充值和提现页无法读取地址与手续费。开启 API 提币时，Gate 还要求目标收款地址已先在 Gate 后台加入提币白名单（或手动成功提过一次）。" = "«Cüzdan → Salt Okunur» seçilmeden yalnızca Spot + Çekim açılırsa Yatırma ve Çekim sayfaları adresleri ve ağ ücretlerini okuyamaz. Ayrıca API ile çekim için hedef adresin önceden Gate çekim beyaz listesine eklenmiş (veya manuel çekimde kullanılmış) olması gerekir.";
+"Gate 拒绝了读取充值地址的请求：请到 Gate「API 管理」为这把密钥开启「钱包 → 只读」权限。" = "Gate yatırma adresi isteğini reddetti: lütfen Gate «API Yönetimi»nde bu anahtar için «Cüzdan → Salt Okunur» iznini açın.";
+"收款地址不在 Gate 提币白名单中。请先到 Gate 网站将该地址加入白名单并完成验证。" = "Alıcı adresi Gate çekim beyaz listenizde yok. Lütfen önce Gate web sitesinde bu adresi beyaz listeye ekleyip doğrulayın.";

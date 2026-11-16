@@ -12,6 +12,8 @@ struct TradeView: View {
     @State private var orderToCancel: STOrder?
     @State private var showingKeyGuide = TradeView.shotKeyGuide  // 如何获取 API 密钥
     @State private var showingKeySetup = false                  // the key fields (设置 → 交易) in a sheet
+    @State private var pendingKeySetupExchange: TradeExchange?
+    @State private var keySetupExchange: TradeExchange = TradeExchange.saved
     @State private var withdrawing: WithdrawCurrency? = TradeView.shotWithdraw
     @State private var depositing: WithdrawCurrency? = TradeView.shotDeposit
     @State private var sideColumnWidth: CGFloat = 20   // measured width of the 买/卖 column
@@ -86,7 +88,9 @@ struct TradeView: View {
     /// count toward the Pro upsell — automatic loads and iCloud-sync refreshes must not
     /// (see UpsellPrompt).
     private func manualRefresh() async {
-        await store.refresh()
+        async let r: Void = store.refresh()
+        async let m: Void = TradeMarketsStore.shared.refresh()
+        await r; await m
         upsell.tradeRefreshed()
     }
 
@@ -109,16 +113,28 @@ struct TradeView: View {
             .scrollDismissesKeyboard(.interactively)
             #endif
             .pearlScreenBackground()
-            .navigationTitle(AppFeatures.tradeAccount ? Loc("交易 · SafeTrade") : Loc("行情"))
+            .navigationTitle(AppFeatures.tradeAccount ? "\(Loc("交易")) · \(store.exchange.displayName)" : Loc("行情"))
             .navigationDestination(isPresented: $openAlerts) { AlertsView() }
             .sheet(item: $withdrawing) { WithdrawView(trade: store, currency: $0.id).environmentObject(contacts) }
             .sheet(item: $depositing) { DepositView(trade: store, currency: $0.id).environmentObject(contacts) }
-            .sheet(isPresented: $showingKeyGuide) { SafeTradeKeyGuide() }
-            // The same page as 设置 → 交易（SafeTrade）, so the missing-key card can open it
-            // directly. Closing it picks up whatever was saved.
+            .sheet(isPresented: $showingKeyGuide, onDismiss: {
+                if let target = pendingKeySetupExchange {
+                    pendingKeySetupExchange = nil
+                    if store.exchange != target { store.setExchange(target) }
+                    keySetupExchange = target
+                    showingKeySetup = true
+                }
+            }) {
+                TradeKeyGuide(initialExchange: store.exchange) { target in
+                    pendingKeySetupExchange = target
+                    showingKeyGuide = false
+                }
+            }
+            // The same page as 设置 → 交易, ordered with the active exchange first, so the
+            // missing-key card or tutorial can open it directly. Closing it picks up whatever was saved.
             .sheet(isPresented: $showingKeySetup, onDismiss: { Task { await store.refresh() } }) {
                 NavigationStack {
-                    TradeSettingsView()
+                    TradeSettingsView(preferred: keySetupExchange)
                         .toolbar {
                             ToolbarItem(placement: .confirmationAction) {
                                 Button(Loc("完成")) { showingKeySetup = false }
@@ -148,6 +164,9 @@ struct TradeView: View {
             // Keychain, which posts nothing here — refresh() re-reads them instead.)
             .onReceive(NotificationCenter.default.publisher(for: .cloudSyncDidUpdate)) { _ in
                 store.adoptSyncedPeriod()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .tradeExchangeDidChange)) { _ in
+                store.adoptSavedExchange()
             }
             // The blocking overlay: an order in flight, or a first load with nothing
             // on screen yet. Later refreshes run quietly (toolbar spinner).
@@ -196,15 +215,34 @@ struct TradeView: View {
 
     // MARK: layout
 
+    private var exchangePicker: some View {
+        Picker(Loc("交易所"), selection: Binding(
+            get: { store.exchange },
+            set: { store.setExchange($0) }
+        )) {
+            ForEach(TradeExchange.allCases) { ex in
+                Text(verbatim: ex.displayName).tag(ex)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .accessibilityIdentifier("trade-exchange-picker")
+    }
+
     @ViewBuilder private var content: some View {
         if !AppFeatures.tradeAccount {
             marketOnly
         } else if wide {
             VStack(spacing: Pearl.Space.lg) {
+                exchangePicker
                 notices
                 HStack(alignment: .top, spacing: Pearl.Space.lg) {
                     VStack(spacing: Pearl.Space.lg) {
-                        balancesRow; MarketSection(store: store); DepthSection(store: store); PriceAlertPromoCard()
+                        balancesRow
+                        MarketSection(store: store)
+                        DepthSection(store: store)
+                        PriceAlertPromoCard()
+                        TradeVolumeShareSection(store: store)
                     }
                         .frame(maxWidth: .infinity)
                     VStack(spacing: Pearl.Space.lg) { orderSection; statusMessages; ordersList }
@@ -213,32 +251,44 @@ struct TradeView: View {
             }
         } else {
             VStack(spacing: Pearl.Space.lg) {
+                exchangePicker
                 notices
                 balancesRow
                 MarketSection(store: store)
                 DepthSection(store: store)
-                PriceAlertPromoCard()
                 orderSection
                 statusMessages
                 ordersList
+                PriceAlertPromoCard()
+                TradeVolumeShareSection(store: store)
             }
         }
     }
 
-    /// A build without the SafeTrade account (App Store, guideline 3.1.5(iii)): the
-    /// public market only — price, K-line, depth. No keys, balances, orders or funds.
+    /// A build without the exchange account (App Store, guideline 3.1.5(iii)): the
+    /// public market only — price, K-line, depth, and global volume share. No keys, balances, orders or funds.
     @ViewBuilder private var marketOnly: some View {
         if wide {
-            HStack(alignment: .top, spacing: Pearl.Space.lg) {
-                MarketSection(store: store).frame(maxWidth: .infinity)
-                VStack(spacing: Pearl.Space.lg) { DepthSection(store: store); PriceAlertPromoCard(); statusMessages }
-                    .frame(width: 360)
+            VStack(spacing: Pearl.Space.lg) {
+                exchangePicker
+                HStack(alignment: .top, spacing: Pearl.Space.lg) {
+                    VStack(spacing: Pearl.Space.lg) {
+                        MarketSection(store: store)
+                        PriceAlertPromoCard()
+                        TradeVolumeShareSection(store: store)
+                    }
+                    .frame(maxWidth: .infinity)
+                    VStack(spacing: Pearl.Space.lg) { DepthSection(store: store); statusMessages }
+                        .frame(width: 360)
+                }
             }
         } else {
             VStack(spacing: Pearl.Space.lg) {
+                exchangePicker
                 MarketSection(store: store)
                 DepthSection(store: store)
                 PriceAlertPromoCard()
+                TradeVolumeShareSection(store: store)
                 statusMessages
             }
         }
@@ -249,7 +299,7 @@ struct TradeView: View {
     /// Why the account can't be used right now: no keys, or the key refused for this IP.
     @ViewBuilder private var notices: some View {
         if !store.hasCredentials { credWarning }
-        if let issue = store.ipIssue { UntrustedIPCard(issue: issue) }
+        if let issue = store.ipIssue { UntrustedIPCard(issue: issue, exchange: store.exchange) }
     }
 
     /// No keys yet: the button opens the key fields themselves, so nothing has to
@@ -258,14 +308,17 @@ struct TradeView: View {
         HStack(spacing: Pearl.Space.md) {
             PearlIconBadge(systemImage: "exclamationmark.triangle.fill", gradient: Pearl.sunrise, size: 40)
             VStack(alignment: .leading, spacing: Pearl.Space.xxs) {
-                Text(Loc("未配置 SafeTrade API 密钥"))
+                Text(store.exchange == .gate ? Loc("未配置 Gate API 密钥") : Loc("未配置 SafeTrade API 密钥"))
                     .font(.subheadline.weight(.semibold)).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
                 Button(Loc("如何获取 API 密钥")) { showingKeyGuide = true }
                     .buttonStyle(.borderless).font(.caption.weight(.semibold)).tint(Pearl.accent)
             }
             Spacer(minLength: Pearl.Space.sm)
-            Button(Loc("添加")) { showingKeySetup = true }
+            Button(Loc("添加")) {
+                keySetupExchange = store.exchange
+                showingKeySetup = true
+            }
                 .buttonStyle(.borderedProminent).tint(Pearl.plate)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

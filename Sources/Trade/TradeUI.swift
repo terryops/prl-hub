@@ -44,6 +44,7 @@ struct TradeStatusLines: View {
 /// address there usually means the list only holds the IPv4 one.
 struct UntrustedIPCard: View {
     let issue: SafeTradeIPIssue
+    var exchange: TradeExchange = .safetrade
     @State private var copied = false
     @State private var showingGuide = false
 
@@ -70,16 +71,22 @@ struct UntrustedIPCard: View {
                     Text(Loc("正在查询…")).font(.caption).foregroundStyle(.secondary)
                 }
             }
-            Text(issue.isIPv6
-                 ? Loc("这是 IPv6 地址：白名单里如果只有 IPv4，可能需要把这个 IPv6 地址也加进 Trusted IPs。")
-                 : Loc("把上面这个 IP 加进这把密钥的 Trusted IPs 即可。"))
+            Text(exchange == .gate
+                 ? (issue.isIPv6
+                    ? Loc("这是 IPv6 地址：白名单里如果只有 IPv4，可能需要把这个 IPv6 地址也加进 Gate 白名单。")
+                    : Loc("把上面这个 IP 加进这把密钥的 IP 白名单即可。"))
+                 : (issue.isIPv6
+                    ? Loc("这是 IPv6 地址：白名单里如果只有 IPv4，可能需要把这个 IPv6 地址也加进 Trusted IPs。")
+                    : Loc("把上面这个 IP 加进这把密钥的 Trusted IPs 即可。")))
                 .pearlExplanation()
-            Button(Loc("在哪里设置 Trusted IPs")) { showingGuide = true }
+            Button(exchange == .gate ? Loc("在哪里设置 IP 白名单") : Loc("在哪里设置 Trusted IPs")) { showingGuide = true }
                 .buttonStyle(.borderless).font(.caption.weight(.semibold)).tint(Pearl.accent)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .pearlCard(padding: Pearl.Space.md, radius: Pearl.Radius.md)
-        .sheet(isPresented: $showingGuide) { SafeTradeKeyGuide() }
+        .sheet(isPresented: $showingGuide) {
+            if exchange == .gate { GateKeyGuide() } else { SafeTradeKeyGuide() }
+        }
     }
 }
 

@@ -116,6 +116,30 @@ pub unsafe extern "C" fn nock_free(s: *mut c_char) {
     }
 }
 
+/// WebAssembly hosts (the PRL Wallet extension, and the wallet inside the Android app) write the
+/// request into the module's memory: `nock_alloc(len)` returns a buffer for it and
+/// `nock_dealloc(ptr, len)` gives it back once `nock_call` has returned. Not built for the Apple
+/// targets. On wasm32 a panic aborts (traps) instead of unwinding, so the host must drop the
+/// instance after a trap rather than keep using it.
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn nock_alloc(len: usize) -> *mut u8 {
+    match std::alloc::Layout::array::<u8>(len.max(1)) {
+        Ok(layout) => unsafe { std::alloc::alloc(layout) },
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// # Safety
+/// `ptr` must be null or come from `nock_alloc(len)` with the same `len`, freed at most once.
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub unsafe extern "C" fn nock_dealloc(ptr: *mut u8, len: usize) {
+    if let (false, Ok(layout)) = (ptr.is_null(), std::alloc::Layout::array::<u8>(len.max(1))) {
+        std::alloc::dealloc(ptr, layout);
+    }
+}
+
 /// Same contract as `nock_call`, for Rust callers and tests.
 pub fn call(req: &Value) -> Value {
     match catch_unwind(AssertUnwindSafe(|| dispatch(req))) {

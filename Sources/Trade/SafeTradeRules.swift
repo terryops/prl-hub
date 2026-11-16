@@ -83,17 +83,37 @@ struct SafeTradeMarketRules: Decodable, Equatable {
     var minAmount: Decimal
     var minPrice: Decimal
     var maxPrice: Decimal
+    var minQuote: Decimal
+    var takerFee: Double
+    var upRate: Decimal?
+    var downRate: Decimal?
 
     /// Used until the live rules load (and if they never do).
     static let pearlusdt = SafeTradeMarketRules(amountPrecision: 4, pricePrecision: 2,
                                                 minAmount: 2, minPrice: Decimal(string: "0.01")!, maxPrice: 100000)
 
-    init(amountPrecision: Int, pricePrecision: Int, minAmount: Decimal, minPrice: Decimal, maxPrice: Decimal) {
+    /// Gate spot `PEARL_USDT` rules (amount 1 dp, price 4 dp, min 0.1 PEARL, min total 3 USDT, taker fee 0.2%, ±30% price band).
+    static let gatePearlUsdt = SafeTradeMarketRules(amountPrecision: 1, pricePrecision: 4,
+                                                    minAmount: Decimal(string: "0.1")!,
+                                                    minPrice: Decimal(string: "0.0001")!,
+                                                    maxPrice: 100000,
+                                                    minQuote: 3,
+                                                    takerFee: 0.002,
+                                                    upRate: Decimal(string: "0.3")!,
+                                                    downRate: Decimal(string: "0.3")!)
+
+    init(amountPrecision: Int, pricePrecision: Int, minAmount: Decimal, minPrice: Decimal, maxPrice: Decimal,
+         minQuote: Decimal = 0, takerFee: Double = SafeTradeBook.takerFee,
+         upRate: Decimal? = nil, downRate: Decimal? = nil) {
         self.amountPrecision = amountPrecision
         self.pricePrecision = pricePrecision
         self.minAmount = minAmount
         self.minPrice = minPrice
         self.maxPrice = maxPrice
+        self.minQuote = minQuote
+        self.takerFee = takerFee
+        self.upRate = upRate
+        self.downRate = downRate
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -111,12 +131,17 @@ struct SafeTradeMarketRules: Decodable, Equatable {
         minAmount = dec(.min_amount) ?? fallback.minAmount
         minPrice = dec(.min_price) ?? fallback.minPrice
         maxPrice = dec(.max_price) ?? fallback.maxPrice
+        minQuote = 0
+        takerFee = SafeTradeBook.takerFee
+        upRate = nil
+        downRate = nil
     }
 
     enum Problem: Equatable {
         case priceDecimals(Int)        // more decimals than the market takes (the limit)
         case amountDecimals(Int)
         case belowMinAmount(Decimal)
+        case belowMinQuote(Decimal)
         case priceOutOfRange(Decimal, Decimal)
 
         var message: String {
@@ -124,6 +149,7 @@ struct SafeTradeMarketRules: Decodable, Equatable {
             case .priceDecimals(let n): return Loc("价格最多 %d 位小数", n)
             case .amountDecimals(let n): return Loc("数量最多 %d 位小数", n)
             case .belowMinAmount(let m): return Loc("最少下单 %@ PEARL", SafeTradeMarketRules.plain(m))
+            case .belowMinQuote(let q): return Loc("下单金额最少 %@ USDT", SafeTradeMarketRules.plain(q))
             case .priceOutOfRange(let lo, let hi):
                 return Loc("价格需在 %@ – %@ USDT 之间", SafeTradeMarketRules.plain(lo), SafeTradeMarketRules.plain(hi))
             }
@@ -132,28 +158,50 @@ struct SafeTradeMarketRules: Decodable, Equatable {
 
     /// The first rule the typed order breaks, or nil. Empty / unparseable fields are
     /// the form's own concern and pass here; `price` is nil for a market order.
-    func problem(amountText: String, priceText: String?) -> Problem? {
-        if let priceText, let p = PRLAmount.parse(priceText) {
+    func problem(amountText: String, priceText: String?, referencePrice: Decimal? = nil) -> Problem? {
+        let parsedPrice = priceText.flatMap(PRLAmount.parse)
+        if let priceText, let p = parsedPrice {
             if Self.decimalPlaces(priceText) > pricePrecision { return .priceDecimals(pricePrecision) }
             if p > 0, p < minPrice || p > maxPrice { return .priceOutOfRange(minPrice, maxPrice) }
         }
         if let a = PRLAmount.parse(amountText), a > 0 {
             if Self.decimalPlaces(amountText) > amountPrecision { return .amountDecimals(amountPrecision) }
             if a < minAmount { return .belowMinAmount(minAmount) }
+            if minQuote > 0, let unitPrice = parsedPrice ?? referencePrice, unitPrice > 0, a * unitPrice < minQuote {
+                return .belowMinQuote(minQuote)
+            }
         }
         return nil
     }
 
     /// `max_price` for a market order: the last price ± `slippage` (0.15 = 15%, see
-    /// `TradeSlippage`), rounded outward to the price precision and kept inside the market's
-    /// price range. nil without a last price.
+    /// `TradeSlippage`), clamped within exchange price-band limits (`upRate` / `downRate` on Gate),
+    /// rounded outward to the price precision and kept inside the market's price range.
     func marketPriceCap(side: String, last: Decimal, slippage: Decimal = TradeSlippage.fraction(TradeSlippage.defaultPercent)) -> Decimal? {
         guard last > 0, slippage > 0 else { return nil }
         let buy = side == "buy"
-        var raw = last * (buy ? 1 + slippage : 1 - slippage)
+        var effective = slippage
+        if buy, let up = upRate, up > 0 {
+            effective = min(effective, up * Decimal(string: "0.99")!)
+        } else if !buy, let down = downRate, down > 0 {
+            effective = min(effective, down * Decimal(string: "0.99")!)
+        }
+        var raw = last * (buy ? 1 + effective : 1 - effective)
         var rounded = Decimal()
         NSDecimalRound(&rounded, &raw, pricePrecision, buy ? .up : .down)
         return min(max(rounded, minPrice), maxPrice)
+    }
+
+    /// Gate market buys are submitted as `limit + ioc` at `cap`, so Gate checks `amount * cap <= availableQuote`
+    /// before matching. When the user can afford `amount` at `minExecutablePrice` (e.g. tapping MAX) and only the
+    /// slippage cushion pushes `amount * cap` past `availableQuote`, clamp `cap` down to `floor(availableQuote / amount)`.
+    func gateAffordableBuyCap(cap: Decimal, minExecutablePrice: Decimal, amount: Decimal, availableQuote: Decimal) -> Decimal {
+        guard amount > 0, availableQuote > 0, amount * cap > availableQuote else { return cap }
+        var raw = availableQuote / amount
+        var floored = Decimal()
+        NSDecimalRound(&floored, &raw, pricePrecision, .down)
+        guard floored >= minExecutablePrice, floored < cap else { return cap }
+        return max(floored, minPrice)
     }
 
     /// Significant decimals typed ("1.50" → 1: a trailing zero changes nothing).
@@ -273,7 +321,7 @@ enum SafeTradeBook {
     /// How much base a `quote` budget buys walking the asks, with a safety margin
     /// for the book moving a tick and the fee: each level is priced one `tick`
     /// higher and the budget is shaved by the taker fee.
-    static func affordableAmount(quote: Double, asks: [STBookLevel], tick: Double) -> Double {
+    static func affordableAmount(quote: Double, asks: [STBookLevel], tick: Double, takerFee: Double = takerFee) -> Double {
         var budget = quote * (1 - takerFee), got = 0.0
         for l in asks {
             let price = l.price + tick

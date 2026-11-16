@@ -67,6 +67,9 @@ final class WithdrawStore: ObservableObject {
     @Published private(set) var verifying = false
 
     private let client = SafeTradeClient()
+    private let gateClient = GateClient()
+    var exchange: TradeExchange { trade.exchange }
+    private var unverifiedSlot: String { exchange == .safetrade ? currency : "\(exchange.rawValue):\(currency)" }
 
     init(currency: String, trade: SafeTradeStore) {
         self.currency = currency
@@ -74,28 +77,52 @@ final class WithdrawStore: ObservableObject {
     }
 
     /// The unverified withdrawal of this currency, if any.
-    var unverified: PendingWithdrawCheck? { trade.unverifiedWithdraws[currency] }
+    var unverified: PendingWithdrawCheck? { trade.unverifiedWithdraws[unverifiedSlot] }
+
+    func reloadForExchangeChange() async {
+        networks = []
+        networkKey = nil
+        history = []
+        historyLoaded = false
+        beneficiaries = []
+        bookNote = nil
+        loadError = nil
+        error = nil
+        notice = nil
+        ipIssue = nil
+        await load()
+    }
 
     func load() async {
+        let ex = exchange
         loadingInfo = true
-        async let c = client.currency(currency)
-        async let h = client.withdraws(currency: currency)
-        async let b = client.beneficiaries()
+        async let c = ex == .gate ? gateClient.currency(currency) : client.currency(currency)
+        async let h = ex == .gate ? gateClient.withdraws(currency: currency) : client.withdraws(currency: currency)
+        async let b = ex == .gate ? gateClient.beneficiaries(currency: currency) : client.beneficiaries()
         do {
             let cc = try await c
+            guard exchange == ex else { return }
             networks = cc.networks
             precision = cc.precision ?? precision
+            if let key = networkKey, !cc.networks.contains(where: { $0.blockchain_key == key }) { networkKey = nil }
             if cc.networks.count == 1 { networkKey = cc.networks[0].blockchain_key }
-            loadError = cc.networks.isEmpty ? Loc("SafeTrade 没有返回 %@ 的提现网络", currency.uppercased()) : nil
+            loadError = cc.networks.isEmpty
+                ? (ex == .gate ? Loc("Gate 没有返回 %@ 的提现网络", currency.uppercased())
+                               : Loc("SafeTrade 没有返回 %@ 的提现网络", currency.uppercased()))
+                : nil
         } catch {
-            loadError = Loc("读取 SafeTrade 提现信息失败：%@", error.localizedDescription)
+            guard exchange == ex else { return }
+            loadError = ex == .gate
+                ? Loc("读取 Gate 提现信息失败：%@", error.localizedDescription)
+                : Loc("读取 SafeTrade 提现信息失败：%@", error.localizedDescription)
         }
         loadingInfo = false
         // History and the address book are optional extras — a failure there just
         // leaves them out (or as they were) rather than blocking the withdrawal itself.
-        if let hh = try? await h { history = hh; historyLoaded = true }
+        if let hh = try? await h, exchange == ex { history = hh; historyLoaded = true }
         do {
             let all = try await b
+            guard exchange == ex else { return }
             // An entry without a currency id still belongs here if its chain is one of ours.
             beneficiaries = all.filter {
                 $0.currencyID == currency || ($0.currencyID == nil && network(forKey: $0.blockchain_key) != nil)
@@ -103,14 +130,18 @@ final class WithdrawStore: ObservableObject {
             let usable = beneficiaries.filter { $0.destination != nil && network(forKey: chainKey(of: $0)) != nil }
             if !all.isEmpty && usable.isEmpty {
                 let kinds = all.prefix(6).map { "\($0.currencyID ?? "?")/\($0.blockchain_key ?? "?")" }
-                bookNote = Loc("SafeTrade 地址簿有 %d 个地址（%@），但没有可用于 %@ 的。",
-                               all.count, kinds.joined(separator: ", "), currency.uppercased())
+                bookNote = ex == .gate
+                    ? Loc("Gate 地址簿有 %d 个地址（%@），但没有可用于 %@ 的。",
+                          all.count, kinds.joined(separator: ", "), currency.uppercased())
+                    : Loc("SafeTrade 地址簿有 %d 个地址（%@），但没有可用于 %@ 的。",
+                          all.count, kinds.joined(separator: ", "), currency.uppercased())
             } else {
                 bookNote = nil
             }
         } catch {
+            guard exchange == ex else { return }
             beneficiaries = []
-            bookNote = Loc("读取 SafeTrade 地址簿失败：%@", error.localizedDescription)
+            bookNote = ex == .gate ? nil : Loc("读取 SafeTrade 地址簿失败：%@", error.localizedDescription)
         }
         // Re-opened with an outcome still unknown: look again straight away.
         if unverified != nil { await verifyUnverified() }
@@ -153,23 +184,31 @@ final class WithdrawStore: ObservableObject {
     /// Returns true when the exchange accepted (or may have accepted) the request,
     /// so the form can clear itself instead of inviting a second submit.
     func submit(address: String, amount: Decimal, beneficiaryID: Int?,
-                emailCode: String, otpCode: String, phoneCode: String) async -> Bool {
+                emailCode: String, otpCode: String, phoneCode: String, memo: String = "") async -> Bool {
         guard let key = network?.blockchain_key, !submitting, unverified == nil else { return false }
+        let ex = exchange
+        let slot = unverifiedSlot
         let before = PendingWithdrawCheck(knownIDs: Set(history.map(\.id)), knownComplete: historyLoaded)
         submitting = true; error = nil; notice = nil; ipIssue = nil
         defer { submitting = false }
         do {
-            try await client.createWithdraw(address: address, amount: amount, blockchainKey: key,
-                                            beneficiaryID: beneficiaryID,
-                                            emailCode: emailCode, otpCode: otpCode, phoneCode: phoneCode,
-                                            currency: currency)
-            codeContext = nil
-            notice = Loc("提现已提交，SafeTrade 处理后会广播上链")
+            if ex == .gate {
+                try await gateClient.createWithdraw(address: address, amount: amount, blockchainKey: key,
+                                                    memo: memo, currency: currency)
+                notice = Loc("提现已提交，Gate 处理后会广播上链")
+            } else {
+                try await client.createWithdraw(address: address, amount: amount, blockchainKey: key,
+                                                beneficiaryID: beneficiaryID,
+                                                emailCode: emailCode, otpCode: otpCode, phoneCode: phoneCode,
+                                                currency: currency)
+                codeContext = nil
+                notice = Loc("提现已提交，SafeTrade 处理后会广播上链")
+            }
             await load()
             return true
         } catch SafeTradeError.withdrawUnverified {
             codeContext = nil
-            trade.unverifiedWithdraws[currency] = before
+            trade.unverifiedWithdraws[slot] = before
             error = SafeTradeError.withdrawUnverified.errorDescription
             await verifyUnverified()
             return true
@@ -185,15 +224,17 @@ final class WithdrawStore: ObservableObject {
     /// Anything less stays locked, with 重新核对 and the website as the way out.
     func verifyUnverified() async {
         guard let check = unverified, !verifying else { return }
+        let ex = exchange
+        let slot = unverifiedSlot
         verifying = true
         defer { verifying = false }
         var cleanLooks = 0
         for delay in [0, 3, 6] {
             if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
-            guard let rows = try? await client.withdraws(currency: currency) else { continue }
+            guard let rows = try? await (ex == .gate ? gateClient.withdraws(currency: currency) : client.withdraws(currency: currency)) else { continue }
             history = rows
             if check.knownComplete, let hit = rows.first(where: check.isNew) {
-                trade.unverifiedWithdraws[currency] = nil
+                trade.unverifiedWithdraws[slot] = nil
                 error = nil
                 notice = Loc("提现记录里出现了这笔提现（%@ %@），已提交成功。", hit.amountText ?? "—", currency.uppercased())
                 return
@@ -201,31 +242,38 @@ final class WithdrawStore: ObservableObject {
             cleanLooks += 1
         }
         if check.knownComplete, cleanLooks >= 2 {
-            trade.unverifiedWithdraws[currency] = nil
+            trade.unverifiedWithdraws[slot] = nil
             error = Loc("提现记录里没有新的提现，这次没有提交成功，可以重新提交。")
         } else {
-            error = Loc("暂时无法确认提现结果，请到 SafeTrade 网站核对提现记录，或稍后点「重新核对」。")
+            error = ex == .gate
+                ? Loc("暂时无法确认提现结果，请到 Gate 网站核对提现记录，或稍后点「重新核对」。")
+                : Loc("暂时无法确认提现结果，请到 SafeTrade 网站核对提现记录，或稍后点「重新核对」。")
         }
     }
 
-    /// Manual override once the user has checked on the SafeTrade website.
+    /// Manual override once the user has checked on the exchange website.
     func dismissUnverified() {
-        trade.unverifiedWithdraws[currency] = nil
+        trade.unverifiedWithdraws[unverifiedSlot] = nil
         error = nil
     }
 
     private func present(_ error: Error) async {
+        let ex = exchange
         if case SafeTradeError.http(_, let body) = error,
            SafeTradeError.errorKeys(body).contains(where: { $0.hasSuffix("missing_phone_code") }) {
             needsPhoneCode = true
         }
         switch (error as? SafeTradeError)?.authProblem {
         case .untrustedIP:
-            // The key's Trusted IPs list doesn't have this network's address:
-            // show which address SafeTrade sees.
             self.error = nil
             ipIssue = SafeTradeIPIssue(ip: nil)
-            if let ip = try? await client.publicIP() { ipIssue = SafeTradeIPIssue(ip: ip) }
+            if let ip = try? await (ex == .gate ? gateClient.publicIP() : client.publicIP()), exchange == ex {
+                ipIssue = SafeTradeIPIssue(ip: ip)
+            }
+            return
+        case .other(let keys) where ex == .gate:
+            self.error = Loc("Gate 拒绝了这个 API 密钥的提现请求（%@）。请到 Gate「API 管理」为这把密钥开启「提现」权限，并绑定当前公网 IP 白名单。",
+                             keys.isEmpty ? "403" : keys.joined(separator: ", "))
             return
         case .other(let keys) where keys.contains(where: { $0.hasPrefix("authz.") }):
             // The key reads fine elsewhere (balances load), so an authz refusal here

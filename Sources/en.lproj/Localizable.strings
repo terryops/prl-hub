@@ -1142,6 +1142,12 @@
 "这是按各矿池标注的样本时间段，计算的实际结算收益相对理论收益的折损率。" = "This is the shortfall of settled earnings versus theoretical earnings over each pool’s displayed sample period.";
 "这是 %@ 期间，实际结算收益相对理论收益的折损率。" = "This is the shortfall of settled earnings versus theoretical earnings during %@.";
 "这是 %@ 期间按矿池出块和公示池费估算的折损率，已扣除出块运气，剩下的是池费和矿池损耗的算力。" = "This is the shortfall estimated from the pool’s blocks and published pool fee during %@, with block luck taken out: what remains is the fee and the work the pool loses.";
+"孤块" = "Orphans";
+"%1$@/%2$@ 块" = "%1$@/%2$@ blocks";
+"其他" = "Other";
+"%@ · 已扣除出块运气" = "%@ · block luck taken out";
+"孤块：近 7 天该池找到、但没被链收录的块，没有奖励。" = "Orphans: blocks the pool found in the last 7 days that the chain didn’t keep; they pay nothing.";
+"其他：矿池损耗的算力和统计误差。" = "Other: the work the pool loses, plus measurement error.";
 
 "左右滑动查看完整对比" = "Swipe sideways to compare all columns";
 "提醒频率" = "Alert frequency";
@@ -1360,3 +1366,102 @@
 "其他地址…" = "Other Address…";
 "用同一套助记词收发 NOCK（Nockchain）。打开后钱包页底部会出现 NOCK 钱包。" = "Send and receive NOCK (Nockchain) with the same recovery phrase. Turn it on and NOCK Wallet appears at the bottom of the wallet page.";
 "到账提醒：地址收到 PRL 就通知你" = "Payment alerts: know as soon as PRL reaches your address";
+
+/* Pools: Peryn's Founding Miner fee, in the ⓘ beside the fee */
+"创始矿工费率" = "Founding member fee";
+"创始矿工 %@。报名到 Pearl FP8 升级截止。" = "Founding members: %@. Sign-ups close at Pearl’s FP8 upgrade.";
+"创始矿工 %@，到 Pearl FP8 升级后 %@ 个月。报名到 Pearl FP8 升级截止。" = "Founding members: %@ until %@ months after Pearl’s FP8 upgrade. Sign-ups close at the upgrade.";
+
+/* Pools: Peryn's Real Cost per fee tier, in the ⓘ beside it */
+"创始矿工地址" = "Founding member addresses";
+"普通地址" = "Other addresses";
+
+/* Pools: why a PPLNS / PROP Real Cost is "—" (too few blocks), in the ⓘ beside it */
+"%1$@ 近 7 天的算力只够出约 %2$@ 块，块太少，扣不准出块运气。满 %3$@ 块才显示真实费用。" = "%1$@’s hashrate over the last 7 days is worth only about %2$@ blocks, too few to take block luck out. Real Cost shows from %3$@ blocks.";
+
+/* Rolling share-work output estimates. */
+"%@ 天统计估计" = "%@-day statistical estimate";
+"发现 %1$@ 个块，其中 %2$@ 个孤块；已接受 share 工作量对应约 %3$@ 个理论块。" = "%1$@ blocks found, including %2$@ orphans. Accepted share work predicts %3$@ blocks.";
+"发现块效率：%1$@；95%% 计数误差参考区间：%2$@～%3$@。" = "Found-block yield: %1$@. 95%% count-only interval: %2$@–%3$@.";
+"成本的 95%% 计数误差参考区间：%1$@～%2$@。" = "Cost: 95%% count-only interval %1$@–%2$@.";
+"尚未确认长期折损；观测产出仍包含出块运气的影响。" = "A lasting output shortfall has not been established; observed output still includes block luck.";
+"以矿池记录的已接受 share 工作量为基准，手续费 %@ 与孤块损失各计一次。区间不包含算力上报和矿池计数误差。" = "Based on pool-recorded accepted share work. Fee %@ and orphan losses are each counted once. Intervals exclude telemetry and pool-reporting errors.";
+"暂无可用的滚动估计；需要至少五个完整 UTC 日、100 个块及其工作量记录。" = "No current rolling estimate. At least five complete UTC days and 100 blocks with round-work records are required.";
+"HeroMiners 使用最近 30 天内的完整 UTC 日记录，至少需要五天和 100 个块，区间包含出块运气。其他 PPLNS／PROP 估算需要最近七天内至少五天观测、逐块 effort，且理论工作量足够产生至少 100 个块。" = "HeroMiners uses up to 30 complete UTC days, with at least five days and 100 blocks. Its interval includes block luck. Other PPLNS/PROP estimates require five observed days in the latest seven, block effort and at least 100 expected blocks.";
+
+"Real Cost 以矿工实报工作量为基准，包含矿工费、工作量认可损失与结算扣减，不计入出块运气。" = "Real Cost uses miner-reported work and includes miner fees, uncredited work and settlement deductions, excluding block luck.";
+
+"完整成本尚未核实。同一时段的矿工工作量、认可工作量或最终分账证据尚不完整；未知不代表 0%。" = "Full cost is unverified. Matching miner work, accepted work and final allocation evidence is incomplete. Unknown does not mean 0%.";
+
+"以下产出观察包含出块运气，不用于 Real Cost。" = "Block output below includes luck and is not used as Real Cost.";
+
+"结算成本只衡量矿池认可工作量到结算收入这一段，不代表完整成本。" = "Settlement cost covers only pool-recognized work through payment, not the full miner-to-income cost.";
+
+"已测得的结算成本：%@（矿池认可工作量口径）。" = "Measured settlement cost: %@ (pool-recognized work basis).";
+
+/* Gate & Global Volume Share */
+"Gate API 密钥" = "Gate API key";
+"未配置 Gate API 密钥" = "Gate API key not configured";
+"Gate 请求地址无效" = "Invalid Gate request URL";
+"Gate 可用余额不足" = "Not enough available balance on Gate";
+"Gate 暂停了这条链的提现" = "Gate has paused withdrawals on this network";
+"Gate 暂停了 %@ 提现" = "Gate has paused %@ withdrawals";
+"Gate 暂时没有开放 %@ 的充值网络" = "Gate has no %@ deposit network open right now";
+"读取 Gate 充值信息失败：%@" = "Couldn't load Gate's deposit info: %@";
+"Gate 还在生成充值地址，请稍后下拉刷新。" = "Gate is still creating the deposit address. Pull down to refresh in a moment.";
+"Gate 提示：%@" = "Gate notice: %@";
+"Gate 正在生成充值地址…" = "Gate is creating the deposit address…";
+"Gate 没有返回 %@ 的提现网络" = "Gate returned no withdrawal network for %@";
+"读取 Gate 提现信息失败：%@" = "Couldn't load Gate withdrawal info: %@";
+"Gate 地址簿有 %d 个地址（%@），但没有可用于 %@ 的。" = "Your Gate address book has %d addresses (%@), but none usable for %@.";
+"提现已提交，Gate 处理后会广播上链" = "Withdrawal submitted. Gate will broadcast it once processed.";
+"暂时无法确认下单结果，请到 Gate 网站核对，或稍后点「重新核对」。" = "Can't confirm the order's outcome right now — check on the Gate website, or tap Check again later.";
+"暂时无法确认提现结果，请到 Gate 网站核对提现记录，或稍后点「重新核对」。" = "Can't confirm the withdrawal's outcome right now — check the withdrawal history on the Gate website, or tap Check again later.";
+"Gate 不认这个 API 密钥：Key 或 Secret 不对，或者密钥已停用。" = "Gate doesn't recognise this API key: the key or secret is wrong, or the key is disabled.";
+"签名已过期：本机时间和 Gate 相差太多，请打开「自动设置时间」后重试。" = "Signature expired: this device's clock is too far from Gate's. Turn on Set Automatically for the date & time, then retry.";
+"Gate 拒绝了这个请求（%@）" = "Gate refused the request (%@)";
+"App 直接连接 api.gateio.ws，中间不经过我们或任何第三方。Secret 只在你的设备上用来给请求签名，本身从不发送出去。" = "The app talks to api.gateio.ws directly — nothing passes through us or any third party. The Secret is used only on your device to sign requests and is never sent anywhere itself.";
+"已保存，但验证未通过：本机时间和 Gate 相差太多，请打开「自动设置时间」。" = "Saved, but the check failed: this device's clock is too far from Gate's. Turn on Set Automatically for the date & time.";
+"已保存，但请求被 Gate 的防火墙拦截（网络或代理），换个网络后在交易页确认。" = "Saved, but Gate's firewall blocked the request (network or proxy). Check again on the Trade tab from another network.";
+"已保存，但暂时无法连接 Gate（网络问题）。请检查网络后在交易页确认。" = "Saved, but couldn't reach Gate right now (network issue). Check your connection and confirm from the Trade tab.";
+"打开 Gate API 页面" = "Open Gate's API page";
+"下单金额最少 %@ USDT" = "Minimum order total is %@ USDT";
+"Gate 拒绝了当前网络：这个 API 密钥绑定了 IP 白名单，而你现在的 IP 不在名单里。" = "Gate rejected this network: this API key has an IP whitelist, and your current IP is not on it.";
+"请求被 Gate 的防火墙拦截，通常是当前网络或代理的出口被拦，换个网络再试。" = "Blocked by Gate's firewall — usually your current network or VPN/proxy exit IP is blocked. Try another network.";
+"开启安全验证" = "Enable Security Verification";
+"勾选权限" = "Select Permissions";
+"绑定 IP 白名单" = "Bind IP Whitelist";
+"复制 Key 和 Secret" = "Copy Key and Secret";
+"获取 Gate API 密钥" = "Get a Gate API Key";
+"已保存，但当前网络的 IP 不在这把密钥的白名单里。到交易页查看当前 IP（可能是 IPv6 地址），把它加进 Gate 白名单。" = "Saved, but your current IP isn't on this key's whitelist. Check the IP shown on the Trade tab (it may be IPv6) and add it to your Gate whitelist.";
+"已保存，但验证未通过：API Key/Secret 可能不正确，或未开启现货/只读权限。请在 Gate 后台核对密钥权限与 IP 白名单。" = "Saved, but verification failed: the API Key/Secret may be wrong, or Spot/Read permissions aren't enabled. Check key permissions and IP whitelist on Gate.";
+"这是 IPv6 地址：白名单里如果只有 IPv4，可能需要把这个 IPv6 地址也加进 Gate 白名单。" = "This is an IPv6 address — if your whitelist only has IPv4, add this IPv6 address to your Gate whitelist as well.";
+"把上面这个 IP 加进这把密钥的 IP 白名单即可。" = "Add the IP above to this key's IP whitelist.";
+"在哪里设置 IP 白名单" = "Where to set IP whitelist";
+"Gate 拒绝了这个 API 密钥的提现请求（%@）。请到 Gate「API 管理」为这把密钥开启「提现」权限，并绑定当前公网 IP 白名单。" = "Gate rejected this API key's withdrawal (%@). Enable Withdrawal permission and bind your current public IP in Gate API Management.";
+"Gate 地址簿" = "Gate Address Book";
+"Gate 地址簿「%@」" = "Gate Address Book \"%@\"";
+"选填（交易所要求时填写）" = "Optional (if required by recipient)";
+"Gate API 提现无需邮箱或谷歌验证码，但要求该 API 密钥已开启「提现」权限且绑定当前公网 IP 白名单；提交前需通过本机生物识别验证。" = "Gate API withdrawals don't use email or 2FA codes, but require an API key with Withdrawal enabled and your current IP whitelisted. Device biometric verification is required before sending.";
+"全网交易量" = "Global Volume";
+"DEX %.1f%%" = "DEX %.1f%%";
+"24h 全网成交" = "24h Global Vol";
+"查看全部 (%d)" = "Show All (%d)";
+"暂无市场数据" = "No market data available";
+"填写 API 密钥" = "Enter API Key";
+"登录 gate.com 或 Gate App，确保账户已开启谷歌验证（2FA）和资金密码。" = "Sign in to gate.com or the Gate app and make sure 2FA and your fund password are enabled.";
+"创建 API v4 密钥" = "Create an API v4 key";
+"选「绑定 IP」并填入当前网络的公网 IP（多个 IP 用英文逗号隔开，最多 20 个）：" = "Select “Bind IP” and enter your current public IP (separate multiple IPs with commas, up to 20):";
+"开启提现权限时 Gate 强制要求绑定 IP；不开提现也可暂不绑定（有效期 90 天）。手机网络可能在 IPv4 与 IPv6 之间切换，换网络后提示 IP 不在白名单时把新 IP 补进去即可。新建或修改白名单约 1–5 分钟生效。" = "Gate requires IP binding when Withdraw is enabled; without Withdraw you may leave IP unbound (valid for 90 days). Mobile networks can switch between IPv4 and IPv6—if the Trade tab later reports an untrusted IP, add the new IP shown there. New keys or whitelist edits take about 1–5 minutes to take effect on Gate.";
+"提交并确认风险提示，输入资金密码和二次验证码后，立即复制显示的 API Key 和 Secret（Secret 只显示这一次）。" = "Submit, accept the risk prompt, enter your fund password and 2FA code, then immediately copy the API Key and Secret (the Secret is shown only once).";
+"回到「设置 → 交易」，在 Gate 区域粘贴 API Key 和 Secret 并保存，App 会马上验证权限与白名单状态。" = "Return to Settings → Trade, paste the API Key and Secret under Gate, and save—the app will immediately verify permissions and IP whitelist status.";
+"SafeTrade 与 Gate API 密钥" = "SafeTrade & Gate API keys";
+"只存在你的钥匙串里（开着 iCloud 钥匙串时由 Apple 端到端加密同步）；交易请求由 App 签名后直接发往 safetrade.com 或 api.gateio.ws。" = "Stored only in your Keychain (synced end-to-end encrypted by Apple when iCloud Keychain is on); trade requests are signed on your device and sent directly to safetrade.com or api.gateio.ws.";
+"SafeTrade、Gate、CoinGecko、WhatToMine、MiningPoolStats、open.er-api.com 等公开数据源，请求不带地址。" = "Public data sources including SafeTrade, Gate, CoinGecko, WhatToMine, MiningPoolStats, and open.er-api.com; requests carry no wallet addresses.";
+"回到「设置 → 交易」，粘贴 API Key 和 API Secret 并保存，App 会马上验证能否使用。" = "Go to Settings → Trade, paste the API Key and API Secret and save; the app checks right away that they work.";
+"网页端右上角头像进入「API 管理」（手机 App 在左上角头像 →「安全中心 / 更多 → API 管理」），点「创建 API Key」，在「账户类型」弹窗里选「交易账户」，备注随便填（如 Pearl Hub），API Key 类型选「API v4 Key」。" = "On the web, open your profile menu → “API Management” (in the Gate app: top-left profile → Security / More → API Management), tap “Create API Key”, choose “Trading Account” in the Account Type popup, enter any remark (e.g. Pearl Hub), and select “API v4 Key”.";
+"「账户类型」弹窗有三种：选「交易账户」。不要选「模拟交易」（虚拟盘，无法读写实盘资产），也不要选「第三方应用」（仅限 Gate 预设的合作托管平台固定服务器 IP，Pearl Hub 由你的设备本机直连 Gate）。" = "The Account Type popup has three options: pick “Trading Account”. Do not pick “Demo Trading” (testnet funds only) or “Third-Party Application” (locked to pre-registered hosted bot server IPs—Pearl Hub connects directly from your own device).";
+"开启「现货 → 读写」（仅查余额可选「只读」）和「钱包 → 只读」（查充值地址、提币手续费与地址簿必需）；「提现 → 读写」按需开启，其余合约、杠杆等全部保持关闭。" = "Enable “Spot → Read and Write” (or “Read Only” just to view balances) and “Wallet → Read Only” (required for deposit addresses, withdrawal fees, and saved addresses). Enable “Withdraw → Read and Write” only if needed; keep Futures, Margin, and all other permissions off.";
+"只开「现货 + 提现」而不勾「钱包 → 只读」会导致充值和提现页无法读取地址与手续费。开启 API 提币时，Gate 还要求目标收款地址已先在 Gate 后台加入提币白名单（或手动成功提过一次）。" = "Enabling only Spot + Withdraw without “Wallet → Read Only” prevents the Deposit and Withdraw pages from loading addresses and network fees. For API withdrawals, Gate also requires the destination address to be whitelisted on Gate beforehand (or used once manually).";
+"Gate 拒绝了读取充值地址的请求：请到 Gate「API 管理」为这把密钥开启「钱包 → 只读」权限。" = "Gate refused the deposit address request: please enable “Wallet → Read Only” for this key in Gate API Management.";
+"收款地址不在 Gate 提币白名单中。请先到 Gate 网站将该地址加入白名单并完成验证。" = "Destination address is not in your Gate withdrawal whitelist. Please add and verify this address on the Gate website first.";

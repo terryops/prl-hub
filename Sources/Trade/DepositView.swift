@@ -28,7 +28,7 @@ struct DepositView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Pearl.Space.lg) {
-                    if let issue = store.ipIssue { UntrustedIPCard(issue: issue) }
+                    if let issue = store.ipIssue { UntrustedIPCard(issue: issue, exchange: trade.exchange) }
                     networkCard
                     if store.networkKey != nil { addressCard }
                     historyCard
@@ -47,6 +47,9 @@ struct DepositView: View {
             }
             .task { await store.load() }
             .refreshable { await store.load() }
+            .onChange(of: trade.exchange) { _, _ in
+                Task { await store.reloadForExchangeChange() }
+            }
         }
         #if os(macOS)
         .frame(minWidth: 460, minHeight: 620)
@@ -88,7 +91,7 @@ struct DepositView: View {
                 }
             }
             if let note = store.network?.maintenanceMessage {
-                PearlInfoRow(Loc("SafeTrade 提示：%@", note))
+                PearlInfoRow(trade.exchange == .gate ? Loc("Gate 提示：%@", note) : Loc("SafeTrade 提示：%@", note))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -110,9 +113,11 @@ struct DepositView: View {
                             .foregroundStyle(Pearl.accent)
                     }
                 }
-                Text(Loc("最少 %@", fmt(n.minDeposit)))
-                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                    .lineLimit(1).minimumScaleFactor(0.8)
+                if n.minDeposit > 0 {
+                    Text(Loc("最少 %@", fmt(n.minDeposit)))
+                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Pearl.Space.sm).padding(.vertical, Pearl.Space.xs + 2)
@@ -154,7 +159,9 @@ struct DepositView: View {
             } else if store.loadingAddress {
                 HStack(spacing: Pearl.Space.xs) {
                     ProgressView().controlSize(.small)
-                    Text(store.generating ? Loc("SafeTrade 正在生成充值地址…") : Loc("正在获取充值地址…"))
+                    Text(store.generating
+                         ? (trade.exchange == .gate ? Loc("Gate 正在生成充值地址…") : Loc("SafeTrade 正在生成充值地址…"))
+                         : Loc("正在获取充值地址…"))
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, minHeight: 120)

@@ -115,6 +115,23 @@ struct PoolRequestTests {
         }
     }
 
+    /// Peryn: one request, the address in the path; the widget reads it by the stored kind name
+    /// and shows the hourly total (Peryn's freshest), not the 24h one.
+    @Test func perynRequestAndWidget() async throws {
+        StubURLProtocol.stub("app.peryn.ai/api/v1/miner/\(alphaAddr)",
+                             [.init(status: 200, body: try Fixture.data("peryn_miner.json"))])
+        let s = try #require(try await PerynSource.miner(alphaAddr, scope: .full))
+        #expect(s.workers.count == 4)
+        let live = try #require(await WidgetFetch.poolLive(kind: "Peryn", address: alphaAddr))
+        #expect(live.online == 3 && live.total == 4)
+        #expect(close(live.hashrateRaw, 2_374_365_596_771_335.5))
+
+        StubURLProtocol.stub("app.peryn.ai/api/v1/miner/\(alphaAddr)", [.init(status: 400, body: Data())])
+        await #expect(throws: PoolHTTPError.status(400)) {
+            _ = try await PerynSource.miner(alphaAddr, scope: .full)
+        }
+    }
+
     /// The widget's scope reads the rig endpoint alone: Kryptex balance / payouts untouched.
     @Test func liveScopeSkipsMoneyEndpoints() async throws {
         let k = "prl1p5ga7tw6vy5rjr59wewzq3u4sp064muwssdglatxdj3wrz0yzqamshydnnk"

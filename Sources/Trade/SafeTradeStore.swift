@@ -32,6 +32,7 @@ struct PendingOrderCheck: Equatable {
 
 @MainActor
 final class SafeTradeStore: ObservableObject {
+    @Published private(set) var exchange: TradeExchange = .safetrade
     @Published var balances: [STBalance] = []
     /// `balances` is last session's (shown dimmed) until the first fresh read lands.
     @Published private(set) var balancesAreCached = false
@@ -100,6 +101,7 @@ final class SafeTradeStore: ObservableObject {
     private static let depthChartInterval: TimeInterval = 9
 
     private let client = SafeTradeClient()
+    private let gateClient = GateClient()
     private var candleRequestID = 0
     /// The full refresh under way. The store owns it, not the view task that asked:
     /// that task is cancelled on every scene-phase flip (a launch or a return from
@@ -110,7 +112,7 @@ final class SafeTradeStore: ObservableObject {
     private var settleRun: Task<Void, Never>?
     /// The last time the order lists were read, for the open-order watch.
     private var ordersReadAt: Date?
-    let market = SafeTradeMarket.defaultValue
+    var market: String { exchange.marketID }
 
     #if DEBUG
     /// Screenshot-only (App Store captures): when SHOT_TRADE_DEMO=1, present a
@@ -124,18 +126,58 @@ final class SafeTradeStore: ObservableObject {
     #endif
     /// Always false without the account feature: keys saved by an older build stay in
     /// the Keychain untouched but are never read, so only the public market loads.
-    var hasCredentials: Bool { AppFeatures.tradeAccount && (Self.shotDemo || SafeTradeSecrets.hasCredentials) }
+    var hasCredentials: Bool { AppFeatures.tradeAccount && (Self.shotDemo || exchange.hasCredentials) }
 
     /// K-line periods offered by the chart picker, in minutes.
     static let periods = [5, 15, 60, 240, 1440]
 
     init() {
+        let saved = TradeExchange.saved
+        exchange = saved
+        rules = saved.defaultRules
         // Restore the last-used chart period (persisted + iCloud-synced).
         let stored = UserDefaults.standard.integer(forKey: "safetrade.period")
         if SafeTradeStore.periods.contains(stored) { period = stored }
         #if DEBUG
         if Self.shotDemo { seedDemo() }
         #endif
+    }
+
+    func setExchange(_ next: TradeExchange) {
+        TradeExchange.save(next)
+        guard next != exchange else { return }
+        refreshRun?.cancel()
+        refreshRun = nil
+        settleRun?.cancel()
+        settleRun = nil
+        exchange = next
+        // Reset per-exchange transient state before loading the newly selected exchange.
+        balances = []
+        balancesAreCached = false
+        ticker = nil
+        orders = []
+        candles = []
+        candlesPeriod = nil
+        minuteCandles = []
+        minutesFetchedAt = nil
+        depth = nil
+        depthStale = false
+        depthFetchedAt = nil
+        rules = next.defaultRules
+        rulesLoaded = false
+        lastRefreshAt = nil
+        ordersReadAt = nil
+        accountStale = false
+        placing = false
+        cancelingOrderID = nil
+        error = nil
+        accountError = nil
+        lastOrder = nil
+        ipIssue = nil
+        unverifiedOrder = nil
+        verifyingOrder = false
+        _ = nextCandleRequestID()
+        Task { await refresh() }
     }
 
     func balance(_ currency: String) -> STBalance? {
@@ -147,6 +189,7 @@ final class SafeTradeStore: ObservableObject {
     /// (Control Center, app switcher). A refresh still under way (say, from just before
     /// the app was suspended) is waited out first, then judged like any other.
     func refreshIfStale(olderThan seconds: TimeInterval = 30) async {
+        if adoptSavedExchange() { return }
         if let run = refreshRun { await run.value }
         if let t = lastRefreshAt, Date().timeIntervalSince(t) < seconds,
            !accountStale, candlesPeriod == period { return }
@@ -170,10 +213,11 @@ final class SafeTradeStore: ObservableObject {
     }
 
     private func runRefresh() async {
+        let activeExchange = exchange
         refreshing = true
         defer { refreshing = false; lastRefreshAt = Date() }
         // Keys may have synced in from another device since the last look.
-        SafeTradeSecrets.invalidateCache()
+        activeExchange.invalidateCredentialCache()
         guard hasCredentials else {
             balances = []
             balancesAreCached = false
@@ -187,19 +231,22 @@ final class SafeTradeStore: ObservableObject {
         }
         // Last session's balances for this key, until the fresh read replaces them — no
         // blank card (and no full-screen overlay) on opening the tab.
-        if balances.isEmpty, let cached = Self.cachedBalances() {
+        if balances.isEmpty, let cached = Self.cachedBalances(for: activeExchange) {
             balances = cached
             balancesAreCached = true
         }
         async let balanceError = loadBalances()
         await loadPrimaryMarket()
+        guard exchange == activeExchange else { return }
         if let error = await balanceError {
+            guard exchange == activeExchange else { return }
             await settleAccount(error)   // the order lists would fail the same way
             await loadSecondaryMarket()
             return
         }
         async let orderError = loadOrders()
         await loadSecondaryMarket()
+        guard exchange == activeExchange else { return }
         await settleAccount(await orderError)
     }
 
@@ -207,20 +254,67 @@ final class SafeTradeStore: ObservableObject {
         period = p
         UserDefaults.standard.set(p, forKey: "safetrade.period")
         CloudSync.push("safetrade.period")
-        let currentMarket = market
+        let activeExchange = exchange
         let requestID = nextCandleRequestID()
         Task {
-            if let next = try? await client.kline(market: currentMarket, period: p) {
+            if let next = try? await fetchKline(exchange: activeExchange, period: p, limit: 120),
+               exchange == activeExchange {
                 applyCandles(next, requestID: requestID, period: p)
             }
         }
     }
 
-    /// Adopt a chart period synced in from another device (re-fetches candles).
+    @discardableResult
+    func adoptSavedExchange() -> Bool {
+        let saved = TradeExchange.saved
+        guard saved != exchange else { return false }
+        setExchange(saved)
+        return true
+    }
+
+    /// Adopt a chart period or active exchange synced in from another device.
     func adoptSyncedPeriod() {
+        if adoptSavedExchange() { return }
         let stored = UserDefaults.standard.integer(forKey: "safetrade.period")
         guard SafeTradeStore.periods.contains(stored), stored != period else { return }
         setPeriod(stored)
+    }
+
+    // MARK: exchange routing helpers
+
+    private func fetchTicker(exchange ex: TradeExchange) async throws -> STTicker {
+        switch ex {
+        case .safetrade: return try await client.ticker(market: ex.marketID)
+        case .gate: return try await gateClient.ticker()
+        }
+    }
+
+    private func fetchKline(exchange ex: TradeExchange, period p: Int, limit: Int = 120) async throws -> [STCandle] {
+        switch ex {
+        case .safetrade: return try await client.kline(market: ex.marketID, period: p, limit: limit)
+        case .gate: return try await gateClient.kline(period: p, limit: limit)
+        }
+    }
+
+    private func fetchDepth(exchange ex: TradeExchange, limit: Int = 100) async throws -> STDepth {
+        switch ex {
+        case .safetrade: return try await client.depth(market: ex.marketID, limit: limit)
+        case .gate: return try await gateClient.depth(limit: limit)
+        }
+    }
+
+    private func fetchMarketRules(exchange ex: TradeExchange) async throws -> SafeTradeMarketRules {
+        switch ex {
+        case .safetrade: return try await client.marketRules(market: ex.marketID)
+        case .gate: return try await gateClient.marketRules()
+        }
+    }
+
+    private func fetchPublicIP(exchange ex: TradeExchange) async throws -> String {
+        switch ex {
+        case .safetrade: return try await client.publicIP()
+        case .gate: return try await gateClient.publicIP()
+        }
     }
 
     /// Public market data — ticker, candles, rules, book — needs no keys.
@@ -231,15 +325,17 @@ final class SafeTradeStore: ObservableObject {
 
     /// The price and the candles, each put on screen as soon as it arrives.
     private func loadPrimaryMarket() async {
+        let activeExchange = exchange
         let candlePeriod = period
         let requestID = nextCandleRequestID()
-        async let t: Void = setTicker(try? await client.ticker(market: market))
-        async let k: Void = loadCandles(period: candlePeriod, requestID: requestID)
-        await t; await k
+        async let t: STTicker? = try? await fetchTicker(exchange: activeExchange)
+        async let k: Void = loadCandles(exchange: activeExchange, period: candlePeriod, requestID: requestID)
+        if let tick = await t, exchange == activeExchange { setTicker(tick) }
+        await k
     }
 
-    private func loadCandles(period p: Int, requestID: Int) async {
-        if let next = try? await client.kline(market: market, period: p) {
+    private func loadCandles(exchange ex: TradeExchange, period p: Int, requestID: Int) async {
+        if let next = try? await fetchKline(exchange: ex, period: p, limit: 120), exchange == ex {
             applyCandles(next, requestID: requestID, period: p)
         }
     }
@@ -258,6 +354,7 @@ final class SafeTradeStore: ObservableObject {
     /// depth chart). The 1-minute candles only gain a row per minute, so they're
     /// re-fetched at most every 30 s.
     func refreshTickerOnly() async {
+        let activeExchange = exchange
         async let m: Void = refreshMinutesIfDue(force: false)
         let bookDue = wantsDepth || (wantsDepthChart && depthDue(every: Self.depthChartInterval))
         async let d: Void = bookDue ? refreshDepth() : ()
@@ -265,8 +362,10 @@ final class SafeTradeStore: ObservableObject {
         // at the next full refresh — the book, polled here, would otherwise beat them.
         let candlesDue = candlesPeriod != period
         let p = period, requestID = candlesDue ? nextCandleRequestID() : 0
-        async let k: Void = candlesDue ? loadCandles(period: p, requestID: requestID) : ()
-        setTicker(try? await client.ticker(market: market))
+        async let k: Void = candlesDue ? loadCandles(exchange: activeExchange, period: p, requestID: requestID) : ()
+        if let tick = try? await fetchTicker(exchange: activeExchange), exchange == activeExchange {
+            setTicker(tick)
+        }
         await m; await d; await k
     }
 
@@ -284,7 +383,9 @@ final class SafeTradeStore: ObservableObject {
     private func refreshMinutesIfDue(force: Bool) async {
         guard period != 1440 else { return }
         if !force, let t = minutesFetchedAt, Date().timeIntervalSince(t) < 30 { return }
-        if let m = try? await client.kline(market: market, period: 1, limit: 250), !m.isEmpty {
+        let activeExchange = exchange
+        if let m = try? await fetchKline(exchange: activeExchange, period: 1, limit: 250),
+           !m.isEmpty, exchange == activeExchange {
             if m != minuteCandles { minuteCandles = m }
             minutesFetchedAt = Date()
         }
@@ -293,12 +394,15 @@ final class SafeTradeStore: ObservableObject {
     /// 100 levels: enough for the chart's ±15 % window and for walking a market order.
     /// A failed read keeps the last book, flagged stale, so one bad poll can't blank it.
     private func refreshDepth() async {
+        let activeExchange = exchange
         do {
-            let d = try await client.depth(market: market, limit: 100)
+            let d = try await fetchDepth(exchange: activeExchange, limit: 100)
+            guard exchange == activeExchange else { return }
             depthFetchedAt = Date()
             if d != depth { depth = d }
             if depthStale { depthStale = false }
         } catch {
+            guard exchange == activeExchange else { return }
             // A poll cancelled by a scene-phase flip says nothing about the book.
             if depth != nil, !depthStale, !SafeTradeClient.isCancellation(error) { depthStale = true }
         }
@@ -310,7 +414,8 @@ final class SafeTradeStore: ObservableObject {
     }
 
     private func loadRulesIfNeeded() async {
-        guard !rulesLoaded, let r = try? await client.marketRules(market: market) else { return }
+        let activeExchange = exchange
+        guard !rulesLoaded, let r = try? await fetchMarketRules(exchange: activeExchange), exchange == activeExchange else { return }
         rulesLoaded = true
         if r != rules { rules = r }
     }
@@ -344,15 +449,24 @@ final class SafeTradeStore: ObservableObject {
         let amountText = SafeTradeMarketRules.plain(amount)
         let priceText = priceValue.map(SafeTradeMarketRules.plain)
         let capText = ordType == "market"
-            ? marketPriceCap(side: side, slippagePercent: slippagePercent).map(SafeTradeMarketRules.plain) : nil
+            ? marketPriceCap(side: side, slippagePercent: slippagePercent, amount: amount).map(SafeTradeMarketRules.plain) : nil
         let before = PendingOrderCheck(side: side, knownIDs: Set(orders.compactMap(\.id)), knownComplete: !accountStale)
         let balancesBefore = balances
+        let activeExchange = exchange
         placing = true; error = nil; lastOrder = nil
         do {
-            let o = try await client.placeOrder(market: market, side: side, amount: amountText, price: priceText,
-                                                maxPrice: capText, type: ordType)
+            let o: STOrder
+            switch activeExchange {
+            case .safetrade:
+                o = try await client.placeOrder(market: activeExchange.marketID, side: side, amount: amountText,
+                                                price: priceText, maxPrice: capText, type: ordType)
+            case .gate:
+                o = try await gateClient.placeOrder(side: side, amount: amountText, price: priceText,
+                                                    maxPrice: capText, type: ordType)
+            }
+            guard exchange == activeExchange else { return false }
             placing = false   // order accepted — stop blocking the screen right away
-            lastOrder = Loc("已下单 #%@ · %@ %@ @ %@ · %@", o.id.map(String.init) ?? "?", o.side ?? side, o.origin_amount ?? amountText, o.displayPrice ?? priceText ?? "—", o.state ?? "")
+            lastOrder = Loc("已下单 #%@ · %@ %@ @ %@ · %@", o.cancelKey ?? "?", o.side ?? side, o.origin_amount ?? amountText, o.displayPrice ?? priceText ?? "—", o.state ?? "")
             orders.insert(o, at: 0)            // optimistic: show it at the top at once
             // Reconcile balances + orders off the hot path, until the order has settled.
             settle(orderID: o.id, balancesBefore: balancesBefore) { ordType == "market" ? !$0.isOpen : !$0.isPending }
@@ -360,6 +474,7 @@ final class SafeTradeStore: ObservableObject {
             Task { try? await Task.sleep(for: .seconds(5)); withAnimation { lastOrder = nil } }
             return true
         } catch SafeTradeError.placedUnverified {
+            guard exchange == activeExchange else { return false }
             // The exchange may have booked it. Treat it as submitted (clear inputs) and
             // lock the button until the order list settles the question.
             placing = false
@@ -368,10 +483,12 @@ final class SafeTradeStore: ObservableObject {
             Task { await verifyUnverifiedOrder() }
             return true
         } catch let e as SafeTradeError {
+            guard exchange == activeExchange else { return false }
             placing = false
             await present(e)
             return false
         } catch {
+            guard exchange == activeExchange else { return false }
             placing = false
             self.error = error.localizedDescription
             // Defensive: an unclassified failure here is treated as a clean failure, but
@@ -383,11 +500,23 @@ final class SafeTradeStore: ObservableObject {
     }
 
     /// A market order's price cap, from the last trade (else the best price it fills against).
-    func marketPriceCap(side: String, slippagePercent: Double) -> Decimal? {
+    /// On Gate market buys (`limit + ioc`), also clamps `cap` to `floor(availableUSDT / amount)` when
+    /// `MAX` or a full-balance buy would otherwise fail Gate's pre-match `amount * cap <= available` check.
+    func marketPriceCap(side: String, slippagePercent: Double, amount: Decimal? = nil) -> Decimal? {
         let book = side == "buy" ? depth?.asks.first?.price : depth?.bids.first?.price
         let last = ticker?.last.flatMap { Decimal(string: $0) }.flatMap { $0 > 0 ? $0 : nil }
             ?? book.flatMap { Decimal(string: String($0)) }
-        return last.flatMap { rules.marketPriceCap(side: side, last: $0, slippage: TradeSlippage.fraction(slippagePercent)) }
+        guard let last,
+              let baseCap = rules.marketPriceCap(side: side, last: last, slippage: TradeSlippage.fraction(slippagePercent)) else {
+            return nil
+        }
+        if exchange == .gate, side == "buy",
+           let amt = amount, amt > 0,
+           let avail = Decimal(string: balance("usdt")?.balance ?? ""), avail > 0 {
+            let minExec = depth?.asks.first.flatMap { Decimal(string: String($0.price)) } ?? (last * Decimal(string: "0.99")!)
+            return rules.gateAffordableBuyCap(cap: baseCap, minExecutablePrice: minExec, amount: amt, availableQuote: avail)
+        }
+        return baseCap
     }
 
     /// Settle an unverified order: look for it in the recent list a few times (the
@@ -396,26 +525,39 @@ final class SafeTradeStore: ObservableObject {
     /// stays locked and the banner offers 重新核对.
     func verifyUnverifiedOrder() async {
         guard let check = unverifiedOrder, !verifyingOrder else { return }
+        let activeExchange = exchange
         verifyingOrder = true
         defer { verifyingOrder = false }
         var cleanLooks = 0
         for delay in [0, 3, 6] {
             if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
-            guard let recent = try? await client.orders(market: market) else { continue }
+            guard exchange == activeExchange else { return }
+            let recent: [STOrder]?
+            switch activeExchange {
+            case .safetrade: recent = try? await client.orders(market: activeExchange.marketID)
+            case .gate:
+                async let open = try? gateClient.orders(status: "open", limit: 100)
+                async let fin = try? gateClient.orders(status: "finished", limit: 20)
+                if let f = await fin { recent = Self.merge(recent: f, open: await open ?? []) } else { recent = nil }
+            }
+            guard let recent else { continue }
             if let hit = recent.first(where: check.isNew) {
                 unverifiedOrder = nil
                 error = nil
-                lastOrder = Loc("已在订单列表找到这笔订单 #%@", hit.id.map(String.init) ?? "?")
+                lastOrder = Loc("已在订单列表找到这笔订单 #%@", hit.cancelKey ?? "?")
                 await refreshAccount()
                 return
             }
             cleanLooks += 1
         }
+        guard exchange == activeExchange else { return }
         if check.knownComplete, cleanLooks >= 2 {
             unverifiedOrder = nil
             error = Loc("订单列表里没有这笔订单，下单没有成功，可以重新下单。")
         } else {
-            error = Loc("暂时无法确认下单结果，请到 SafeTrade 网站核对，或稍后点「重新核对」。")
+            error = activeExchange == .gate
+                ? Loc("暂时无法确认下单结果，请到 Gate 网站核对，或稍后点「重新核对」。")
+                : Loc("暂时无法确认下单结果，请到 SafeTrade 网站核对，或稍后点「重新核对」。")
         }
         await refreshAccount()
     }
@@ -433,18 +575,25 @@ final class SafeTradeStore: ObservableObject {
     /// One cancel at a time keeps the spinner state unambiguous.
     func cancelOrder(_ order: STOrder) async {
         guard let id = order.id, cancelingOrderID == nil, !placing else { return }
+        let activeExchange = exchange
         cancelingOrderID = id; error = nil; lastOrder = nil
         let balancesBefore = balances
         do {
-            try await client.cancelOrder(id: id)
+            switch activeExchange {
+            case .safetrade: try await client.cancelOrder(id: id)
+            case .gate: try await gateClient.cancelOrder(order)
+            }
+            guard exchange == activeExchange else { return }
             await refreshAccount()   // pull the real state (and the unlocked balance)
-            if !Self.isSettled(orders.first(where: { $0.id == id }), balancesMoved: balances != balancesBefore, done: { !$0.isOpen }) {
-                settle(orderID: id, balancesBefore: balancesBefore, firstDelay: 1) { !$0.isOpen }
+            let absentOK = activeExchange == .gate
+            if !Self.isSettled(orders.first(where: { $0.id == id }), balancesMoved: balances != balancesBefore,
+                               absentMeansDone: absentOK, done: { !$0.isOpen }) {
+                settle(orderID: id, balancesBefore: balancesBefore, firstDelay: 1, absentMeansDone: absentOK) { !$0.isOpen }
             }
         } catch {
-            await present(error)
+            if exchange == activeExchange { await present(error) }
         }
-        cancelingOrderID = nil
+        if exchange == activeExchange { cancelingOrderID = nil }
     }
 
     /// Seconds between the follow-up reads. The engine settles an order in milliseconds
@@ -457,6 +606,7 @@ final class SafeTradeStore: ObservableObject {
     /// off `balancesBefore` — at once, then after each of `settleDelays` (~19 s in all;
     /// past that the open-order watch carries on).
     private func settle(orderID: Int?, balancesBefore: [STBalance], firstDelay: Double = 0,
+                        absentMeansDone: Bool = false,
                         done: @escaping (STOrder) -> Bool) {
         settleRun?.cancel()
         settleRun = Task { [weak self] in
@@ -465,16 +615,19 @@ final class SafeTradeStore: ObservableObject {
                 guard let self, !Task.isCancelled else { return }
                 await self.refreshAccount()
                 let order = self.orders.first { $0.id != nil && $0.id == orderID }
-                if Self.isSettled(order, balancesMoved: self.balances != balancesBefore, done: done) { break }
+                if Self.isSettled(order, balancesMoved: self.balances != balancesBefore,
+                                  absentMeansDone: absentMeansDone, done: done) { break }
             }
             if let self, !Task.isCancelled { self.settleRun = nil }
         }
     }
 
-    /// An order has settled once the list shows it `done` and the balances have moved
-    /// (the order list and the balances can each lag the engine).
-    nonisolated static func isSettled(_ order: STOrder?, balancesMoved: Bool, done: (STOrder) -> Bool) -> Bool {
-        guard balancesMoved, let order else { return false }
+    /// An order has settled once the list shows it `done` (or omits a zero-fill cancel on Gate)
+    /// and the balances have moved (the order list and the balances can each lag the engine).
+    nonisolated static func isSettled(_ order: STOrder?, balancesMoved: Bool,
+                                      absentMeansDone: Bool = false, done: (STOrder) -> Bool) -> Bool {
+        guard balancesMoved else { return false }
+        guard let order else { return absentMeansDone }
         return done(order)
     }
 
@@ -493,40 +646,51 @@ final class SafeTradeStore: ObservableObject {
     /// what's on screen, flagged stale — an open order that "vanished" might get placed
     /// again.
     func refreshAccount() async {
+        let activeExchange = exchange
         async let b = loadBalances()
         async let o = loadOrders()
         let balanceError = await b
         let orderError = await o
+        guard exchange == activeExchange else { return }
         await settleAccount(balanceError ?? orderError)
     }
 
     /// Balances, applied the moment they arrive (the balance card doesn't wait on the
     /// order lists). Returns the failure instead of reporting it — see settleAccount.
     private func loadBalances() async -> Error? {
+        let activeExchange = exchange
         do {
-            let next = try await client.balances()
+            let next: [STBalance]
+            switch activeExchange {
+            case .safetrade: next = try await client.balances()
+            case .gate: next = try await gateClient.balances()
+            }
+            guard exchange == activeExchange else { return nil }
             if next != balances { balances = next }
             if balancesAreCached { balancesAreCached = false }
-            Self.rememberBalances(next)
+            Self.rememberBalances(next, for: activeExchange)
             return nil
         } catch {
+            guard exchange == activeExchange else { return nil }
             return error
         }
     }
 
     // MARK: last known balances
 
-    /// Per API key (a hash of it — the key itself never goes into UserDefaults), so
-    /// switching to another account's key can't show the old account's figures.
-    private static var balanceCacheKey: String? {
-        let key = SafeTradeSecrets.apiKey
+    /// Per exchange + API key (a hash of it — the key itself never goes into UserDefaults), so
+    /// switching exchanges or accounts never shows another account's figures.
+    private static func balanceCacheKey(for exchange: TradeExchange) -> String? {
+        let key = exchange.apiKey
         guard !key.isEmpty else { return nil }
         let digest = SHA256.hash(data: Data(key.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
-        return "safetrade.lastBalances.\(digest)"
+        if exchange == .safetrade { return "safetrade.lastBalances.\(digest)" }
+        return "trade.lastBalances.\(exchange.rawValue).\(digest)"
     }
 
-    private static func cachedBalances() -> [STBalance]? {
-        guard let k = balanceCacheKey, let rows = UserDefaults.standard.array(forKey: k) as? [[String: String]] else { return nil }
+    private static func cachedBalances(for exchange: TradeExchange) -> [STBalance]? {
+        guard let k = balanceCacheKey(for: exchange),
+              let rows = UserDefaults.standard.array(forKey: k) as? [[String: String]] else { return nil }
         let list = rows.compactMap { r -> STBalance? in
             guard let c = r["currency"], let b = r["balance"], let l = r["locked"] else { return nil }
             return STBalance(currency: c, balance: b, locked: l)
@@ -539,24 +703,37 @@ final class SafeTradeStore: ObservableObject {
         return renamed.isEmpty ? nil : renamed
     }
 
-    private static func rememberBalances(_ list: [STBalance]) {
-        guard let k = balanceCacheKey else { return }
+    private static func rememberBalances(_ list: [STBalance], for exchange: TradeExchange) {
+        guard let k = balanceCacheKey(for: exchange) else { return }
         UserDefaults.standard.set(list.map { ["currency": $0.currency, "balance": $0.balance, "locked": $0.locked] }, forKey: k)
     }
 
     /// Recent + every resting order, merged. The open-orders read is best effort: if
     /// it fails, the open orders already on screen stand in.
     private func loadOrders() async -> Error? {
-        async let o = client.orders(market: market)
-        async let w = try? client.orders(market: market, state: "wait", limit: 100)
+        let activeExchange = exchange
         do {
-            let recent = try await o
-            let open = await w ?? orders.filter(\.isOpen)
+            let recent: [STOrder]
+            let open: [STOrder]
+            switch activeExchange {
+            case .safetrade:
+                async let o = client.orders(market: activeExchange.marketID)
+                async let w = try? client.orders(market: activeExchange.marketID, state: "wait", limit: 100)
+                recent = try await o
+                open = await w ?? orders.filter(\.isOpen)
+            case .gate:
+                async let fin = gateClient.orders(status: "finished", limit: 20)
+                async let opn = try? gateClient.orders(status: "open", limit: 100)
+                recent = try await fin
+                open = await opn ?? orders.filter(\.isOpen)
+            }
+            guard exchange == activeExchange else { return nil }
             let merged = Self.merge(recent: recent, open: open)
             if merged != orders { orders = merged }
             ordersReadAt = Date()
             return nil
         } catch {
+            guard exchange == activeExchange else { return nil }
             return error
         }
     }
@@ -590,12 +767,15 @@ final class SafeTradeStore: ObservableObject {
     }
 
     /// Show a failure. An untrusted-IP refusal gets the IP card (with the address
-    /// SafeTrade sees) instead of a raw error line.
+    /// the exchange sees) instead of a raw error line.
     private func present(_ e: Error, account: Bool = false) async {
+        let activeExchange = exchange
         if (e as? SafeTradeError)?.authProblem == .untrustedIP {
             if account { accountError = nil } else { error = nil }
             if ipIssue == nil { ipIssue = SafeTradeIPIssue(ip: nil) }
-            if let ip = try? await client.publicIP() { ipIssue = SafeTradeIPIssue(ip: ip) }
+            if let ip = try? await fetchPublicIP(exchange: activeExchange), exchange == activeExchange {
+                ipIssue = SafeTradeIPIssue(ip: ip)
+            }
             return
         }
         if account { accountError = e.localizedDescription } else { error = e.localizedDescription }

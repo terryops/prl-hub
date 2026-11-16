@@ -11,6 +11,7 @@ struct WithdrawView: View {
     @Environment(\.openURL) private var openURL
 
     @State private var address = ""
+    @State private var memo = ""
     @State private var amount = ""
     @State private var emailCode = ""
     @State private var otpCode = ""
@@ -40,11 +41,12 @@ struct WithdrawView: View {
         if isPearl { return PRLAddress.isValid(trimmedAddress, network: .mainnet) }
         return store.network?.isValidAddress(trimmedAddress) ?? false
     }
+    private var effectivePrecision: Int { store.network?.withdrawPrecision ?? store.precision }
     /// Typed amount, rejected if it has more decimals than the exchange accepts.
     private var amountValue: Decimal? {
         guard let v = PRLAmount.parse(amount) else { return nil }
         var x = v, r = Decimal()
-        NSDecimalRound(&r, &x, store.precision, .plain)
+        NSDecimalRound(&r, &x, effectivePrecision, .plain)
         return r == v ? v : nil
     }
     private var fee: Decimal { store.network?.fee(for: amountValue ?? 0) ?? 0 }
@@ -52,7 +54,9 @@ struct WithdrawView: View {
 
     /// Why the amount can't be sent yet (nil = fine or still empty).
     private var amountProblem: String? {
-        guard let a = amountValue, !amount.isEmpty else { return amount.isEmpty ? nil : Loc("数量格式不对") }
+        guard !amount.isEmpty else { return nil }
+        guard PRLAmount.parse(amount) != nil else { return Loc("数量格式不对") }
+        guard let a = amountValue else { return Loc("数量最多 %d 位小数", effectivePrecision) }
         if let n = store.network, a < n.minAmount { return Loc("最少提现 %@ %@", fmt(n.minAmount), unit) }
         if a > available { return Loc("%@ 余额不足", unit) }
         if a <= fee { return Loc("数量需大于手续费") }
@@ -70,12 +74,15 @@ struct WithdrawView: View {
                 && bookKey($0) == store.networkKey
         }
     }
+    private var isGate: Bool { trade.exchange == .gate }
     private var canSubmit: Bool {
-        codeReady && store.network?.canWithdraw == true && (beneficiary != nil || emailCode.count == 6)
-            && (otpCode.isEmpty || otpCode.count == 6)
-            && (!store.needsPhoneCode || phoneCode.count == 6)
+        let codesOK = isGate
+            || ((beneficiary != nil || emailCode.count == 6)
+                && (otpCode.isEmpty || otpCode.count == 6)
+                && (!store.needsPhoneCode || phoneCode.count == 6))
+        return codeReady && store.network?.canWithdraw == true && codesOK
             && !store.submitting && !authenticating
-            && store.unverified == nil && !store.verifying   // a previous one's outcome is still unknown
+            && store.unverified == nil && !store.verifying
     }
 
     /// Mainnet receive address of every wallet on this device (index 0). Read-only wallets are
@@ -91,7 +98,7 @@ struct WithdrawView: View {
             ScrollView {
                 VStack(spacing: Pearl.Space.lg) {
                     formCard
-                    codesCard
+                    if isGate { gateSubmitCard } else { codesCard }
                     statusMessages
                     historyCard
                 }
@@ -120,16 +127,25 @@ struct WithdrawView: View {
                 await store.load()
             }
             .refreshable { await store.load() }
+            .onChange(of: trade.exchange) { _, _ in
+                address = ""
+                memo = ""
+                amount = ""
+                beneficiaryID = nil
+                confirming = false
+                Task { await store.reloadForExchangeChange() }
+            }
             .onChange(of: store.networkKey) { old, new in
                 // An address picked from a saved entry for the old chain doesn't belong
                 // on the new one: clear it rather than let it ride along to another
                 // network. (Kept if the same address is also saved for the new chain.)
                 guard let old, old != new, savedFor(chain: old), !savedFor(chain: new) else { return }
                 address = ""
+                memo = ""
                 beneficiaryID = nil
             }
             .onChange(of: codeSignature) { _, now in
-                guard let sentFor = store.codeContext, sentFor != now else { return }
+                guard !isGate, let sentFor = store.codeContext, sentFor != now else { return }
                 emailCode = ""; phoneCode = ""
                 store.invalidateCodes()
             }
@@ -148,6 +164,8 @@ struct WithdrawView: View {
                     fee: "\(fmt(fee)) \(unit)",
                     received: fmt(received), unit: unit,
                     network: store.network?.name,
+                    memo: (store.network?.requiresMemo == true)
+                        ? memo.trimmingCharacters(in: .whitespacesAndNewlines) : nil,
                     address: trimmedAddress,
                     addressName: savedName,
                     onConfirm: submitConfirmed)
@@ -172,7 +190,8 @@ struct WithdrawView: View {
             }
             if await store.submit(address: a, amount: v, beneficiaryID: viaBook,
                                   emailCode: viaBook == nil ? emailCode : "",
-                                  otpCode: otpCode, phoneCode: phoneCode) {
+                                  otpCode: otpCode, phoneCode: phoneCode,
+                                  memo: store.network?.requiresMemo == true ? memo : "") {
                 amount = ""; emailCode = ""; otpCode = ""; phoneCode = ""
                 await trade.refresh()
             }
@@ -191,7 +210,9 @@ struct WithdrawView: View {
     /// Label shown under a filled-in address that is already saved somewhere.
     private var savedName: String? {
         guard addressValid else { return nil }
-        if let b = beneficiary { return Loc("SafeTrade 地址簿「%@」· 免邮箱验证码", b.title) }
+        if let b = beneficiary {
+            return isGate ? Loc("Gate 地址簿「%@」", b.title) : Loc("SafeTrade 地址簿「%@」· 免邮箱验证码", b.title)
+        }
         if isPearl {
             if let w = myWallets.first(where: { $0.address == trimmedAddress }) { return Loc("钱包「%@」", w.name) }
             return contacts.name(for: trimmedAddress).map { Loc("通讯录「%@」", $0) }
@@ -223,6 +244,8 @@ struct WithdrawView: View {
     private func apply(_ p: WithdrawAddress) {
         store.networkKey = p.blockchainKey
         address = p.address
+        memo = ""
+        beneficiaryID = nil
     }
 
     private func bookKey(_ b: STBeneficiary) -> String? { store.chainKey(of: b) }
@@ -231,6 +254,7 @@ struct WithdrawView: View {
         guard let dest = b.destination, let key = bookKey(b) else { return }
         store.networkKey = key
         address = dest
+        if isGate { memo = b.memo ?? "" }
         beneficiaryID = b.id
     }
 
@@ -247,7 +271,7 @@ struct WithdrawView: View {
         if hasAny {
             Menu {
                 if !bookEntries.isEmpty {
-                    Section(Loc("SafeTrade 地址簿（免邮箱验证码）")) {
+                    Section(isGate ? Loc("Gate 地址簿") : Loc("SafeTrade 地址簿（免邮箱验证码）")) {
                         ForEach(bookEntries) { b in
                             let n = store.network(forKey: bookKey(b))
                             Button(isPearl ? b.title : "\(b.title) · \(n?.name ?? "")") { apply(b) }
@@ -289,8 +313,9 @@ struct WithdrawView: View {
     private var addressPlaceholder: String {
         if isPearl { return "prl1…" }
         guard let key = store.network?.blockchain_key.lowercased() else { return Loc("先选择网络") }
-        if key.hasPrefix("tron") { return "T…" }
+        if key.hasPrefix("tron") || key == "trx" { return "T…" }
         if key.hasPrefix("spl") || key.hasPrefix("sol") { return "Solana" }
+        if ChainAddress.isNonEVMChain(key) { return store.network?.shortName ?? "" }
         return "0x…"
     }
 
@@ -363,10 +388,10 @@ struct WithdrawView: View {
             if !isPearl { networkPicker }
 
             if let n = store.network, !n.canWithdraw {
-                Label(Loc("SafeTrade 暂停了这条链的提现"), systemImage: "pause.circle")
+                Label(isGate ? Loc("Gate 暂停了这条链的提现") : Loc("SafeTrade 暂停了这条链的提现"), systemImage: "pause.circle")
                     .font(.caption).foregroundStyle(.orange)
             } else if !store.networks.isEmpty && store.openNetworks.isEmpty {
-                Label(Loc("SafeTrade 暂停了 %@ 提现", unit), systemImage: "pause.circle")
+                Label(isGate ? Loc("Gate 暂停了 %@ 提现", unit) : Loc("SafeTrade 暂停了 %@ 提现", unit), systemImage: "pause.circle")
                     .font(.caption).foregroundStyle(.orange)
             }
 
@@ -399,12 +424,27 @@ struct WithdrawView: View {
                 }
             }
 
+            if store.network?.requiresMemo == true {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Memo").font(.subheadline).foregroundStyle(.secondary)
+                    TextField(Loc("选填（交易所要求时填写）"), text: $memo)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.callout.monospaced())
+                        .autocorrectionDisabled()
+                        .accessibilityLabel("Memo")
+                        .focused($focused)
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                }
+            }
+
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(Loc("数量 (%@)", unit)).font(.subheadline).foregroundStyle(.secondary)
                     Spacer()
                     if available > 0 {
-                        Button(Loc("MAX %@", fmt(available))) { amount = fmt(available, floorTo: store.precision) }
+                        Button(Loc("MAX %@", fmt(available))) { amount = fmt(available, floorTo: effectivePrecision) }
                             .buttonStyle(.borderless).font(.caption.weight(.medium)).tint(Pearl.accent)
                     }
                 }
@@ -428,6 +468,20 @@ struct WithdrawView: View {
                 }
                 .font(.subheadline)
             }
+        }
+        .pearlCard()
+    }
+
+    private var gateSubmitCard: some View {
+        VStack(alignment: .leading, spacing: Pearl.Space.md) {
+            HStack(spacing: 4) {
+                Text(Loc("安全验证")).font(.headline)
+                PearlInfoTip(Loc("Gate API 提现无需邮箱或谷歌验证码，但要求该 API 密钥已开启「提现」权限且绑定当前公网 IP 白名单；提交前需通过本机生物识别验证。"),
+                             title: Loc("安全验证"))
+            }
+            Button { focused = false; confirming = true } label: { Text(Loc("提现")) }
+                .buttonStyle(.pearl)
+                .disabled(!canSubmit)
         }
         .pearlCard()
     }
@@ -495,7 +549,7 @@ struct WithdrawView: View {
                              recheck: { Task { await store.verifyUnverified() } },
                              dismiss: { store.dismissUnverified() })
         }
-        if let issue = store.ipIssue { UntrustedIPCard(issue: issue) }
+        if let issue = store.ipIssue { UntrustedIPCard(issue: issue, exchange: trade.exchange) }
         TradeStatusLines(notice: store.notice, errors: [store.error])
     }
 

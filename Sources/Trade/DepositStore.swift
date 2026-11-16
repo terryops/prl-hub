@@ -31,6 +31,8 @@ final class DepositStore: ObservableObject {
     @Published private(set) var ipIssue: SafeTradeIPIssue?
 
     private let client = SafeTradeClient()
+    private let gateClient = GateClient()
+    var exchange: TradeExchange { trade.exchange }
     private var unit: String { currency.uppercased() }
 
     init(currency: String, trade: SafeTradeStore) {
@@ -38,18 +40,36 @@ final class DepositStore: ObservableObject {
         self.trade = trade
     }
 
+    func reloadForExchangeChange() async {
+        networks = []
+        networkKey = nil
+        address = nil
+        loadError = nil
+        addressError = nil
+        history = []
+        ipIssue = nil
+        await load()
+    }
+
     func load() async {
+        let ex = exchange
         loadingInfo = true
-        async let info = client.currency(currency)
-        async let recent = loadHistory()
+        async let info = ex == .gate ? gateClient.currency(currency) : client.currency(currency)
+        async let recent: Void = loadHistory()
         do {
             let open = try await info.networks.filter { $0.canDeposit }
+            guard exchange == ex else { return }
             networks = open
-            loadError = open.isEmpty ? Loc("SafeTrade 暂时没有开放 %@ 的充值网络", unit) : nil
+            loadError = open.isEmpty
+                ? (ex == .gate ? Loc("Gate 暂时没有开放 %@ 的充值网络", unit) : Loc("SafeTrade 暂时没有开放 %@ 的充值网络", unit))
+                : nil
             if let key = networkKey, !open.contains(where: { $0.blockchain_key == key }) { networkKey = nil }
             if networkKey == nil, open.count == 1 { networkKey = open[0].blockchain_key }
         } catch {
-            loadError = Loc("读取 SafeTrade 充值信息失败：%@", error.localizedDescription)
+            guard exchange == ex else { return }
+            loadError = ex == .gate
+                ? Loc("读取 Gate 充值信息失败：%@", error.localizedDescription)
+                : Loc("读取 SafeTrade 充值信息失败：%@", error.localizedDescription)
         }
         loadingInfo = false
         if networkKey != nil { await loadAddress() }
@@ -64,15 +84,17 @@ final class DepositStore: ObservableObject {
         Task { await loadAddress() }
     }
 
-    /// The deposit address on the chosen chain. SafeTrade generates it on first ask and
-    /// answers with an empty address meanwhile, so ask again a few times.
+    /// The deposit address on the chosen chain. SafeTrade & Gate generate it on first ask and
+    /// answer with an empty address meanwhile, so ask again a few times.
     func loadAddress() async {
         guard let key = networkKey else { return }
+        let ex = exchange
         addressError = nil
         #if DEBUG
         if SafeTradeStore.shotDemo { address = Self.demoAddress(network: key); return }
         #endif
-        if let known = trade.balance(currency)?.deposit_addresses
+        if ex == .safetrade,
+           let known = trade.balance(currency)?.deposit_addresses
             .flatMap({ STDepositAddress.pick($0, currency: currency, network: key) }) {
             address = known
             return
@@ -81,19 +103,23 @@ final class DepositStore: ObservableObject {
         defer { loadingAddress = false; generating = false }
         for attempt in 0..<6 {
             do {
-                let a = try await client.depositAddress(currency: currency, network: key)
-                guard networkKey == key else { return }          // switched chain meanwhile
+                let a = try await (ex == .gate
+                    ? gateClient.depositAddress(currency: currency, network: key)
+                    : client.depositAddress(currency: currency, network: key))
+                guard exchange == ex, networkKey == key else { return }          // switched chain/exchange meanwhile
                 if a.isReady { address = a; ipIssue = nil; return }
                 generating = true
             } catch {
-                guard networkKey == key else { return }
+                guard exchange == ex, networkKey == key else { return }
                 await present(error)
                 return
             }
             if attempt < 5 { try? await Task.sleep(for: .seconds(3)) }
-            if Task.isCancelled { return }
+            if Task.isCancelled || exchange != ex { return }
         }
-        addressError = Loc("SafeTrade 还在生成充值地址，请稍后下拉刷新。")
+        addressError = ex == .gate
+            ? Loc("Gate 还在生成充值地址，请稍后下拉刷新。")
+            : Loc("SafeTrade 还在生成充值地址，请稍后下拉刷新。")
     }
 
     /// Recent deposits — an optional extra: a failed read keeps what was shown.
@@ -101,14 +127,25 @@ final class DepositStore: ObservableObject {
         #if DEBUG
         if SafeTradeStore.shotDemo { history = Self.demoHistory(currency: currency); return }
         #endif
-        if let rows = try? await client.deposits(currency: currency) { history = rows }
+        let ex = exchange
+        if let rows = try? await (ex == .gate ? gateClient.deposits(currency: currency) : client.deposits(currency: currency)),
+           exchange == ex {
+            history = rows
+        }
     }
 
     private func present(_ error: Error) async {
+        let ex = exchange
         if (error as? SafeTradeError)?.authProblem == .untrustedIP {
             addressError = nil
             ipIssue = SafeTradeIPIssue(ip: nil)
-            if let ip = try? await client.publicIP() { ipIssue = SafeTradeIPIssue(ip: ip) }
+            if let ip = try? await (ex == .gate ? gateClient.publicIP() : client.publicIP()), exchange == ex {
+                ipIssue = SafeTradeIPIssue(ip: ip)
+            }
+            return
+        }
+        if ex == .gate, case .other = (error as? SafeTradeError)?.authProblem {
+            addressError = Loc("Gate 拒绝了读取充值地址的请求：请到 Gate「API 管理」为这把密钥开启「钱包 → 只读」权限。")
             return
         }
         addressError = error.localizedDescription

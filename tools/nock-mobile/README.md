@@ -4,6 +4,14 @@ Rust → `vendor/NockMobile.xcframework` (static library + `module.modulemap`), 
 iOS and macOS apps. Swift side: `Sources/WalletKit/NockCore.swift` (FFI), `NockClient.swift`
 (gRPC-web over URLSession), `NockWalletStore.swift`, UI in `Sources/Wallet/NockWallet.swift`.
 
+The same crate, compiled to WebAssembly, is the NOCK core of the PRL Wallet browser extension
+and of the wallet inside the Android app: prl-hub-wallet keeps a copy in `nock-core/`
+(`npm run sync:nock` there copies it from here, `-- --check` lists differences). Change it here
+first. The two `nock_alloc` / `nock_dealloc` exports exist only on wasm32.
+
+License: MIT (`LICENSE`), so the MIT-licensed wallet can ship it; the rest of this repository
+stays GPL-3.0.
+
 ## What it does
 
 - **Same seed as PRL.** The wallet's 12-word BIP39 phrase also opens a NOCK account, derived like

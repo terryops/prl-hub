@@ -16,8 +16,8 @@ struct SecurityInfoView: View {
                 PearlInfoRow(Loc("加密存于本机钥匙串，只属于这台设备：不同步到 iCloud，也不进备份。查看助记词和转账都要 Face ID / Touch ID 验证。"),
                              title: Loc("助记词与私钥"), systemImage: "key.fill")
                 if AppFeatures.tradeAccount {
-                    PearlInfoRow(Loc("只存在你的钥匙串里（开着 iCloud 钥匙串时由 Apple 端到端加密同步）；交易请求由 App 签名后直接发往 safetrade.com。"),
-                                 title: Loc("SafeTrade API 密钥"), systemImage: "key.horizontal.fill")
+                    PearlInfoRow(Loc("只存在你的钥匙串里（开着 iCloud 钥匙串时由 Apple 端到端加密同步）；交易请求由 App 签名后直接发往 safetrade.com 或 api.gateio.ws。"),
+                                 title: Loc("SafeTrade 与 Gate API 密钥"), systemImage: "key.horizontal.fill")
                 }
                 PearlInfoRow(Loc("内购全程由 Apple 处理，我们拿不到你的付款方式和 Apple 账号。"),
                              title: Loc("付款信息"), systemImage: "creditcard")
@@ -56,7 +56,7 @@ struct SecurityInfoView: View {
                              title: Loc("Pearl 区块浏览器"), systemImage: "cube")
                 PearlInfoRow(Loc("添加矿池监控后，App 把收益地址（F2Pool 为只读页链接）发给对应矿池。"),
                              title: Loc("矿池公开接口"), systemImage: "server.rack")
-                PearlInfoRow(Loc("SafeTrade、CoinGecko、WhatToMine、MiningPoolStats、open.er-api.com 等公开数据源，请求不带地址。"),
+                PearlInfoRow(Loc("SafeTrade、Gate、CoinGecko、WhatToMine、MiningPoolStats、open.er-api.com 等公开数据源，请求不带地址。"),
                              title: Loc("行情与汇率"), systemImage: "dollarsign.circle")
                 PearlInfoRow(Loc("向 Apple 的 itunes.apple.com 查询 App Store 上的最新版本号，用来提示更新。请求不带地址，也不带任何身份信息。"),
                              title: Loc("App Store 版本查询"), systemImage: "arrow.down.circle")

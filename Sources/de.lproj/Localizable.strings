@@ -1142,6 +1142,12 @@
 "这是按各矿池标注的样本时间段，计算的实际结算收益相对理论收益的折损率。" = "Dies ist der prozentuale Minderertrag der abgerechneten gegenüber den theoretischen Einnahmen im angegebenen Stichprobenzeitraum des Pools.";
 "这是 %@ 期间，实际结算收益相对理论收益的折损率。" = "Dies ist der prozentuale Minderertrag der abgerechneten gegenüber den theoretischen Einnahmen im Zeitraum %@.";
 "这是 %@ 期间按矿池出块和公示池费估算的折损率，已扣除出块运气，剩下的是池费和矿池损耗的算力。" = "Dies ist der prozentuale Minderertrag, geschätzt aus den gefundenen Blöcken des Pools und der veröffentlichten Poolgebühr im Zeitraum %@, ohne das Glück beim Finden von Blöcken: Es bleiben nur die Gebühr und die Arbeit, die der Pool verliert.";
+"孤块" = "Orphan-Blöcke";
+"%1$@/%2$@ 块" = "%1$@/%2$@ Blöcke";
+"其他" = "Sonstiges";
+"%@ · 已扣除出块运气" = "%@ · ohne Glück beim Finden von Blöcken";
+"孤块：近 7 天该池找到、但没被链收录的块，没有奖励。" = "Orphan-Blöcke: Blöcke, die der Pool in den letzten 7 Tagen gefunden hat, die die Chain aber nicht behalten hat; sie bringen nichts.";
+"其他：矿池损耗的算力和统计误差。" = "Sonstiges: die Arbeit, die der Pool verliert, und Messfehler.";
 
 "左右滑动查看完整对比" = "Seitlich wischen, um alle Spalten zu vergleichen";
 "提醒频率" = "Alarmhäufigkeit";
@@ -1360,3 +1366,102 @@
 "其他地址…" = "Andere Adresse…";
 "用同一套助记词收发 NOCK（Nockchain）。打开后钱包页底部会出现 NOCK 钱包。" = "Sende und empfange NOCK (Nockchain) mit derselben Wiederherstellungsphrase. Eingeschaltet erscheint die NOCK-Wallet unten auf der Wallet-Seite.";
 "到账提醒：地址收到 PRL 就通知你" = "Zahlungseingangs-Alarme: erfahre sofort, wenn PRL auf deiner Adresse eingeht";
+
+/* Pools: Peryn's Founding Miner fee, in the ⓘ beside the fee */
+"创始矿工费率" = "Gebühr für Gründungsmitglieder";
+"创始矿工 %@。报名到 Pearl FP8 升级截止。" = "Gründungsmitglieder: %@. Anmeldung bis zum FP8-Upgrade von Pearl.";
+"创始矿工 %@，到 Pearl FP8 升级后 %@ 个月。报名到 Pearl FP8 升级截止。" = "Gründungsmitglieder: %@ bis %@ Monate nach dem FP8-Upgrade von Pearl. Anmeldung bis zum Upgrade.";
+
+/* Pools: Peryn's Real Cost per fee tier, in the ⓘ beside it */
+"创始矿工地址" = "Adressen von Gründungsmitgliedern";
+"普通地址" = "Andere Adressen";
+
+/* Pools: why a PPLNS / PROP Real Cost is "—" (too few blocks), in the ⓘ beside it */
+"%1$@ 近 7 天的算力只够出约 %2$@ 块，块太少，扣不准出块运气。满 %3$@ 块才显示真实费用。" = "Die Hashrate von %1$@ der letzten 7 Tage reicht nur für etwa %2$@ Blöcke – zu wenige, um das Glück beim Finden von Blöcken herauszurechnen. Reale Kosten erscheinen ab %3$@ Blöcken.";
+
+/* Rolling share-work output estimates. */
+"%@ 天统计估计" = "Statistische Schätzung über %@ Tage";
+"发现 %1$@ 个块，其中 %2$@ 个孤块；已接受 share 工作量对应约 %3$@ 个理论块。" = "%1$@ Blöcke gefunden, davon %2$@ verwaist. Die akzeptierte Share-Arbeit entspricht %3$@ theoretischen Blöcken.";
+"发现块效率：%1$@；95%% 计数误差参考区间：%2$@～%3$@。" = "Effizienz gefundener Blöcke: %1$@. 95%%-Intervall nur für Zählzufall: %2$@–%3$@.";
+"成本的 95%% 计数误差参考区间：%1$@～%2$@。" = "Kosten: 95%%-Intervall nur für Zählzufall %1$@–%2$@.";
+"尚未确认长期折损；观测产出仍包含出块运气的影响。" = "Ein dauerhafter Ertragsverlust ist nicht nachgewiesen; der beobachtete Ertrag enthält weiterhin Blockglück.";
+"以矿池记录的已接受 share 工作量为基准，手续费 %@ 与孤块损失各计一次。区间不包含算力上报和矿池计数误差。" = "Grundlage ist die vom Pool erfasste Share-Arbeit. Gebühr %@ und Verluste verwaister Blöcke werden je einmal berücksichtigt. Telemetrie- und Pool-Meldefehler sind nicht im Intervall enthalten.";
+"暂无可用的滚动估计；需要至少五个完整 UTC 日、100 个块及其工作量记录。" = "Keine aktuelle gleitende Schätzung. Erforderlich sind mindestens fünf vollständige UTC-Tage und 100 Blöcke mit Arbeitsdaten der Runden.";
+"HeroMiners 使用最近 30 天内的完整 UTC 日记录，至少需要五天和 100 个块，区间包含出块运气。其他 PPLNS／PROP 估算需要最近七天内至少五天观测、逐块 effort，且理论工作量足够产生至少 100 个块。" = "HeroMiners nutzt bis zu 30 vollständige UTC-Tage, mindestens fünf Tage und 100 Blöcke; das Intervall enthält Blockglück. Andere PPLNS/PROP-Schätzungen benötigen fünf beobachtete Tage der letzten sieben, Block-Effort und mindestens 100 erwartete Blöcke.";
+
+"Real Cost 以矿工实报工作量为基准，包含矿工费、工作量认可损失与结算扣减，不计入出块运气。" = "Real Cost basiert auf der vom Miner gemeldeten Arbeit und umfasst Miner-Gebühren, nicht anerkannte Arbeit und Abrechnungsabzüge, ohne Blockglück.";
+
+"完整成本尚未核实。同一时段的矿工工作量、认可工作量或最终分账证据尚不完整；未知不代表 0%。" = "Die Gesamtkosten sind ungeprüft. Zeitgleiche Nachweise zu Miner-Arbeit, anerkannter Arbeit oder endgültiger Verteilung fehlen. Unbekannt bedeutet nicht 0 %.";
+
+"以下产出观察包含出块运气，不用于 Real Cost。" = "Die folgende Blockausbeute enthält Glück und wird nicht als Real Cost verwendet.";
+
+"结算成本只衡量矿池认可工作量到结算收入这一段，不代表完整成本。" = "Abrechnungskosten betreffen nur anerkannte Arbeit bis zur Auszahlung, nicht die gesamten Kosten.";
+
+"已测得的结算成本：%@（矿池认可工作量口径）。" = "Gemessene Abrechnungskosten: %@ (Basis: anerkannte Arbeit).";
+
+/* Gate & Global Volume Share */
+"Gate API 密钥" = "Gate-API-Schlüssel";
+"未配置 Gate API 密钥" = "Gate-API-Schlüssel nicht eingerichtet";
+"Gate 请求地址无效" = "Ungültige Gate-Anfrage-URL";
+"Gate 可用余额不足" = "Nicht genug verfügbares Guthaben bei Gate";
+"Gate 暂停了这条链的提现" = "Gate hat Auszahlungen in diesem Netzwerk pausiert";
+"Gate 暂停了 %@ 提现" = "Gate hat %@-Auszahlungen pausiert";
+"Gate 暂时没有开放 %@ 的充值网络" = "Gate hat derzeit kein Einzahlungsnetzwerk für %@ geöffnet";
+"读取 Gate 充值信息失败：%@" = "Gate-Einzahlungsinfos konnten nicht geladen werden: %@";
+"Gate 还在生成充值地址，请稍后下拉刷新。" = "Gate erstellt die Einzahlungsadresse noch. Zieh gleich zum Aktualisieren nach unten.";
+"Gate 提示：%@" = "Hinweis von Gate: %@";
+"Gate 正在生成充值地址…" = "Gate erstellt die Einzahlungsadresse…";
+"Gate 没有返回 %@ 的提现网络" = "Gate hat kein Auszahlungsnetzwerk für %@ geliefert";
+"读取 Gate 提现信息失败：%@" = "Gate-Auszahlungsinfos konnten nicht geladen werden: %@";
+"Gate 地址簿有 %d 个地址（%@），但没有可用于 %@ 的。" = "Dein Gate-Adressbuch enthält %d Adressen (%@), aber keine für %@.";
+"提现已提交，Gate 处理后会广播上链" = "Auszahlung übermittelt. Gate sendet sie nach der Bearbeitung ins Netzwerk.";
+"暂时无法确认下单结果，请到 Gate 网站核对，或稍后点「重新核对」。" = "Das Ergebnis der Order lässt sich gerade nicht bestätigen – prüfe es auf der Gate-Website oder tippe später auf „Erneut prüfen“.";
+"暂时无法确认提现结果，请到 Gate 网站核对提现记录，或稍后点「重新核对」。" = "Das Ergebnis der Auszahlung lässt sich gerade nicht bestätigen – prüfe den Auszahlungsverlauf auf der Gate-Website oder tippe später auf „Erneut prüfen“.";
+"Gate 不认这个 API 密钥：Key 或 Secret 不对，或者密钥已停用。" = "Gate erkennt diesen API-Schlüssel nicht: Key oder Secret ist falsch, oder der Schlüssel ist deaktiviert.";
+"签名已过期：本机时间和 Gate 相差太多，请打开「自动设置时间」后重试。" = "Signatur abgelaufen: Die Uhr dieses Geräts weicht zu stark von der Gate-Zeit ab. Aktiviere „Automatisch einstellen“ für Datum & Uhrzeit und versuch es erneut.";
+"Gate 拒绝了这个请求（%@）" = "Gate hat die Anfrage abgelehnt (%@)";
+"App 直接连接 api.gateio.ws，中间不经过我们或任何第三方。Secret 只在你的设备上用来给请求签名，本身从不发送出去。" = "Die App verbindet sich direkt mit api.gateio.ws – nichts läuft über uns oder Dritte. Das Secret wird nur auf deinem Gerät zum Signieren der Anfragen verwendet und selbst nie irgendwohin gesendet.";
+"已保存，但验证未通过：本机时间和 Gate 相差太多，请打开「自动设置时间」。" = "Gespeichert, aber die Prüfung ist fehlgeschlagen: Die Uhr dieses Geräts weicht zu stark von der Gate-Zeit ab. Aktiviere „Automatisch einstellen“ für Datum & Uhrzeit.";
+"已保存，但请求被 Gate 的防火墙拦截（网络或代理），换个网络后在交易页确认。" = "Gespeichert, aber die Firewall von Gate hat die Anfrage blockiert (Netzwerk oder Proxy). Prüfe es im Tab „Handel“ aus einem anderen Netzwerk erneut.";
+"已保存，但暂时无法连接 Gate（网络问题）。请检查网络后在交易页确认。" = "Gespeichert, aber Gate ist gerade nicht erreichbar (Netzwerkproblem). Prüfe deine Verbindung und kontrolliere es im Tab „Handel“.";
+"打开 Gate API 页面" = "API-Seite von Gate öffnen";
+"下单金额最少 %@ USDT" = "Mindestbestellwert: %@ USDT";
+"Gate 拒绝了当前网络：这个 API 密钥绑定了 IP 白名单，而你现在的 IP 不在名单里。" = "Gate hat dieses Netzwerk abgelehnt: Dieser API-Schlüssel nutzt eine IP-Whitelist und deine aktuelle IP steht nicht darauf.";
+"请求被 Gate 的防火墙拦截，通常是当前网络或代理的出口被拦，换个网络再试。" = "Von der Gate-Firewall blockiert – meist ist das aktuelle Netzwerk oder der VPN-/Proxy-Ausgang gesperrt. Versuche ein anderes Netzwerk.";
+"开启安全验证" = "Sicherheitsüberprüfung aktivieren";
+"勾选权限" = "Berechtigungen auswählen";
+"绑定 IP 白名单" = "IP-Whitelist verknüpfen";
+"复制 Key 和 Secret" = "Key und Secret kopieren";
+"获取 Gate API 密钥" = "Gate-API-Schlüssel abrufen";
+"已保存，但当前网络的 IP 不在这把密钥的白名单里。到交易页查看当前 IP（可能是 IPv6 地址），把它加进 Gate 白名单。" = "Gespeichert, aber deine aktuelle IP steht nicht auf der Whitelist dieses Schlüssels. Prüfe die im Handel-Tab angezeigte IP (ggf. IPv6) und füge sie bei Gate hinzu.";
+"已保存，但验证未通过：API Key/Secret 可能不正确，或未开启现货/只读权限。请在 Gate 后台核对密钥权限与 IP 白名单。" = "Gespeichert, aber Überprüfung fehlgeschlagen: API Key/Secret ist evtl. falsch oder Spot-/Leseberechtigungen fehlen. Prüfe Berechtigungen und IP-Whitelist bei Gate.";
+"这是 IPv6 地址：白名单里如果只有 IPv4，可能需要把这个 IPv6 地址也加进 Gate 白名单。" = "Dies ist eine IPv6-Adresse: Wenn deine Whitelist nur IPv4 enthält, füge auch diese IPv6-Adresse zur Gate-Whitelist hinzu.";
+"把上面这个 IP 加进这把密钥的 IP 白名单即可。" = "Füge die obige IP zur IP-Whitelist dieses Schlüssels hinzu.";
+"在哪里设置 IP 白名单" = "Wo man die IP-Whitelist einstellt";
+"Gate 拒绝了这个 API 密钥的提现请求（%@）。请到 Gate「API 管理」为这把密钥开启「提现」权限，并绑定当前公网 IP 白名单。" = "Gate hat die Auszahlung für diesen API-Schlüssel abgelehnt (%@). Aktiviere in der Gate-API-Verwaltung die Auszahlungsberechtigung und verknüpfe deine aktuelle öffentliche IP.";
+"Gate 地址簿" = "Gate-Adressbuch";
+"Gate 地址簿「%@」" = "Gate-Adressbuch „%@“";
+"选填（交易所要求时填写）" = "Optional (falls vom Empfänger gefordert)";
+"Gate API 提现无需邮箱或谷歌验证码，但要求该 API 密钥已开启「提现」权限且绑定当前公网 IP 白名单；提交前需通过本机生物识别验证。" = "Gate-API-Auszahlungen benötigen keinen E-Mail- oder 2FA-Code, setzen aber einen API-Schlüssel mit Auszahlungsrecht und IP-Whitelist voraus; vor dem Senden ist eine Geräte-Authentifizierung nötig.";
+"全网交易量" = "Globales Volumen";
+"DEX %.1f%%" = "DEX %.1f%%";
+"24h 全网成交" = "24h Gesamtvolumen";
+"查看全部 (%d)" = "Alle anzeigen (%d)";
+"暂无市场数据" = "Keine Marktdaten verfügbar";
+"填写 API 密钥" = "API-Schlüssel eingeben";
+"登录 gate.com 或 Gate App，确保账户已开启谷歌验证（2FA）和资金密码。" = "Melde dich auf gate.com oder in der Gate-App an und stelle sicher, dass 2FA und das Fondspasswort aktiviert sind.";
+"创建 API v4 密钥" = "API-v4-Schlüssel erstellen";
+"选「绑定 IP」并填入当前网络的公网 IP（多个 IP 用英文逗号隔开，最多 20 个）：" = "Wähle „IP binden“ und gib deine aktuelle öffentliche IP ein (mehrere IPs mit Komma trennen, maximal 20):";
+"开启提现权限时 Gate 强制要求绑定 IP；不开提现也可暂不绑定（有效期 90 天）。手机网络可能在 IPv4 与 IPv6 之间切换，换网络后提示 IP 不在白名单时把新 IP 补进去即可。新建或修改白名单约 1–5 分钟生效。" = "Bei aktivierter Auszahlung erzwingt Gate eine IP-Bindung; ohne Auszahlung ist auch keine Bindung möglich (90 Tage gültig). Mobilfunk wechselt teils zwischen IPv4 und IPv6 – meldet der Handel-Tab später eine unbekannte IP, füge die dort angezeigte neue IP hinzu. Änderungen werden bei Gate nach ca. 1–5 Minuten wirksam.";
+"提交并确认风险提示，输入资金密码和二次验证码后，立即复制显示的 API Key 和 Secret（Secret 只显示这一次）。" = "Sende das Formular ab, bestätige den Risikohinweis, gib Fondspasswort und 2FA-Code ein und kopiere sofort API Key und Secret (das Secret wird nur einmal angezeigt).";
+"回到「设置 → 交易」，在 Gate 区域粘贴 API Key 和 Secret 并保存，App 会马上验证权限与白名单状态。" = "Kehre zu „Einstellungen → Handel“ zurück, füge API Key und Secret im Bereich Gate ein und speichere – die App prüft Berechtigungen und IP-Whitelist sofort.";
+"SafeTrade 与 Gate API 密钥" = "SafeTrade- & Gate-API-Schlüssel";
+"只存在你的钥匙串里（开着 iCloud 钥匙串时由 Apple 端到端加密同步）；交易请求由 App 签名后直接发往 safetrade.com 或 api.gateio.ws。" = "Nur in deinem Schlüsselbund gespeichert (bei aktiviertem iCloud-Schlüsselbund von Apple Ende-zu-Ende-verschlüsselt synchronisiert); Handelsanfragen werden auf dem Gerät signiert und direkt an safetrade.com oder api.gateio.ws gesendet.";
+"SafeTrade、Gate、CoinGecko、WhatToMine、MiningPoolStats、open.er-api.com 等公开数据源，请求不带地址。" = "Öffentliche Datenquellen wie SafeTrade, Gate, CoinGecko, WhatToMine, MiningPoolStats und open.er-api.com; Anfragen enthalten keine Adressen.";
+"回到「设置 → 交易」，粘贴 API Key 和 API Secret 并保存，App 会马上验证能否使用。" = "Geh zu „Einstellungen → Handel“, füge API Key und API Secret ein und speichere; die App prüft sofort, ob sie funktionieren.";
+"网页端右上角头像进入「API 管理」（手机 App 在左上角头像 →「安全中心 / 更多 → API 管理」），点「创建 API Key」，在「账户类型」弹窗里选「交易账户」，备注随便填（如 Pearl Hub），API Key 类型选「API v4 Key」。" = "Öffne im Web oben rechts über dein Profil „API-Verwaltung“ (in der App: Profil oben links → „Sicherheit / Mehr → API-Verwaltung“), tippe auf „API-Schlüssel erstellen“, wähle im Dialog „Kontotyp“ die Option „Handelskonto“, vergib eine Notiz (z. B. Pearl Hub) und wähle „API v4 Key“.";
+"「账户类型」弹窗有三种：选「交易账户」。不要选「模拟交易」（虚拟盘，无法读写实盘资产），也不要选「第三方应用」（仅限 Gate 预设的合作托管平台固定服务器 IP，Pearl Hub 由你的设备本机直连 Gate）。" = "Im Dialog „Kontotyp“ gibt es drei Optionen: Wähle „Handelskonto“. Wähle weder „Demo-Handel“ (nur Spielgeld) noch „Drittanbieter-Anwendung“ (nur für feste Server-IPs registrierter Partnerplattformen – Pearl Hub verbindet sich direkt von deinem Gerät).";
+"开启「现货 → 读写」（仅查余额可选「只读」）和「钱包 → 只读」（查充值地址、提币手续费与地址簿必需）；「提现 → 读写」按需开启，其余合约、杠杆等全部保持关闭。" = "Aktiviere „Spot → Lesen und Schreiben“ (bzw. „Nur Lesen“ nur für Guthaben) sowie „Wallet → Nur Lesen“ (erforderlich für Einzahlungsadressen, Auszahlungsgebühren und Adressbuch). „Auszahlung → Lesen und Schreiben“ nur bei Bedarf aktivieren; Futures, Margin und alle übrigen Optionen aus lassen.";
+"只开「现货 + 提现」而不勾「钱包 → 只读」会导致充值和提现页无法读取地址与手续费。开启 API 提币时，Gate 还要求目标收款地址已先在 Gate 后台加入提币白名单（或手动成功提过一次）。" = "Wenn nur Spot + Auszahlung ohne „Wallet → Nur Lesen“ aktiviert ist, können Ein- und Auszahlungsseiten keine Adressen und Gebühren laden. Für API-Auszahlungen muss die Zieladresse zudem vorab bei Gate auf der Auszahlungs-Whitelist stehen (oder einmal manuell genutzt worden sein).";
+"Gate 拒绝了读取充值地址的请求：请到 Gate「API 管理」为这把密钥开启「钱包 → 只读」权限。" = "Gate hat das Abrufen der Einzahlungsadresse abgelehnt: Bitte aktiviere in der Gate-„API-Verwaltung“ für diesen Schlüssel die Berechtigung „Wallet → Nur Lesen“.";
+"收款地址不在 Gate 提币白名单中。请先到 Gate 网站将该地址加入白名单并完成验证。" = "Die Empfängeradresse steht nicht auf deiner Gate-Auszahlungs-Whitelist. Bitte füge die Adresse zuerst auf der Gate-Website zur Whitelist hinzu und bestätige sie.";

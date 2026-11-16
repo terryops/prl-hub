@@ -30,16 +30,29 @@ struct SharedOverview: Decodable, Sendable {
             var realFeePercent: Double? = nil
             var realFeeEstimated: Bool? = nil
             var realFeePeriod: Period? = nil
+            var realFeeEstimate: RollingPoolCost? = nil
+            var hasRollingEstimate = false
             /// A second coin paid on the same work (F2Pool's NOCK). Lossy like the Real Cost: a
             /// malformed one is dropped, never the payout.
             var mergeBonus: PoolMergeBonus? = nil
+            /// Founding members' fee for this payout (Peryn's Founding Miners). Lossy like the bonus.
+            var founding: PoolFounding? = nil
+            /// Real Cost measured per fee tier (Peryn's PPS+): which tier `realFeePercent` is, and both. Lossy.
+            var feeTiers: PoolFeeTiers? = nil
 
             private enum CodingKeys: String, CodingKey {
-                case scheme, fee, grossPerPH, estimated, solo, realFeePercent, realFeeEstimated, realFeePeriod, mergeBonus
+                case scheme, fee, grossPerPH, estimated, solo, realFeePercent, realFeeEstimated, realFeePeriod, mergeBonus, founding,
+                     realFeeTier, realFeeTiers, realFeeEstimate
+            }
+            private struct FeeTiersWire: Decodable {
+                let founding, standard: Double?
             }
             private struct MergeBonusWire: Decodable {
                 let coin: String?
                 let minPercent, maxPercent: Double?
+            }
+            private struct FoundingWire: Decodable {
+                let fee, afterFP8Months: Double?
             }
 
             init(scheme: String?, fee: Double?, grossPerPH: Double?, estimated: Bool, solo: Bool,
@@ -62,8 +75,15 @@ struct SharedOverview: Decodable, Sendable {
                 realFeePercent = (try? c.decodeIfPresent(Double.self, forKey: .realFeePercent)) ?? nil
                 realFeeEstimated = (try? c.decodeIfPresent(Bool.self, forKey: .realFeeEstimated)) ?? nil
                 realFeePeriod = (try? c.decodeIfPresent(Period.self, forKey: .realFeePeriod)) ?? nil
+                hasRollingEstimate = c.contains(.realFeeEstimate)
+                realFeeEstimate = (try? c.decodeIfPresent(RollingPoolCost.self, forKey: .realFeeEstimate)) ?? nil
                 let bonus = (try? c.decodeIfPresent(MergeBonusWire.self, forKey: .mergeBonus)) ?? nil
                 mergeBonus = bonus.flatMap { PoolMergeBonus(coin: $0.coin, minPercent: $0.minPercent, maxPercent: $0.maxPercent) }
+                let founding = (try? c.decodeIfPresent(FoundingWire.self, forKey: .founding)) ?? nil
+                self.founding = founding.flatMap { PoolFounding(fee: $0.fee, afterFP8Months: $0.afterFP8Months) }
+                let tier = (try? c.decodeIfPresent(String.self, forKey: .realFeeTier)) ?? nil
+                let tiers = (try? c.decodeIfPresent(FeeTiersWire.self, forKey: .realFeeTiers)) ?? nil
+                feeTiers = tiers.flatMap { PoolFeeTiers(shown: tier, founding: $0.founding, standard: $0.standard) }
             }
         }
         let id, name, url: String
@@ -82,6 +102,23 @@ struct SharedOverview: Decodable, Sendable {
         var realFeeMeasurement: PPSFeeMeasurement? = nil
         /// Block luck the service measured from five-minute samples, by window: "24h", "7d", "14d".
         let luck: [String: Luck]?
+        /// The pool's blocks that lost the race over the last week.
+        var orphans: Orphans? = nil
+    }
+    /// A pool's orphans over the last week: `orphans` of its `blocks` (those included) never made
+    /// the chain. Lossy like Luck: a window the app can't read is dropped, never the snapshot.
+    struct Orphans: Decodable, Sendable {
+        let blocks, orphans: Int?
+
+        private enum CodingKeys: String, CodingKey { case blocks, orphans }
+
+        init(blocks: Int?, orphans: Int?) { self.blocks = blocks; self.orphans = orphans }
+
+        init(from decoder: Decoder) throws {
+            let c = try? decoder.container(keyedBy: CodingKeys.self)
+            blocks = try? c?.decodeIfPresent(Int.self, forKey: .blocks)
+            orphans = try? c?.decodeIfPresent(Int.self, forKey: .orphans)
+        }
     }
     /// One window of block luck: the pool's blocks ÷ the blocks its reported work should have
     /// found. Lossy on purpose — a window the app can't read is dropped, never the snapshot.
@@ -123,6 +160,38 @@ struct SharedOverview: Decodable, Sendable {
         ok && !stale && ts > 0 && ts <= date.timeIntervalSince1970 + 60 &&
             date.timeIntervalSince1970 - ts <= 900 &&
             (!rows.isEmpty || network?.isUsable(at: date) == true)
+    }
+}
+
+/// Output against the pool's accepted share work. The count interval includes
+/// block luck and excludes errors in the pool's reporting or miner telemetry.
+struct RollingPoolCost: Decodable, Sendable, Equatable {
+    let sourceVersion: Int
+    let id, pool, theoryBasis, confidenceMethod: String
+    let start, end, measuredAt, targetDays: Double
+    let poolBlocks, blocksSample, orphans: Int
+    let work, feePercent, foundYield, ratio, confidence: Double
+    let foundYield95, cost95: [Double]
+    var days: Int { Int((end - start) / 86400) }
+    var lossUnconfirmed: Bool { foundYield95.count == 2 && foundYield95[1] >= 1 }
+
+    func validated(percent: Double?, period: SharedOverview.Row.Payout.Period?) -> RollingPoolCost? {
+        guard let percent, percent.isFinite, let period,
+              id == "https://pearl.herominers.com/", pool == "HeroMiners",
+              theoryBasis == "accepted_share_rounds", sourceVersion == 2, confidenceMethod == "poisson_count_only", confidence == 0.95,
+              start.isFinite, end.isFinite, start > 0, end - start >= 5 * 86400, end - start <= 30 * 86400,
+              start.truncatingRemainder(dividingBy: 86400) == 0, end.truncatingRemainder(dividingBy: 86400) == 0,
+              targetDays == 30, measuredAt.isFinite, measuredAt >= end, period.start == start, period.end == end,
+              poolBlocks >= 100, poolBlocks <= 3000, orphans >= 0, orphans <= poolBlocks, blocksSample == poolBlocks - orphans,
+              work.isFinite, work > 0, feePercent.isFinite, (0...100).contains(feePercent),
+              foundYield.isFinite, abs(foundYield - Double(poolBlocks) / work) < 1e-9,
+              ratio.isFinite, (0...2).contains(ratio),
+              abs(ratio - (1 - feePercent / 100) * Double(blocksSample) / work) < 1e-9,
+              abs(percent - (1 - ratio) * 100) < 1e-6,
+              foundYield95.count == 2, foundYield95.allSatisfy(\.isFinite), foundYield95[0] >= 0,
+              foundYield95[0] <= foundYield, foundYield95[1] >= foundYield,
+              cost95.count == 2, cost95.allSatisfy(\.isFinite), cost95[0] <= percent, cost95[1] >= percent else { return nil }
+        return self
     }
 }
 
@@ -201,7 +270,7 @@ actor SharedPublicData {
     }
 
     private static func fetch() async throws -> SharedOverview {
-        var request = URLRequest(url: URL(string: "https://pearlhub.net/v1/pools")!)
+        var request = URLRequest(url: URL(string: "https://pearlhub.net/v1/pools?real_cost=rolling")!)
         request.timeoutInterval = 12
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")

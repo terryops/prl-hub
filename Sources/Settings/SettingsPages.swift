@@ -152,11 +152,33 @@ struct NetworkSettingsView: View {
 }
 
 struct TradeSettingsView: View {
+    var preferred: TradeExchange = TradeExchange.saved
+
     var body: some View {
-        SettingsPage(Loc("交易（SafeTrade）")) {
-            SafeTradeSettingsSection()
-                .pearlListRowSurface()
+        SettingsPage(Loc("交易")) {
+            if preferred == .gate {
+                GateSettingsSection()
+                    .pearlListRowSurface()
+                SafeTradeSettingsSection()
+                    .pearlListRowSurface()
+            } else {
+                SafeTradeSettingsSection()
+                    .pearlListRowSurface()
+                GateSettingsSection()
+                    .pearlListRowSurface()
+            }
         }
+        #if os(iOS)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button(Loc("完成")) {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
+                .fontWeight(.semibold)
+            }
+        }
+        #endif
     }
 }
 

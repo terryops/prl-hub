@@ -8,7 +8,7 @@ import Foundation
 // SAME parsing code — they used to parse every pool twice, and drifted.
 
 /// A user-added per-miner watch = (pool, address). Pools with a public per-miner-by-address
-/// API: PearlHash, AlphaPool, Lucky Pool, HeroMiners, Pearl Fortune, Kryptex, Jetski. F2Pool is the
+/// API: PearlHash, AlphaPool, Lucky Pool, HeroMiners, Pearl Fortune, Kryptex, Jetski, Peryn. F2Pool is the
 /// exception — it has no by-address API, so its watches are keyed by the account's read-only
 /// page URL instead. See F2PoolRef.
 enum PoolKind: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -20,6 +20,8 @@ enum PoolKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case kryptex = "Kryptex"
     /// Jetski Pool's Pearl pool (pearl.jetskipool.ai; the site itself is titled PEARLSKI).
     case jetski = "Jetski"
+    /// Peryn (peryn.ai).
+    case peryn = "Peryn"
     case f2pool = "F2Pool"
     var id: String { rawValue }
     var label: String { rawValue }
@@ -38,6 +40,7 @@ enum PoolKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .pearlHash:    return PearlHashSource.self
         case .kryptex:      return KryptexSource.self
         case .jetski:       return JetskiSource.self
+        case .peryn:        return PerynSource.self
         case .f2pool:       return F2PoolSource.self
         }
     }
@@ -49,8 +52,9 @@ enum PoolKind: String, Codable, CaseIterable, Identifiable, Sendable {
 /// No pool publishes all of them: the four by-address pools report a live rate but no
 /// 15-minute one, F2Pool is the mirror image — its freshest figure IS a 15-minute average
 /// and it has no instantaneous rate at all — Kryptex publishes its own trio (30m / 3h /
-/// 24h), and Jetski stops at 6h. So a window is only ever OFFERED for a pool that actually
-/// publishes it (`PoolMinerStats.windows`); nothing is faked into a slot it doesn't fit.
+/// 24h), Jetski stops at 6h, and Peryn publishes only 1h and 24h. So a window is only ever
+/// OFFERED for a pool that actually publishes it (`PoolMinerStats.windows`); nothing is faked
+/// into a slot it doesn't fit.
 enum SpeedWindow: String, CaseIterable, Sendable {
     case live, m15, m30, hour, h3, h6, day
 
@@ -71,18 +75,25 @@ struct WatchWorker: Identifiable, Sendable {
     let name: String
     let online: Bool
     /// Raw H/s per window. A window this pool doesn't publish PER RIG is absent (not 0) —
-    /// an absent window renders "—", while a real 0 means the rig is idle. Pearl Fortune,
-    /// for instance, publishes only a live rate per rig even though the ACCOUNT has 1h/24h.
+    /// an absent window renders "—", while a real 0 means the rig is idle. PearlHash,
+    /// for instance, publishes only a live rate per rig even though the account has a 1h.
     var rates: [SpeedWindow: Double] = [:]
     var id: String { name }
 
     func rate(_ w: SpeedWindow) -> Double { rates[w] ?? 0 }
 
     /// Freshest published rate — "what this rig is doing now", whatever the pool calls it.
-    /// (F2Pool's freshest is its 15-minute average; Kryptex's is a 30-minute one.) Drives the
-    /// live totals elsewhere — including the widget, which would otherwise fall all the way
-    /// back to a 24h average for a pool that publishes no instantaneous rate.
-    var instant: Double { rate(.live).nonZeroOr(rate(.m15)).nonZeroOr(rate(.m30)) }
+    /// (F2Pool's freshest is its 15-minute average; Kryptex's is a 30-minute one; Peryn's, which
+    /// publishes nothing under an hour, its 1-hour one.) Drives the live totals elsewhere —
+    /// including the widget, which would otherwise fall all the way back to a 24h average for a
+    /// pool that publishes no instantaneous rate.
+    var instant: Double {
+        let fresh = rate(.live).nonZeroOr(rate(.m15)).nonZeroOr(rate(.m30))
+        // The hour only stands in where the rig has no sub-hour figure at all: a pool that has
+        // one and reads 0 there (the rig just stopped) must not show its hourly average instead.
+        let subHour: [SpeedWindow] = [.live, .m15, .m30]
+        return fresh > 0 || subHour.contains { rates[$0] != nil } ? fresh : rate(.hour)
+    }
     /// 24h average where published, else the freshest figure. Used for the device sync.
     var hashrate: Double { rate(.day).nonZeroOr(instant) }
 }

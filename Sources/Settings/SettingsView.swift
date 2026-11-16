@@ -313,7 +313,7 @@ private struct GatewaySettingsSection: View {
                 NavigationLink {
                     TradeSettingsView()
                 } label: {
-                    SettingsMenuLabel(Loc("交易（SafeTrade）"), systemImage: "arrow.left.arrow.right")
+                    SettingsMenuLabel(Loc("交易"), systemImage: "arrow.left.arrow.right")
                 }
                 .accessibilityIdentifier("settings-trade")
             }

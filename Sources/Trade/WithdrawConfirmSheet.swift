@@ -11,6 +11,7 @@ struct WithdrawConfirmSheet: View {
     let received: String
     let unit: String
     let network: String?
+    var memo: String? = nil
     let address: String
     let addressName: String?
     let onConfirm: () -> Void
@@ -33,6 +34,10 @@ struct WithdrawConfirmSheet: View {
                     PearlReceiptSection(Loc("收款信息")) {
                         if let network {
                             PearlReceiptRow(Loc("网络"), network)
+                            Divider()
+                        }
+                        if let memo, !memo.isEmpty {
+                            PearlReceiptRow("Memo", memo)
                             Divider()
                         }
                         PearlReceiptAddress(label: Loc("收款地址"), address: address, name: addressName)

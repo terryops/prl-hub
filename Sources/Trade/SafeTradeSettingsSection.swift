@@ -60,15 +60,6 @@ struct SafeTradeSettingsSection: View {
             SafeTradeSecrets.invalidateCache()
             masked = Self.readMasked()
         }
-        #if os(iOS)
-        .toolbar {
-            // 文本/密钥输入键盘上方的「完成」按钮，点一下即可收起键盘。
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button(Loc("完成")) { focusedField = nil }.fontWeight(.semibold)
-            }
-        }
-        #endif
     }
 
     @ViewBuilder private var inputs: some View {
@@ -125,6 +116,7 @@ struct SafeTradeSettingsSection: View {
             flash(Loc("无法写入钥匙串（Keychain）"), warning: true)
             return
         }
+        TradeExchange.save(.safetrade)
         switch check {
         case .ok:
             flash(Loc("已保存并通过验证（会经 iCloud 同步到其他设备）"))

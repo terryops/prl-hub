@@ -8,7 +8,7 @@ A self-custody **Pearl ($PRL)** wallet and mining monitor for iPhone, iPad and M
 
 - **Self-custody wallet**: create or restore wallets (12 or 24 words), keep several on one device and switch between them, receive, and send. Read-only wallets watch an address without a recovery phrase. The recovery phrase is encrypted in the Keychain, and viewing it or confirming a transfer requires Face ID / Touch ID. Transactions are signed on the device.
 - **NOCK wallet** (off until switched on in Settings → Wallet & Security): the same recovery phrase also opens a Nockchain (NOCK) account, at the same address the official `nockchain-wallet` and Iris derive from it: balance (with block rewards still inside their 100-block lock shown apart), history, receive and send.
-- **Mining monitor**: network hashrate and difficulty, a pools overview, and per-address monitors for AlphaPool, F2Pool, HeroMiners, Kryptex, Lucky Pool, Pearl Fortune, PearlHash and Jetski.
+- **Mining monitor**: network hashrate and difficulty, a pools overview, and per-address monitors for AlphaPool, F2Pool, HeroMiners, Kryptex, Lucky Pool, Pearl Fortune, PearlHash, Jetski and Peryn.
 - **Widgets**: an iOS home-screen widget and a macOS desktop widget.
 - **Price alerts (Pearl Hub Pro)**: push notifications when PRL reaches a target price or moves sharply within 5 minutes, 1 hour or 24 hours, even while the app is closed. Unlocked by a one-time in-app purchase.
 - **Payment alerts (Pearl Hub Pro)**: a push when PRL arrives at an address you choose.

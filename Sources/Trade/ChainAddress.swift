@@ -40,6 +40,28 @@ enum ChainAddress {
         return b.count == 32
     }
 
+    private static let nonEVMChainKeys: Set<String> = [
+        "near", "ton", "gram", "dotsm", "ksmsm", "polkadot", "apt", "aptos", "sui", "xtz", "tezos", "algo", "algorand", "eos", "xlm", "xrp", "kava", "btc"
+    ]
+
+    /// Chains on Gate / multi-chain exchanges that do not use 0x-prefixed EVM addresses.
+    static func isNonEVMChain(_ chainKey: String) -> Bool {
+        let k = chainKey.lowercased()
+        return nonEVMChainKeys.contains(k)
+    }
+
+    /// Address validation for non-EVM chains (NEAR named/implicit accounts, TON/Polkadot/Aptos…).
+    static func isValidNonEVM(_ a: String, chainKey: String) -> Bool {
+        let k = chainKey.lowercased()
+        if k == "near" {
+            if a.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil { return true }
+            return (2...64).contains(a.count)
+                && a.range(of: "^(([a-z0-9]+[-_])*[a-z0-9]+\\.)+([a-z0-9]+[-_])*[a-z0-9]+$", options: .regularExpression) != nil
+        }
+        return (16...128).contains(a.count)
+            && a.unicodeScalars.allSatisfy { $0.value >= 0x21 && $0.value <= 0x7e }
+    }
+
     private static let alphabet = Array("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
     private static let alphabetIndex: [Character: Int] = Dictionary(
         uniqueKeysWithValues: alphabet.enumerated().map { ($1, $0) })

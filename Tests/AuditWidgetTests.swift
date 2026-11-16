@@ -211,6 +211,7 @@ struct AuditWidgetTests {
         #expect(try LuckyPoolSource.parse(empty, now: 0) == nil)
         #expect(try HeroMinersSource.parse(empty, now: 0) == nil)
         #expect(try JetskiSource.parse(empty, now: 0) == nil)
+        #expect(try PerynSource.parse(empty) == nil)
         #expect(try PearlHashSource.parse(empty, poolHashrate: 0) == nil)
         #expect(KryptexSource.stats(KryptexMiner(workers: [], balance: nil, payouts: nil)) == nil)
         #expect(PearlFortuneSource.live(try PoolHTTP.decode(PFEnvelope<PFConnections>.self, from: empty).data) == nil)

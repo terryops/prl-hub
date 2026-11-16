@@ -1142,6 +1142,12 @@
 "这是按各矿池标注的样本时间段，计算的实际结算收益相对理论收益的折损率。" = "Ini adalah persentase kekurangan pendapatan yang telah diselesaikan dibanding pendapatan teoretis selama periode sampel yang ditampilkan untuk tiap pool.";
 "这是 %@ 期间，实际结算收益相对理论收益的折损率。" = "Ini adalah persentase kekurangan pendapatan yang telah diselesaikan dibanding pendapatan teoretis selama %@.";
 "这是 %@ 期间按矿池出块和公示池费估算的折损率，已扣除出块运气，剩下的是池费和矿池损耗的算力。" = "Ini adalah persentase kekurangan pendapatan yang diestimasi dari blok yang ditemukan pool dan biaya resminya selama %@, tanpa keberuntungan menemukan blok: yang tersisa hanya biaya dan kerja yang hilang di pool.";
+"孤块" = "Blok yatim";
+"%1$@/%2$@ 块" = "%1$@/%2$@ blok";
+"其他" = "Lainnya";
+"%@ · 已扣除出块运气" = "%@ · tanpa keberuntungan menemukan blok";
+"孤块：近 7 天该池找到、但没被链收录的块，没有奖励。" = "Blok yatim: blok yang ditemukan pool dalam 7 hari terakhir tetapi tidak disimpan rantai; tidak dibayar.";
+"其他：矿池损耗的算力和统计误差。" = "Lainnya: kerja yang hilang di pool dan galat pengukuran.";
 
 "左右滑动查看完整对比" = "Geser untuk membandingkan semua kolom";
 "提醒频率" = "Frekuensi peringatan";
@@ -1360,3 +1366,102 @@
 "其他地址…" = "Alamat lain…";
 "用同一套助记词收发 NOCK（Nockchain）。打开后钱包页底部会出现 NOCK 钱包。" = "Kirim dan terima NOCK (Nockchain) dengan frasa pemulihan yang sama. Setelah diaktifkan, Dompet NOCK muncul di bagian bawah halaman dompet.";
 "到账提醒：地址收到 PRL 就通知你" = "Peringatan dana masuk: langsung tahu saat PRL masuk ke alamat Anda";
+
+/* Pools: Peryn's Founding Miner fee, in the ⓘ beside the fee */
+"创始矿工费率" = "Biaya anggota pendiri";
+"创始矿工 %@。报名到 Pearl FP8 升级截止。" = "Anggota pendiri: %@. Pendaftaran ditutup saat peningkatan FP8 Pearl.";
+"创始矿工 %@，到 Pearl FP8 升级后 %@ 个月。报名到 Pearl FP8 升级截止。" = "Anggota pendiri: %@ hingga %@ bulan setelah peningkatan FP8 Pearl. Pendaftaran ditutup saat peningkatan itu.";
+
+/* Pools: Peryn's Real Cost per fee tier, in the ⓘ beside it */
+"创始矿工地址" = "Alamat anggota pendiri";
+"普通地址" = "Alamat lain";
+
+/* Pools: why a PPLNS / PROP Real Cost is "—" (too few blocks), in the ⓘ beside it */
+"%1$@ 近 7 天的算力只够出约 %2$@ 块，块太少，扣不准出块运气。满 %3$@ 块才显示真实费用。" = "Hashrate %1$@ dalam 7 hari terakhir hanya setara sekitar %2$@ blok, terlalu sedikit untuk menghilangkan keberuntungan menemukan blok. Biaya nyata ditampilkan mulai %3$@ blok.";
+
+/* Rolling share-work output estimates. */
+"%@ 天统计估计" = "Perkiraan statistik %@ hari";
+"发现 %1$@ 个块，其中 %2$@ 个孤块；已接受 share 工作量对应约 %3$@ 个理论块。" = "%1$@ blok ditemukan, termasuk %2$@ blok yatim. Kerja share yang diterima setara dengan %3$@ blok teoretis.";
+"发现块效率：%1$@；95%% 计数误差参考区间：%2$@～%3$@。" = "Efisiensi penemuan blok: %1$@. Interval 95%% hanya untuk keacakan jumlah: %2$@–%3$@.";
+"成本的 95%% 计数误差参考区间：%1$@～%2$@。" = "Biaya: interval 95%% hanya untuk keacakan jumlah %1$@–%2$@.";
+"尚未确认长期折损；观测产出仍包含出块运气的影响。" = "Kehilangan hasil jangka panjang belum terbukti; hasil pengamatan masih dipengaruhi keberuntungan blok.";
+"以矿池记录的已接受 share 工作量为基准，手续费 %@ 与孤块损失各计一次。区间不包含算力上报和矿池计数误差。" = "Berdasarkan kerja share yang dicatat pool. Biaya %@ dan kerugian blok yatim dihitung masing-masing sekali. Interval tidak mencakup kesalahan telemetri atau laporan pool.";
+"暂无可用的滚动估计；需要至少五个完整 UTC 日、100 个块及其工作量记录。" = "Belum ada perkiraan bergulir saat ini. Diperlukan minimal lima hari UTC penuh dan 100 blok beserta catatan kerja putaran.";
+"HeroMiners 使用最近 30 天内的完整 UTC 日记录，至少需要五天和 100 个块，区间包含出块运气。其他 PPLNS／PROP 估算需要最近七天内至少五天观测、逐块 effort，且理论工作量足够产生至少 100 个块。" = "HeroMiners memakai hingga 30 hari UTC penuh, minimal lima hari dan 100 blok; interval mencakup keberuntungan blok. Perkiraan PPLNS/PROP lain memerlukan lima hari pengamatan dari tujuh hari terakhir, effort blok, dan minimal 100 blok yang diharapkan.";
+
+"Real Cost 以矿工实报工作量为基准，包含矿工费、工作量认可损失与结算扣减，不计入出块运气。" = "Real Cost memakai kerja yang dilaporkan miner, termasuk biaya miner, kerja yang tidak diakui dan potongan penyelesaian, tanpa keberuntungan blok.";
+
+"完整成本尚未核实。同一时段的矿工工作量、认可工作量或最终分账证据尚不完整；未知不代表 0%。" = "Biaya penuh belum terverifikasi. Bukti kerja miner, kerja yang diakui atau pembagian akhir pada periode yang sama belum lengkap. Tidak diketahui bukan berarti 0%.";
+
+"以下产出观察包含出块运气，不用于 Real Cost。" = "Hasil blok berikut mencakup keberuntungan dan tidak digunakan sebagai Real Cost.";
+
+"结算成本只衡量矿池认可工作量到结算收入这一段，不代表完整成本。" = "Biaya penyelesaian hanya mencakup kerja yang diakui hingga pembayaran, bukan biaya penuh.";
+
+"已测得的结算成本：%@（矿池认可工作量口径）。" = "Biaya penyelesaian terukur: %@ (berdasarkan kerja yang diakui pool).";
+
+/* Gate & Global Volume Share */
+"Gate API 密钥" = "Kunci API Gate";
+"未配置 Gate API 密钥" = "Kunci API Gate belum dikonfigurasi";
+"Gate 请求地址无效" = "URL permintaan Gate tidak valid";
+"Gate 可用余额不足" = "Saldo tersedia di Gate tidak cukup";
+"Gate 暂停了这条链的提现" = "Gate menjeda penarikan di jaringan ini";
+"Gate 暂停了 %@ 提现" = "Gate menjeda penarikan %@";
+"Gate 暂时没有开放 %@ 的充值网络" = "Gate belum membuka jaringan deposit %@ saat ini";
+"读取 Gate 充值信息失败：%@" = "Gagal memuat info deposit Gate: %@";
+"Gate 还在生成充值地址，请稍后下拉刷新。" = "Gate masih membuat alamat deposit. Tarik ke bawah untuk menyegarkan sebentar lagi.";
+"Gate 提示：%@" = "Pemberitahuan Gate: %@";
+"Gate 正在生成充值地址…" = "Gate sedang membuat alamat deposit…";
+"Gate 没有返回 %@ 的提现网络" = "Gate tidak mengembalikan jaringan penarikan untuk %@";
+"读取 Gate 提现信息失败：%@" = "Gagal memuat info penarikan Gate: %@";
+"Gate 地址簿有 %d 个地址（%@），但没有可用于 %@ 的。" = "Buku alamat Gate berisi %d alamat (%@), tetapi tidak ada yang bisa dipakai untuk %@.";
+"提现已提交，Gate 处理后会广播上链" = "Penarikan dikirim. Gate akan menyiarkannya setelah diproses.";
+"暂时无法确认下单结果，请到 Gate 网站核对，或稍后点「重新核对」。" = "Belum bisa memastikan hasil order — cek di situs Gate, atau nanti ketuk Cek lagi.";
+"暂时无法确认提现结果，请到 Gate 网站核对提现记录，或稍后点「重新核对」。" = "Belum bisa memastikan hasil penarikan — cek riwayat penarikan di situs Gate, atau nanti ketuk Cek lagi.";
+"Gate 不认这个 API 密钥：Key 或 Secret 不对，或者密钥已停用。" = "Gate tidak mengenali kunci API ini: kunci atau secret salah, atau kunci dinonaktifkan.";
+"签名已过期：本机时间和 Gate 相差太多，请打开「自动设置时间」后重试。" = "Tanda tangan kedaluwarsa: jam perangkat terlalu jauh dari Gate. Aktifkan pengaturan waktu otomatis, lalu coba lagi.";
+"Gate 拒绝了这个请求（%@）" = "Gate menolak permintaan ini (%@)";
+"App 直接连接 api.gateio.ws，中间不经过我们或任何第三方。Secret 只在你的设备上用来给请求签名，本身从不发送出去。" = "Aplikasi terhubung langsung ke api.gateio.ws — tidak melewati kami atau pihak ketiga mana pun. Secret hanya dipakai di perangkat Anda untuk menandatangani permintaan dan tidak pernah dikirim ke mana pun.";
+"已保存，但验证未通过：本机时间和 Gate 相差太多，请打开「自动设置时间」。" = "Tersimpan, tetapi pengecekan gagal: jam perangkat terlalu jauh dari Gate. Aktifkan pengaturan waktu otomatis.";
+"已保存，但请求被 Gate 的防火墙拦截（网络或代理），换个网络后在交易页确认。" = "Tersimpan, tetapi firewall Gate memblokir permintaan (jaringan atau proxy). Cek lagi di tab Trading dari jaringan lain.";
+"已保存，但暂时无法连接 Gate（网络问题）。请检查网络后在交易页确认。" = "Tersimpan, tetapi belum bisa menjangkau Gate sekarang (masalah jaringan). Periksa koneksi Anda lalu konfirmasi dari tab Trading.";
+"打开 Gate API 页面" = "Buka halaman API Gate";
+"下单金额最少 %@ USDT" = "Total order minimum %@ USDT";
+"Gate 拒绝了当前网络：这个 API 密钥绑定了 IP 白名单，而你现在的 IP 不在名单里。" = "Gate menolak jaringan ini: kunci API ini memiliki daftar putih IP, dan IP Anda saat ini tidak ada di dalamnya.";
+"请求被 Gate 的防火墙拦截，通常是当前网络或代理的出口被拦，换个网络再试。" = "Diblokir oleh firewall Gate — biasanya jaringan atau IP keluar VPN/proksi saat ini diblokir. Coba jaringan lain.";
+"开启安全验证" = "Aktifkan Verifikasi Keamanan";
+"勾选权限" = "Pilih Izin";
+"绑定 IP 白名单" = "Ikat Daftar Putih IP";
+"复制 Key 和 Secret" = "Salin Key dan Secret";
+"获取 Gate API 密钥" = "Dapatkan Kunci API Gate";
+"已保存，但当前网络的 IP 不在这把密钥的白名单里。到交易页查看当前 IP（可能是 IPv6 地址），把它加进 Gate 白名单。" = "Tersimpan, tetapi IP saat ini belum ada di daftar putih kunci ini. Lihat IP di tab Perdagangan (mungkin IPv6) lalu tambahkan ke daftar putih Gate.";
+"已保存，但验证未通过：API Key/Secret 可能不正确，或未开启现货/只读权限。请在 Gate 后台核对密钥权限与 IP 白名单。" = "Tersimpan, tetapi verifikasi gagal: API Key/Secret mungkin salah atau izin Spot/Baca belum aktif. Periksa izin kunci dan daftar putih IP di Gate.";
+"这是 IPv6 地址：白名单里如果只有 IPv4，可能需要把这个 IPv6 地址也加进 Gate 白名单。" = "Ini adalah alamat IPv6: jika daftar putih Anda hanya berisi IPv4, tambahkan juga alamat IPv6 ini ke daftar putih Gate.";
+"把上面这个 IP 加进这把密钥的 IP 白名单即可。" = "Tambahkan IP di atas ke daftar putih IP kunci ini.";
+"在哪里设置 IP 白名单" = "Tempat mengatur daftar putih IP";
+"Gate 拒绝了这个 API 密钥的提现请求（%@）。请到 Gate「API 管理」为这把密钥开启「提现」权限，并绑定当前公网 IP 白名单。" = "Gate menolak penarikan untuk kunci API ini (%@). Aktifkan izin Penarikan dan ikat IP publik saat ini di Manajemen API Gate.";
+"Gate 地址簿" = "Buku Alamat Gate";
+"Gate 地址簿「%@」" = "Buku Alamat Gate \"%@\"";
+"选填（交易所要求时填写）" = "Opsional (isi jika diminta penerima)";
+"Gate API 提现无需邮箱或谷歌验证码，但要求该 API 密钥已开启「提现」权限且绑定当前公网 IP 白名单；提交前需通过本机生物识别验证。" = "Penarikan API Gate tidak memerlukan kode email atau 2FA, tetapi wajib mengaktifkan izin Penarikan dan daftar putih IP pada kunci API, serta verifikasi biometrik perangkat.";
+"全网交易量" = "Volume Global";
+"DEX %.1f%%" = "DEX %.1f%%";
+"24h 全网成交" = "Vol Global 24j";
+"查看全部 (%d)" = "Lihat Semua (%d)";
+"暂无市场数据" = "Data pasar belum tersedia";
+"填写 API 密钥" = "Masukkan kunci API";
+"登录 gate.com 或 Gate App，确保账户已开启谷歌验证（2FA）和资金密码。" = "Masuk ke gate.com atau aplikasi Gate, lalu pastikan 2FA dan kata sandi dana sudah aktif.";
+"创建 API v4 密钥" = "Buat kunci API v4";
+"选「绑定 IP」并填入当前网络的公网 IP（多个 IP 用英文逗号隔开，最多 20 个）：" = "Pilih «Ikat IP» lalu masukkan IP publik jaringan saat ini (pisahkan beberapa IP dengan koma, maks. 20):";
+"开启提现权限时 Gate 强制要求绑定 IP；不开提现也可暂不绑定（有效期 90 天）。手机网络可能在 IPv4 与 IPv6 之间切换，换网络后提示 IP 不在白名单时把新 IP 补进去即可。新建或修改白名单约 1–5 分钟生效。" = "Gate mewajibkan pengikatan IP saat izin penarikan aktif; tanpa penarikan boleh tidak diikat (berlaku 90 hari). Jaringan seluler dapat berpindah antara IPv4 dan IPv6—jika tab Dagang menampilkan peringatan IP, tambahkan IP baru yang muncul. Kunci baru atau perubahan whitelist mulai berlaku dalam 1–5 menit.";
+"提交并确认风险提示，输入资金密码和二次验证码后，立即复制显示的 API Key 和 Secret（Secret 只显示这一次）。" = "Kirim dan setujui peringatan risiko, masukkan kata sandi dana serta kode 2FA, lalu segera salin API Key dan Secret yang tampil (Secret hanya ditampilkan satu kali).";
+"回到「设置 → 交易」，在 Gate 区域粘贴 API Key 和 Secret 并保存，App 会马上验证权限与白名单状态。" = "Kembali ke «Pengaturan → Dagang», tempel API Key dan Secret di bagian Gate lalu simpan—aplikasi akan langsung memverifikasi izin dan status whitelist IP.";
+"SafeTrade 与 Gate API 密钥" = "Kunci API SafeTrade & Gate";
+"只存在你的钥匙串里（开着 iCloud 钥匙串时由 Apple 端到端加密同步）；交易请求由 App 签名后直接发往 safetrade.com 或 api.gateio.ws。" = "Hanya disimpan di Rantai Kunci Anda (disinkronkan terenkripsi ujung-ke-ujung oleh Apple saat Rantai Kunci iCloud aktif); permintaan perdagangan ditandatangani di perangkat dan dikirim langsung ke safetrade.com atau api.gateio.ws.";
+"SafeTrade、Gate、CoinGecko、WhatToMine、MiningPoolStats、open.er-api.com 等公开数据源，请求不带地址。" = "Sumber data publik seperti SafeTrade, Gate, CoinGecko, WhatToMine, MiningPoolStats, dan open.er-api.com; permintaan tidak menyertakan alamat.";
+"回到「设置 → 交易」，粘贴 API Key 和 API Secret 并保存，App 会马上验证能否使用。" = "Buka Pengaturan → Trading, tempel API Key dan API Secret lalu simpan; aplikasi langsung memeriksa apakah kuncinya berfungsi.";
+"网页端右上角头像进入「API 管理」（手机 App 在左上角头像 →「安全中心 / 更多 → API 管理」），点「创建 API Key」，在「账户类型」弹窗里选「交易账户」，备注随便填（如 Pearl Hub），API Key 类型选「API v4 Key」。" = "Di web, buka menu profil kanan atas → «Manajemen API» (di aplikasi: profil kiri atas → «Keamanan / Lainnya → Manajemen API»), ketuk «Buat API Key», pilih «Akun Perdagangan» pada jendela «Jenis Akun», isi catatan (mis. Pearl Hub), lalu pilih «API v4 Key».";
+"「账户类型」弹窗有三种：选「交易账户」。不要选「模拟交易」（虚拟盘，无法读写实盘资产），也不要选「第三方应用」（仅限 Gate 预设的合作托管平台固定服务器 IP，Pearl Hub 由你的设备本机直连 Gate）。" = "Jendela «Jenis Akun» memiliki tiga pilihan: pilih «Akun Perdagangan». Jangan pilih «Perdagangan Demo» (khusus dana virtual) atau «Aplikasi Pihak Ketiga» (khusus IP server tetap platform mitra Gate; Pearl Hub terhubung langsung dari perangkat Anda).";
+"开启「现货 → 读写」（仅查余额可选「只读」）和「钱包 → 只读」（查充值地址、提币手续费与地址簿必需）；「提现 → 读写」按需开启，其余合约、杠杆等全部保持关闭。" = "Aktifkan «Spot → Baca dan Tulis» (atau «Baca Saja» hanya untuk cek saldo) serta «Dompet → Baca Saja» (wajib untuk alamat deposit, biaya penarikan, dan buku alamat). Aktifkan «Penarikan → Baca dan Tulis» hanya bila perlu; biarkan futures, margin, dan lainnya tetap mati.";
+"只开「现货 + 提现」而不勾「钱包 → 只读」会导致充值和提现页无法读取地址与手续费。开启 API 提币时，Gate 还要求目标收款地址已先在 Gate 后台加入提币白名单（或手动成功提过一次）。" = "Mengaktifkan Spot + Penarikan saja tanpa «Dompet → Baca Saja» akan membuat halaman Deposit dan Penarikan gagal memuat alamat serta biaya jaringan. Untuk penarikan API, alamat tujuan juga wajib sudah masuk whitelist penarikan Gate (atau pernah ditarik manual).";
+"Gate 拒绝了读取充值地址的请求：请到 Gate「API 管理」为这把密钥开启「钱包 → 只读」权限。" = "Gate menolak permintaan alamat deposit: aktifkan izin «Dompet → Baca Saja» untuk kunci ini di «Manajemen API» Gate.";
+"收款地址不在 Gate 提币白名单中。请先到 Gate 网站将该地址加入白名单并完成验证。" = "Alamat tujuan belum ada di daftar putih penarikan Gate Anda. Tambahkan dan verifikasi alamat ini terlebih dahulu di situs web Gate.";

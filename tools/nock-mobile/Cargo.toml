@@ -3,7 +3,7 @@ name = "nock-mobile"
 version = "0.1.0"
 edition = "2021"
 description = "Nockchain (NOCK) wallet core for Pearl Hub: key derivation, note decoding, tx build + sign"
-license = "GPL-3.0-only"
+license = "MIT"
 publish = false
 
 [lib]

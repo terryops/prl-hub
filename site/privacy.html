@@ -26,10 +26,10 @@
 <body>
 <header><div class="in"><img src="/logo.png" alt="Pearl Hub"><div><h1>Privacy Policy</h1><a href="/">← Pearl Hub</a></div></div></header>
 <main>
-  <p class="muted">Last updated: October 15, 2026</p>
+  <p class="muted">Last updated: November 15, 2026</p>
 
   <p><strong>Pearl Hub</strong> provides a native self-custody cryptocurrency wallet and mining
-  monitor for the Pearl ($PRL) network, a Chrome wallet extension, and a web mining companion. We do not sell your
+  monitor for the Pearl ($PRL) network, an Android app, a Chrome wallet extension, and a web mining companion. We do not sell your
   data or use advertising trackers. The native app's optional alerts and the web companion's
   server requests and encrypted sync are described below.</p>
 
@@ -43,7 +43,7 @@
   <p>In the native app, your wallet recovery phrase and private keys are generated on your device and stored,
   encrypted, in the device Keychain / Secure Enclave. They never leave your device and are
   never transmitted to us. Viewing your recovery phrase or sending funds is protected by
-  Face ID / Touch ID.</p>
+  Face ID / Touch ID. For the Android app, see &ldquo;Android app&rdquo; below.</p>
 
   <h2>Price Alerts (optional, Pearl Hub Pro)</h2>
   <p>If you unlock Pearl Hub Pro and add price alerts, the app sends our alert server
@@ -68,6 +68,15 @@
   and online status the pool last reported, for that purpose only. It never receives your recovery phrase, private keys or
   balances. Switching the alert off, or deleting the monitor, removes it from the server.</p>
 
+  <h2>Payment Alerts (optional, Pearl Hub Pro)</h2>
+  <p>Payment alerts are off until you choose an address and switch them on. When you do, the app
+  sends the alert server that one PRL address, the name it has in the app (a wallet's or a
+  monitor's, if any), this device's push notification token and the app's display language. The
+  server reads each new block of the public Pearl blockchain and notifies you when a transaction
+  pays that address; it keeps the IDs of the transactions it has notified you about, so it doesn't
+  repeat them. It never receives your recovery phrase, private keys or balances. Switching the
+  alert off removes the address from the server.</p>
+
   <h2>In-app purchases</h2>
   <p>Pearl Hub Pro is a one-time in-app purchase processed entirely by Apple. We never receive
   your payment details or your Apple Account; the app checks your purchase on-device with
@@ -83,16 +92,22 @@
   and preferences are stored in your browser. We never request recovery phrases or private keys.</p>
   <p>The read-only wallet page sends watch addresses to our service, which queries
   Blockbook for balances and paginated transaction history, including fees and counterparties. Mining income queries also send your
-  monitored payout addresses to exclude transfers between them. These results are briefly
-  cached using hashed address keys. The web page cannot sign or send transactions.
+  monitored payout addresses to exclude transfers between them. Transaction lookups on the same
+  page send the transaction ID you enter, and our service queries Blockbook for that transaction.
+  These results are briefly cached using hashed address and transaction keys. The web page cannot
+  sign transactions. Its broadcast tab sends a transaction you signed elsewhere and paste there to
+  our service, which passes it to the Pearl network through our own index and Pearl's official
+  indexer; the transaction is not stored. Rebroadcasting a transaction by its ID has our service fetch
+  it from one of those indexes and send it the same way.
   Watch addresses remain in local settings and optional encrypted sync. A collapsed card
   on the same page contains the Chrome extension download and installation guide.</p>
   <p>USD exchange rates come from ExchangeRate-API's public USD feed; extended price
-  history comes from BigONE's public PRL/USDT daily candles. These requests contain
-  no wallet address or identity. The candlestick chart on the Market page is the one
-  exception that does not pass through our service: your browser loads it directly from
-  SafeTrade's public PEARL/USDT market data (<code>safetrade.com</code>), without an address,
-  account or cookies, so SafeTrade receives your IP address. Network charts use public Blockbook samples retained
+  history comes from SafeTrade, Gate, Coinbase and Kraken public daily candles, and 24-hour venue volume share comes from
+  our service's cached summary of CoinGecko, SafeTrade, Gate, Coinbase, Kraken and DexScreener public market data. These requests contain
+  no wallet address or identity. Public PEARL/USDT candlesticks and order-book depth on the Market and
+  read-only Trade pages are the exception that does not pass through our service: your browser loads them
+  directly from SafeTrade (<code>safetrade.com</code>) or Gate (<code>api.gateio.ws</code>), without an address,
+  account or cookies, so the selected exchange receives your IP address. Network charts use public Blockbook samples retained
   by our service. Device lists, rental costs and calculator preferences remain in your
   browser and, if enabled, your encrypted settings sync. Synchronizing pool workers
   into your device list queries only the monitors you have enabled.</p>
@@ -130,12 +145,23 @@
   Expired codes and request budgets are cleaned up automatically; sessions expire after 30 days of
   inactivity or 90 days from sign-in.</p>
 
+  <h2 id="delete-account">Delete your account</h2>
+  <p>In the iPhone, iPad, Mac or Android app, open Settings &rarr; Email account and choose Delete account.
+  On the web, open <a href="/">pearlhub.net</a>, choose Account, sign in with your email and choose Delete account.
+  If you can no longer sign in, email <a href="mailto:support@pearlhub.net">support@pearlhub.net</a> from the
+  account's address and we will delete it. Deletion removes your email and cloud configuration and revokes
+  sessions and notification registrations; the de-identified records described above remain, and wallets stay
+  on your devices until you remove them there.</p>
+
   <h2>Chrome wallet extension</h2>
   <p>The extension encrypts recovery phrases and pending transaction records in local
   extension storage using your password. It does not sync private keys through a Chrome
-  account or our web service. Blockchain queries send account extended public keys,
-  addresses and transaction identifiers to the selected network's Blockbook service;
-  transfers send signed transactions. Recovery phrases and private keys are not sent.
+  account or our web service. On mainnet, blockchain queries send account extended public keys,
+  addresses and transaction identifiers first to our own Pearl blockchain index (reached at
+  <code>pearlhub.net/node</code>; the Blockbook server described under &ldquo;Wallet balances and
+  transactions&rdquo;), and to Pearl's official indexer when ours is unavailable or behind; on testnet
+  only to the official testnet indexer. Transfers send the signed transaction to both. Recovery
+  phrases and private keys are not sent.
   Uninstalling the extension removes its local wallet records.</p>
   <p>On mainnet the extension requests the public PRL price and exchange rates from our
   service to show an estimate of your balance; these requests carry no wallet address or
@@ -144,26 +170,112 @@
   Cloud configuration is encrypted at rest and readable by the server. Account credentials remain
   in trusted local storage. Signing out stops sync and restores guest contacts. Local account caches
   are separated by user, and no data is synced through your Chrome or Microsoft account.</p>
+  <p>Once you open its NOCK page, the extension also shows the NOCK address the same recovery phrase
+  opens (see &ldquo;NOCK (Nockchain) wallet&rdquo; below). It asks NockBox's public node
+  (<code>rpc.nockbox.org</code>), directly from your browser and with the same lock identifiers, and
+  broadcasts the NOCK transactions you confirm there. To list the address's past transactions, it
+  also sends the NOCK address, directly from your browser, to the nockscan block explorer
+  (<code>nockscan.com</code>). When NockBox's node cannot be reached, the NOCK page
+  offers the second node described there (<code>216.158.95.10</code>, plain HTTP); only if you allow it,
+  through an optional site permission Chrome asks you to confirm, does the extension use it as well.
+  The NOCK price comes from CoinGecko without any
+  address or identity. The NOCK address and its history are stored unencrypted in local extension
+  storage, like contacts, and are removed with the wallet.</p>
   <p>Opening a public wallet address in the Web companion places the selected address in the
   URL fragment. The browser reads it after the page loads; it is not sent in the initial page request.</p>
+
+  <h2>Android app</h2>
+  <p>The Android app shows the web version's interface inside the app and adds a wallet, notifications
+  and home-screen widgets. The web version and email account sections above apply to it.</p>
+  <p>The wallet works like the Chrome extension: recovery phrases and pending transaction records are
+  encrypted on the device. Instead of a password, the encryption secret is a random value encrypted with a key
+  held in the Android Keystore, and the app uses it only after your fingerprint, face or screen lock confirms.
+  Recovery phrases and private keys never leave the device. App data is excluded from Android backups and
+  device-to-device transfer, so a new phone needs your recovery phrase. Screenshots are blocked while
+  a recovery phrase is shown. Mainnet balances and history are read from Pearl Hub's own blockchain
+  index at <code>pearlhub.net/node</code> first. If it is unavailable or behind the chain, the app uses
+  Pearl's official index at <code>blockbook.pearlresearch.ai</code>; testnet uses
+  <code>blockbook.testnet.pearlresearch.ai</code>. Queries send extended public keys (xpubs, which can
+  reveal all addresses of a wallet), addresses and transaction IDs. Transfers broadcast only transactions
+  signed on the device to both mainnet indexes. Widgets use the same index order. A read-only wallet you
+  add by address has no recovery phrase on the device and is queried by that address instead of an xpub.
+  If you sign in to a Pro account with sync on, each wallet's name and first receive address sync with the
+  web version's Wallet page, as in the native app; read-only wallets also take renames and removals made
+  there.</p>
+  <p>The NOCK side of the wallet works as in the native app (see &ldquo;NOCK (Nockchain) wallet&rdquo;): it
+  reads both public Nockchain nodes directly from the device, the second over plain HTTP, the NOCK price from
+  CoinGecko, and the NOCK address's history from <code>nockscan.com</code>. The NOCK address and its history
+  are stored unencrypted in the app's private storage.</p>
+  <p>If you turn on price or offline alerts, the app registers with Google's Firebase Cloud Messaging and
+  sends our alert server its registration token instead of an Apple push token; everything else is as
+  described in the alert sections above. Google delivers the notifications under its own privacy
+  policy. Tokens Google reports as no longer valid are deleted automatically.</p>
+  <p>Home-screen widgets refresh while the app is closed: they request the public PRL price and, for the
+  pool monitors you have, pool statistics from our service (the same requests the app makes), and read
+  your wallet balance from the blockchain indexes as above. Widget data stays on the device.</p>
+  <p>The version from Google Play sells Pearl Hub Pro as a one-time Google Play purchase. Google handles
+  the payment; we never see your card or Google account. To unlock Pro, the app sends our server the purchase
+  token and order ID Google Play gives it. The server checks them with Google, confirms the purchase to
+  Google, and later reads Google's list of refunded purchases to end Pro for refunded ones. If you are not
+  signed in, the purchase is tied to a random purchase credential stored in the app, as for the web version's
+  guest purchases. Signing in with email moves it to your account. Reinstalling, or another phone with the
+  same Google account, restores it. The version downloaded from pearlhub.net offers PRL checkout as
+  described for the web version.</p>
+  <p>The version downloaded from pearlhub.net checks <code>pearlhub.net/downloads/android/latest.json</code> at
+  launch and on returning to the foreground, at most once every six hours, to show a newer installable version.
+  This request sends no wallet address or account identity. Closing the notice hides that version.
+  The app opens the signed APK download in the browser; installation still uses Android's system flow.</p>
+  <p>The Trade tab works with your own SafeTrade or Gate account. Any SafeTrade or Gate API key and secret you add are
+  encrypted with a key held in the Android Keystore and kept only on this device: they are excluded from
+  backups, are not synced, and never reach our servers. The app signs each request on the device and sends
+  it directly to <code>safetrade.com</code> or <code>api.gateio.ws</code> with your API key (the secret itself is never sent): market data,
+  your balances and orders, deposit addresses and history, and withdrawals. Every withdrawal first asks for
+  your fingerprint, face or screen lock. Withdrawal addresses you save stay on the device.</p>
+
+  <h2>Wallet balances and transactions</h2>
+  <p>To show a wallet's balance and history, the native app first queries our own Pearl
+  blockchain index (<code>node.pearlhub.net</code>, a Blockbook server we run, reached through
+  Cloudflare). These queries send each wallet's extended public key (xpub), from which all of
+  that wallet's addresses can be derived, and the transaction identifiers involved. They are used
+  only to answer the request and are not stored. When our index is unavailable or behind, the app
+  sends the same queries to Pearl's official indexer instead. Signed transactions are broadcast to
+  both. The on-chain income shown for monitored mining addresses (which sends those payout
+  addresses) and the network hashrate chart (which requests public blocks) use the same two
+  indexes in the same order. Recovery phrases and private keys are never sent.</p>
+
+  <h2>NOCK (Nockchain) wallet</h2>
+  <p>The same recovery phrase also opens a NOCK address on Nockchain, derived on your device. To
+  show its balance, the native app asks NockBox's public Nockchain node (<code>rpc.nockbox.org</code>)
+  for the coins locked to that address, and when that node is unavailable, the public node the
+  official Nockchain wallet uses by default (<code>216.158.95.10</code>). The second one is reached
+  over plain, unencrypted HTTP, so others on the network path can see those requests. The requests
+  carry two lock identifiers derived from your NOCK address, so a node can tell which address is
+  asking. The same nodes answer the transaction and block lookups behind your NOCK history, and a
+  NOCK send is broadcast to both of them. To list your past NOCK transactions, including ones made on
+  another device or before you installed the app, the native app sends your NOCK address to the
+  nockscan block explorer (<code>nockscan.com</code>); it does so only once you use NOCK in the app
+  (open a NOCK page, hold NOCK or have NOCK history). The history it builds is kept on your device and
+  never synced. Recovery phrases and private keys are never sent.</p>
 
   <h2>Third-party services the app contacts</h2>
   <p>To provide its features, the native app makes direct requests from your device to public
   services. These requests carry only what is needed to fulfill them (for example a wallet
   or mining address you enter), and each service has its own privacy policy:</p>
   <ul>
-    <li><strong>Pearl blockchain indexer</strong> (<code>blockbook.pearlresearch.ai</code>) — to read balances and broadcast transactions.</li>
-    <li><strong>Public market data</strong> (e.g. SafeTrade public ticker, CoinGecko) — to display the $PRL price and charts, for reference only.</li>
-    <li><strong>SafeTrade trading API</strong> (<code>safetrade.com</code>) — only if you add your own SafeTrade API key, to show your exchange balances and place or cancel your orders.</li>
-    <li><strong>Mining pool public APIs</strong> (AlphaPool, Lucky Pool, HeroMiners, Pearl Fortune, PearlHash, Kryptex, Jetski, F2Pool) — to show stats for a mining address you choose to monitor.</li>
+    <li><strong>Pearl blockchain indexer</strong> (<code>blockbook.pearlresearch.ai</code>) — for balances, history, mining-address income and network charts when our own index is unavailable or behind; signed transactions are broadcast to it as well.</li>
+    <li><strong>Public market data</strong> (e.g. SafeTrade and Gate public market feeds, CoinGecko, DexScreener) — to display $PRL and NOCK prices, charts and 24-hour volume share, for reference only.</li>
+    <li><strong>Nockchain public nodes</strong> (<code>rpc.nockbox.org</code>, run by NockBox; <code>216.158.95.10</code>, the official Nockchain wallet's default node, plain HTTP) — for your NOCK balance, transaction status and block times; NOCK transactions you sign are broadcast to both.</li>
+    <li><strong>Nockchain explorer</strong> (<code>nockscan.com</code>) — your NOCK address, to list your NOCK transaction history once you use NOCK in the app or the Chrome extension; and the transaction itself when you open it in the explorer from its details.</li>
+    <li><strong>SafeTrade and Gate trading APIs</strong> (<code>safetrade.com</code>, <code>api.gateio.ws</code>) — only if you add your own SafeTrade or Gate API key, to show your exchange balances, place or cancel your orders, show deposit addresses and deposit and withdrawal history, and send the withdrawals you confirm.</li>
+    <li><strong>Mining pool public APIs</strong> (AlphaPool, Lucky Pool, HeroMiners, Pearl Fortune, PearlHash, Kryptex, Jetski, Peryn, F2Pool) — to show stats for a mining address you choose to monitor.</li>
   </ul>
   <p>We do not control these services. Native app queries go directly to them; web queries
-  pass through our service as described in the Web version section, except the SafeTrade
-  candlestick chart, which the browser loads directly.</p>
+  pass through our service as described in the Web version section, except the SafeTrade and Gate
+  public market charts, which the browser loads directly.</p>
 
   <h2>iCloud sync (optional, Apple-encrypted)</h2>
-  <p>While signed out of the email account, iCloud can sync your preferences (language, currency, pool setup) across your own
-  devices through Apple iCloud, and a SafeTrade API key you add is kept in your iCloud
+  <p>While signed out of the email account, iCloud can sync your preferences (language, currency, pool setup, last selected exchange) across your own
+  devices through Apple iCloud, and any SafeTrade or Gate API key you add is kept in your iCloud
   Keychain. This data is handled by Apple under Apple's privacy policy; we have no access to
   it.</p>
 

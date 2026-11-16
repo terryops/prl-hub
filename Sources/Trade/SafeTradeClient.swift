@@ -132,6 +132,29 @@ struct STOrder: Decodable, Equatable {
     let avg_price: String?
     let created_at: STTimestamp?
     let updated_at: STTimestamp?
+    var rawID: String? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case id, market, side, type, price, state, origin_amount, avg_price, created_at, updated_at
+    }
+
+    init(id: Int?, market: String?, side: String?, type: String?, price: String?, state: String?,
+         origin_amount: String?, avg_price: String?, created_at: STTimestamp?, updated_at: STTimestamp?,
+         rawID: String? = nil) {
+        self.id = id
+        self.market = market
+        self.side = side
+        self.type = type
+        self.price = price
+        self.state = state
+        self.origin_amount = origin_amount
+        self.avg_price = avg_price
+        self.created_at = created_at
+        self.updated_at = updated_at
+        self.rawID = rawID
+    }
+
+    var cancelKey: String? { rawID ?? id.map(String.init) }
 
     /// When the order was placed — falls back to its last update if the create
     /// time is missing or unparseable; nil means the row simply shows no date.
@@ -202,6 +225,12 @@ struct STCurrencyNetwork: Decodable, Identifiable {
     var maintenanceMessage: String? {
         options?["maintenance_message"].map(\.text).flatMap { $0.isEmpty ? nil : $0 }
     }
+    /// True when the chain uses an address memo/tag (e.g. Gate `is_tag == 1` on TON/GRAM).
+    var requiresMemo: Bool { options?["requires_memo"]?.text == "true" }
+    /// Per-chain maximum decimal places when different networks of a coin vary (e.g. Gate USDT 8 vs 6 vs 4).
+    var withdrawPrecision: Int? {
+        options?["precision"].flatMap { Int($0.text) }.flatMap { $0 > 0 ? $0 : nil }
+    }
     /// Same rule as the SafeTrade web client: max(fixed fee, amount × ratio).
     func fee(for amount: Decimal) -> Decimal {
         let fixed = Decimal(string: withdraw_fee ?? "") ?? 0
@@ -220,8 +249,10 @@ struct STCurrencyNetwork: Decodable, Identifiable {
             return regexes.contains { a.range(of: $0, options: .regularExpression) != nil }
         }
         let key = blockchain_key.lowercased()
-        if key.hasPrefix("tron") { return ChainAddress.isValidTron(a) }
+        if key.hasPrefix("pearl") || key == "prl" { return PRLAddress.isValid(a, network: .mainnet) }
+        if key.hasPrefix("tron") || key == "trx" { return ChainAddress.isValidTron(a) }
         if key.hasPrefix("spl") || key.hasPrefix("sol") { return ChainAddress.isValidSolana(a) }
+        if ChainAddress.isNonEVMChain(key) { return ChainAddress.isValidNonEVM(a, chainKey: key) }
         // Ethereum and the EVM chains (BSC, Arbitrum, Base, Polygon, Avalanche, PulseChain…).
         return ChainAddress.isValidEVM(a)
     }
@@ -236,6 +267,7 @@ struct STCurrency: Decodable {
 /// orders come back as strings — accept both.
 struct STNumberText: Decodable {
     let text: String
+    init(_ text: String) { self.text = text }
     init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
         if let s = try? c.decode(String.self) { text = s }
@@ -359,6 +391,7 @@ struct STBeneficiary: Decodable, Identifiable {
     let label: String?
     let name: String?
     let description: String?
+    let memo: String?
     let currency_id: String?
     let currency: String?
     let blockchain_key: String?
@@ -374,6 +407,57 @@ struct STBeneficiary: Decodable, Identifiable {
     var isActive: Bool { (state ?? "active").lowercased() == "active" }
 }
 
+extension STWithdraw {
+    init(id: Int, amount: String?, fee: String?, address: String?, txid: String?,
+         status: String?, blockchainKey: String?, createdAt: Date?) {
+        self.id = id
+        self.amount = amount.map(STNumberText.init)
+        self.fee = fee.map(STNumberText.init)
+        self.rid = nil
+        self.address = address
+        self.txid = txid
+        self.blockchain_txid = txid
+        self.state = status
+        self.status = status
+        self.blockchain_key = blockchainKey
+        self.created_at = STTimestamp(createdAt)
+    }
+}
+
+extension STDeposit {
+    init(id: Int, currency: String?, blockchainKey: String?, amount: String?, fee: String?,
+         txid: String?, address: String?, state: String?, createdAt: Date?) {
+        self.id = id
+        self.currency = currency
+        self.blockchain_key = blockchainKey
+        self.amount = amount.map(STNumberText.init)
+        self.fee = fee.map(STNumberText.init)
+        self.credited = nil
+        self.fee_paid = nil
+        self.fee_currency = nil
+        self.txid = txid
+        self.address = address
+        self.state = state
+        self.created_at = STTimestamp(createdAt)
+    }
+}
+
+extension STBeneficiary {
+    init(id: Int, name: String?, currency: String?, blockchainKey: String?, address: String?, active: Bool, memo: String? = nil) {
+        self.id = id
+        self.label = name
+        self.name = name
+        self.description = nil
+        self.memo = memo
+        self.currency_id = currency
+        self.currency = currency
+        self.blockchain_key = blockchainKey
+        self.state = active ? "active" : "pending"
+        self.address = address
+        self.data = nil
+    }
+}
+
 struct STCandle: Identifiable, Equatable {
     let time: Date
     let open, high, low, close, volume: Double
@@ -386,12 +470,16 @@ enum SafeTradeError: LocalizedError {
     /// The balances call's 404 `record.not_found`: an API key SafeTrade doesn't know
     /// (SafeTradeAuthProblem.isUnknownKey). Keeps the body SafeTrade sent.
     case unknownKey(String)
+    case gateNoCredentials, gateInvalidURL, gateHTTP(Int, SafeTradeAuthProblem?, String)
     var errorDescription: String? {
         switch self {
         case .unknownKey: return SafeTradeAuthProblem.badKey.message
         case .withdrawUnverified: return Loc("提现请求可能已提交但未能确认结果，请先看下方提现记录，切勿重复提交。")
         case .noCredentials: return Loc("未配置 SafeTrade API 密钥")
         case .invalidURL: return Loc("SafeTrade 请求地址无效")
+        case .gateNoCredentials: return Loc("未配置 Gate API 密钥")
+        case .gateInvalidURL: return Loc("Gate 请求地址无效")
+        case .gateHTTP(_, _, let message): return message
         case .http(let c, let m):
             if let auth = SafeTradeAuthProblem(status: c, body: m) { return auth.message }
             if let known = Self.errorKeys(m).lazy.compactMap(Self.message(forKey:)).first { return known }
@@ -405,6 +493,7 @@ enum SafeTradeError: LocalizedError {
     var authProblem: SafeTradeAuthProblem? {
         if case .http(let c, let m) = self { return SafeTradeAuthProblem(status: c, body: m) }
         if case .unknownKey = self { return .badKey }
+        if case .gateHTTP(_, let auth, _) = self { return auth }
         return nil
     }
 }

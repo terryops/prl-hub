@@ -34,7 +34,7 @@ enum CloudSync {
         "income.alert",
         // exchange / trade — NON-secret only. The API key/secret are stored in the
         // iCloud Keychain (E2E-encrypted), never in this plaintext KVS.
-        "safetrade.period", "safetrade.withdrawAddresses",
+        "trade.exchange", "safetrade.period", "safetrade.withdrawAddresses",
         // wallet — non-secret meta only (the seed stays in the Keychain)
         "wallet.name", "wallet.network", "wallet.contacts",
         // app appearance / language / currency

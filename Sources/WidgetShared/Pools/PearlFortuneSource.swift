@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Pearl Fortune (pearlfortune.org, public-pool fork, PPLNS, read-only API) — per miner
 // Per-miner data spans 3 endpoints, all enveloped in {"data": …}:
 //   /api/v1/miners/{addr}              → balance + pending estimate + hourly share series
-//   /api/v1/miners/{addr}/connections  → live workers + reported hashrate
+//   /api/v1/miners/{addr}/connections  → live workers (per connection) + their hashrates
 //   /api/v1/miners/{addr}/ledger       → lifetime credited / paid-out totals
 // `_atomic` amounts are ÷ atomic_units (1e8); the API returns ledger amounts as
 // STRINGS, so those go through FlexDouble. The widget reads /connections alone.
@@ -30,10 +30,30 @@ struct PFMinerDetail: Decodable, Sendable {
 
 struct PFConnections: Decodable, Sendable {
     struct Summary: Decodable, Sendable { let reported_hashrate: Double? }
+    /// One connection of a rig.
+    struct Session: Decodable, Sendable {
+        struct Telemetry: Decodable, Sendable { let hashrate_source: String? }
+        let stale: Bool?               // live == !stale
+        let reported_hashrate: Double? // what the mining software reports
+        let reported_telemetry: Telemetry?
+    }
+    /// The pool's own per-rig rate from accepted shares; a window with nothing observed yet is
+    /// not a rate.
+    struct Measured: Decodable, Sendable {
+        let hashrate_1h: Double?, observed_1h_s: Double?
+        let hashrate_24h: Double?, observed_24h_s: Double?
+    }
     struct Worker: Decodable, Sendable {
         let worker: String?            // worker name (NB: key is `worker`, not `worker_name`)
+        let sessions: [Session]?       // since 2026-11-06
+        let pool: Measured?            // since 2026-11-06
+        // Until 2026-11-06 a rig was a single connection with these at its top level.
         let reported_hashrate: Double?
-        let stale: Bool?               // online == !stale
+        let stale: Bool?
+
+        var connections: [Session] {
+            sessions ?? [Session(stale: stale, reported_hashrate: reported_hashrate, reported_telemetry: nil)]
+        }
     }
     let configured: Bool?
     let online: Bool?
@@ -70,14 +90,22 @@ enum PearlFortuneSource: PoolMinerSource {
         return combine(detail: d, conn: (try? await conn) ?? nil, ledger: (try? await ledger) ?? nil)
     }
 
+    /// A rig is online while any of its connections is. Live = Σ what the mining software
+    /// reports on those connections (as the pool's own page sums it), left out — so the 1h
+    /// stands in — when a live connection reports nothing; 1h / 24h = the pool's measurement.
     private static func rigs(_ c: PFConnections?) -> [WatchWorker] {
-        // Per RIG, Pearl Fortune publishes a live rate and nothing else — the 1h/24h
-        // rolling averages exist only for the account. So the rig rows honestly show
-        // "—" on those windows rather than repeating the live number three times.
         (c?.workers ?? []).map { w in
-            WatchWorker(name: w.worker ?? "—",
-                        online: !(w.stale ?? true),
-                        rates: [.live: w.reported_hashrate ?? 0])
+            let live = w.connections.filter { $0.stale == false }
+            let reports = live.compactMap { s in
+                (s.reported_telemetry?.hashrate_source ?? "miner") == "miner" ? s.reported_hashrate : nil
+            }
+            var rates: [SpeedWindow: Double] = [:]
+            if live.isEmpty { rates[.live] = 0 } else if !reports.isEmpty { rates[.live] = reports.reduce(0, +) }
+            if let m = w.pool {
+                if (m.observed_1h_s ?? 0) > 0, let h = m.hashrate_1h { rates[.hour] = h }
+                if (m.observed_24h_s ?? 0) > 0, let d = m.hashrate_24h { rates[.day] = d }
+            }
+            return WatchWorker(name: w.worker ?? "—", online: !live.isEmpty, rates: rates)
         }
         .sorted(by: onlineFirst)
     }

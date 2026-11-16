@@ -1142,6 +1142,12 @@
 "这是按各矿池标注的样本时间段，计算的实际结算收益相对理论收益的折损率。" = "Đây là tỷ lệ thu nhập đã quyết toán thiếu hụt so với thu nhập lý thuyết trong kỳ mẫu được ghi cho mỗi pool.";
 "这是 %@ 期间，实际结算收益相对理论收益的折损率。" = "Đây là tỷ lệ thu nhập đã quyết toán thiếu hụt so với thu nhập lý thuyết trong %@.";
 "这是 %@ 期间按矿池出块和公示池费估算的折损率，已扣除出块运气，剩下的是池费和矿池损耗的算力。" = "Đây là tỷ lệ thu nhập thiếu hụt ước tính từ các khối pool tìm được và phí công bố trong %@, đã loại bỏ may mắn tìm khối: chỉ còn lại phí và phần công mà pool làm mất.";
+"孤块" = "Khối mồ côi";
+"%1$@/%2$@ 块" = "%1$@/%2$@ khối";
+"其他" = "Khác";
+"%@ · 已扣除出块运气" = "%@ · đã loại bỏ may mắn tìm khối";
+"孤块：近 7 天该池找到、但没被链收录的块，没有奖励。" = "Khối mồ côi: khối pool tìm được trong 7 ngày qua nhưng chuỗi không giữ lại; không có phần thưởng.";
+"其他：矿池损耗的算力和统计误差。" = "Khác: phần công mà pool làm mất và sai số thống kê.";
 
 "左右滑动查看完整对比" = "Vuốt ngang để so sánh tất cả các cột";
 "提醒频率" = "Tần suất cảnh báo";
@@ -1360,3 +1366,102 @@
 "其他地址…" = "Địa chỉ khác…";
 "用同一套助记词收发 NOCK（Nockchain）。打开后钱包页底部会出现 NOCK 钱包。" = "Gửi và nhận NOCK (Nockchain) bằng cùng cụm từ khôi phục. Bật lên, Ví NOCK sẽ xuất hiện ở cuối trang ví.";
 "到账提醒：地址收到 PRL 就通知你" = "Cảnh báo nhận tiền: biết ngay khi PRL về địa chỉ của bạn";
+
+/* Pools: Peryn's Founding Miner fee, in the ⓘ beside the fee */
+"创始矿工费率" = "Phí thành viên sáng lập";
+"创始矿工 %@。报名到 Pearl FP8 升级截止。" = "Thành viên sáng lập: %@. Đăng ký đóng khi Pearl nâng cấp FP8.";
+"创始矿工 %@，到 Pearl FP8 升级后 %@ 个月。报名到 Pearl FP8 升级截止。" = "Thành viên sáng lập: %@ cho đến %@ tháng sau khi Pearl nâng cấp FP8. Đăng ký đóng khi nâng cấp.";
+
+/* Pools: Peryn's Real Cost per fee tier, in the ⓘ beside it */
+"创始矿工地址" = "Địa chỉ thành viên sáng lập";
+"普通地址" = "Địa chỉ khác";
+
+/* Pools: why a PPLNS / PROP Real Cost is "—" (too few blocks), in the ⓘ beside it */
+"%1$@ 近 7 天的算力只够出约 %2$@ 块，块太少，扣不准出块运气。满 %3$@ 块才显示真实费用。" = "Hashrate của %1$@ trong 7 ngày qua chỉ đủ cho khoảng %2$@ khối, quá ít để loại bỏ may mắn tìm khối. Chi phí thực hiển thị từ %3$@ khối.";
+
+/* Rolling share-work output estimates. */
+"%@ 天统计估计" = "Ước tính thống kê trong %@ ngày";
+"发现 %1$@ 个块，其中 %2$@ 个孤块；已接受 share 工作量对应约 %3$@ 个理论块。" = "Tìm được %1$@ khối, gồm %2$@ khối mồ côi. Công việc share được chấp nhận tương ứng %3$@ khối lý thuyết.";
+"发现块效率：%1$@；95%% 计数误差参考区间：%2$@～%3$@。" = "Hiệu suất tìm khối: %1$@. Khoảng 95%% chỉ tính ngẫu nhiên của số khối: %2$@–%3$@.";
+"成本的 95%% 计数误差参考区间：%1$@～%2$@。" = "Chi phí: khoảng 95%% chỉ tính ngẫu nhiên của số khối %1$@–%2$@.";
+"尚未确认长期折损；观测产出仍包含出块运气的影响。" = "Chưa xác nhận tổn thất dài hạn; sản lượng quan sát vẫn chịu ảnh hưởng của may rủi tìm khối.";
+"以矿池记录的已接受 share 工作量为基准，手续费 %@ 与孤块损失各计一次。区间不包含算力上报和矿池计数误差。" = "Dựa trên công việc share được pool ghi nhận. Phí %@ và tổn thất khối mồ côi được tính mỗi khoản một lần. Khoảng không bao gồm sai số báo hashrate hoặc số liệu pool.";
+"暂无可用的滚动估计；需要至少五个完整 UTC 日、100 个块及其工作量记录。" = "Chưa có ước tính trượt hiện tại. Cần ít nhất năm ngày UTC đầy đủ và 100 khối có dữ liệu công việc từng vòng.";
+"HeroMiners 使用最近 30 天内的完整 UTC 日记录，至少需要五天和 100 个块，区间包含出块运气。其他 PPLNS／PROP 估算需要最近七天内至少五天观测、逐块 effort，且理论工作量足够产生至少 100 个块。" = "HeroMiners dùng tối đa 30 ngày UTC đầy đủ, ít nhất năm ngày và 100 khối; khoảng bao gồm may rủi. Ước tính PPLNS/PROP khác cần năm ngày quan sát trong bảy ngày gần nhất, effort từng khối và ít nhất 100 khối kỳ vọng.";
+
+"Real Cost 以矿工实报工作量为基准，包含矿工费、工作量认可损失与结算扣减，不计入出块运气。" = "Real Cost dựa trên công việc phần mềm đào báo cáo, gồm phí phần mềm, công việc không được ghi nhận và khoản khấu trừ thanh toán, không gồm may mắn tìm khối.";
+
+"完整成本尚未核实。同一时段的矿工工作量、认可工作量或最终分账证据尚不完整；未知不代表 0%。" = "Chưa xác minh tổng chi phí. Chưa đủ bằng chứng về công việc báo cáo, được chấp nhận hoặc phân bổ cuối cùng trong cùng kỳ. Chưa biết không có nghĩa là 0%.";
+
+"以下产出观察包含出块运气，不用于 Real Cost。" = "Sản lượng khối dưới đây có yếu tố may mắn và không được dùng làm Real Cost.";
+
+"结算成本只衡量矿池认可工作量到结算收入这一段，不代表完整成本。" = "Chi phí thanh toán chỉ tính từ công việc pool ghi nhận đến khoản chi trả, không phải tổng chi phí.";
+
+"已测得的结算成本：%@（矿池认可工作量口径）。" = "Chi phí thanh toán đo được: %@ (theo công việc pool ghi nhận).";
+
+/* Gate & Global Volume Share */
+"Gate API 密钥" = "Khóa API Gate";
+"未配置 Gate API 密钥" = "Chưa cấu hình Gate API key";
+"Gate 请求地址无效" = "Địa chỉ yêu cầu Gate không hợp lệ";
+"Gate 可用余额不足" = "Số dư khả dụng trên Gate không đủ";
+"Gate 暂停了这条链的提现" = "Gate đang tạm dừng rút trên mạng này";
+"Gate 暂停了 %@ 提现" = "Gate đang tạm dừng rút %@";
+"Gate 暂时没有开放 %@ 的充值网络" = "Gate hiện chưa mở mạng nạp %@ nào";
+"读取 Gate 充值信息失败：%@" = "Không tải được thông tin nạp của Gate: %@";
+"Gate 还在生成充值地址，请稍后下拉刷新。" = "Gate vẫn đang tạo địa chỉ nạp. Lát nữa hãy kéo xuống để làm mới.";
+"Gate 提示：%@" = "Thông báo của Gate: %@";
+"Gate 正在生成充值地址…" = "Gate đang tạo địa chỉ nạp…";
+"Gate 没有返回 %@ 的提现网络" = "Gate không trả về mạng rút cho %@";
+"读取 Gate 提现信息失败：%@" = "Không tải được thông tin rút của Gate: %@";
+"Gate 地址簿有 %d 个地址（%@），但没有可用于 %@ 的。" = "Sổ địa chỉ Gate có %d địa chỉ (%@), nhưng không có địa chỉ nào dùng được cho %@.";
+"提现已提交，Gate 处理后会广播上链" = "Đã gửi yêu cầu rút. Gate sẽ phát giao dịch sau khi xử lý.";
+"暂时无法确认下单结果，请到 Gate 网站核对，或稍后点「重新核对」。" = "Chưa thể xác nhận kết quả lệnh — hãy kiểm tra trên web Gate, hoặc lát nữa nhấn Kiểm tra lại.";
+"暂时无法确认提现结果，请到 Gate 网站核对提现记录，或稍后点「重新核对」。" = "Chưa thể xác nhận kết quả rút — hãy kiểm tra lịch sử rút trên web Gate, hoặc lát nữa nhấn Kiểm tra lại.";
+"Gate 不认这个 API 密钥：Key 或 Secret 不对，或者密钥已停用。" = "Gate không nhận API key này: key hoặc secret sai, hoặc key đã bị tắt.";
+"签名已过期：本机时间和 Gate 相差太多，请打开「自动设置时间」后重试。" = "Chữ ký đã hết hạn: đồng hồ máy lệch quá nhiều so với Gate. Hãy bật đặt giờ tự động rồi thử lại.";
+"Gate 拒绝了这个请求（%@）" = "Gate từ chối yêu cầu (%@)";
+"App 直接连接 api.gateio.ws，中间不经过我们或任何第三方。Secret 只在你的设备上用来给请求签名，本身从不发送出去。" = "Ứng dụng kết nối thẳng tới api.gateio.ws — không đi qua chúng tôi hay bất kỳ bên thứ ba nào. Secret chỉ được dùng trên thiết bị của bạn để ký yêu cầu và bản thân nó không bao giờ được gửi đi.";
+"已保存，但验证未通过：本机时间和 Gate 相差太多，请打开「自动设置时间」。" = "Đã lưu, nhưng kiểm tra thất bại: đồng hồ máy lệch quá nhiều so với Gate. Hãy bật đặt giờ tự động.";
+"已保存，但请求被 Gate 的防火墙拦截（网络或代理），换个网络后在交易页确认。" = "Đã lưu, nhưng tường lửa của Gate đã chặn yêu cầu (mạng hoặc proxy). Kiểm tra lại ở tab Giao dịch bằng mạng khác.";
+"已保存，但暂时无法连接 Gate（网络问题）。请检查网络后在交易页确认。" = "Đã lưu, nhưng tạm thời không kết nối được Gate (sự cố mạng). Hãy kiểm tra mạng rồi xác nhận ở tab Giao dịch.";
+"打开 Gate API 页面" = "Mở trang API của Gate";
+"下单金额最少 %@ USDT" = "Giá trị lệnh tối thiểu là %@ USDT";
+"Gate 拒绝了当前网络：这个 API 密钥绑定了 IP 白名单，而你现在的 IP 不在名单里。" = "Gate đã từ chối mạng này: khóa API này có danh sách trắng IP và IP hiện tại của bạn không nằm trong đó.";
+"请求被 Gate 的防火墙拦截，通常是当前网络或代理的出口被拦，换个网络再试。" = "Yêu cầu bị tường lửa của Gate chặn — thường do mạng hiện tại hoặc IP ra của VPN/proxy bị chặn. Hãy thử mạng khác.";
+"开启安全验证" = "Bật xác minh bảo mật";
+"勾选权限" = "Chọn quyền";
+"绑定 IP 白名单" = "Liên kết danh sách trắng IP";
+"复制 Key 和 Secret" = "Sao chép Key và Secret";
+"获取 Gate API 密钥" = "Lấy khóa API Gate";
+"已保存，但当前网络的 IP 不在这把密钥的白名单里。到交易页查看当前 IP（可能是 IPv6 地址），把它加进 Gate 白名单。" = "Đã lưu, nhưng IP hiện tại chưa có trong danh sách trắng của khóa này. Hãy xem IP ở tab Giao dịch (có thể là IPv6) và thêm vào danh sách trắng Gate.";
+"已保存，但验证未通过：API Key/Secret 可能不正确，或未开启现货/只读权限。请在 Gate 后台核对密钥权限与 IP 白名单。" = "Đã lưu nhưng xác minh thất bại: API Key/Secret có thể sai hoặc chưa bật quyền Spot/Đọc. Hãy kiểm tra quyền khóa và danh sách trắng IP trên Gate.";
+"这是 IPv6 地址：白名单里如果只有 IPv4，可能需要把这个 IPv6 地址也加进 Gate 白名单。" = "Đây là địa chỉ IPv6: nếu danh sách trắng chỉ có IPv4, bạn cần thêm cả địa chỉ IPv6 này vào danh sách trắng Gate.";
+"把上面这个 IP 加进这把密钥的 IP 白名单即可。" = "Thêm địa chỉ IP ở trên vào danh sách trắng IP của khóa này.";
+"在哪里设置 IP 白名单" = "Thiết lập danh sách trắng IP ở đâu";
+"Gate 拒绝了这个 API 密钥的提现请求（%@）。请到 Gate「API 管理」为这把密钥开启「提现」权限，并绑定当前公网 IP 白名单。" = "Gate đã từ chối yêu cầu rút tiền của khóa API này (%@). Hãy bật quyền «Rút tiền» và liên kết IP công cộng hiện tại trong Quản lý API của Gate.";
+"Gate 地址簿" = "Sổ địa chỉ Gate";
+"Gate 地址簿「%@」" = "Sổ địa chỉ Gate «%@»";
+"选填（交易所要求时填写）" = "Tùy chọn (nhập nếu sàn nhận yêu cầu)";
+"Gate API 提现无需邮箱或谷歌验证码，但要求该 API 密钥已开启「提现」权限且绑定当前公网 IP 白名单；提交前需通过本机生物识别验证。" = "Rút tiền qua Gate API không cần mã email hay 2FA, nhưng khóa API phải bật quyền «Rút tiền», liên kết IP trắng hiện tại và xác thực sinh trắc học trên thiết bị.";
+"全网交易量" = "Khối lượng toàn mạng";
+"DEX %.1f%%" = "DEX %.1f%%";
+"24h 全网成交" = "KL toàn mạng 24h";
+"查看全部 (%d)" = "Xem tất cả (%d)";
+"暂无市场数据" = "Chưa có dữ liệu thị trường";
+"填写 API 密钥" = "Nhập API key";
+"登录 gate.com 或 Gate App，确保账户已开启谷歌验证（2FA）和资金密码。" = "Đăng nhập gate.com hoặc ứng dụng Gate và đảm bảo đã bật xác thực 2FA cùng mật khẩu quỹ.";
+"创建 API v4 密钥" = "Tạo khóa API v4";
+"选「绑定 IP」并填入当前网络的公网 IP（多个 IP 用英文逗号隔开，最多 20 个）：" = "Chọn «Liên kết IP» và nhập IP công cộng hiện tại (nhiều IP cách nhau bằng dấu phẩy, tối đa 20):";
+"开启提现权限时 Gate 强制要求绑定 IP；不开提现也可暂不绑定（有效期 90 天）。手机网络可能在 IPv4 与 IPv6 之间切换，换网络后提示 IP 不在白名单时把新 IP 补进去即可。新建或修改白名单约 1–5 分钟生效。" = "Gate bắt buộc liên kết IP khi bật quyền rút tiền; nếu tắt rút tiền có thể để trống (hiệu lực 90 ngày). Mạng di động có thể chuyển giữa IPv4 và IPv6 — khi tab Giao dịch báo IP chưa được phép, hãy thêm IP mới hiển thị. Khóa mới hoặc thay đổi danh sách trắng mất khoảng 1–5 phút để có hiệu lực.";
+"提交并确认风险提示，输入资金密码和二次验证码后，立即复制显示的 API Key 和 Secret（Secret 只显示这一次）。" = "Nhấn gửi, xác nhận cảnh báo rủi ro, nhập mật khẩu quỹ và mã 2FA, sau đó sao chép ngay API Key và Secret (Secret chỉ hiển thị đúng một lần).";
+"回到「设置 → 交易」，在 Gate 区域粘贴 API Key 和 Secret 并保存，App 会马上验证权限与白名单状态。" = "Quay lại «Cài đặt → Giao dịch», dán API Key và Secret vào mục Gate rồi lưu; ứng dụng sẽ kiểm tra ngay quyền và danh sách trắng IP.";
+"SafeTrade 与 Gate API 密钥" = "Khóa API SafeTrade & Gate";
+"只存在你的钥匙串里（开着 iCloud 钥匙串时由 Apple 端到端加密同步）；交易请求由 App 签名后直接发往 safetrade.com 或 api.gateio.ws。" = "Chỉ lưu trong Chuỗi khóa của bạn (được Apple đồng bộ mã hóa đầu cuối khi bật Chuỗi khóa iCloud); các yêu cầu giao dịch được ký ngay trên thiết bị và gửi trực tiếp tới safetrade.com hoặc api.gateio.ws.";
+"SafeTrade、Gate、CoinGecko、WhatToMine、MiningPoolStats、open.er-api.com 等公开数据源，请求不带地址。" = "Các nguồn dữ liệu công khai gồm SafeTrade, Gate, CoinGecko, WhatToMine, MiningPoolStats, open.er-api.com; yêu cầu không kèm địa chỉ ví.";
+"回到「设置 → 交易」，粘贴 API Key 和 API Secret 并保存，App 会马上验证能否使用。" = "Vào Cài đặt → Giao dịch, dán API Key và API Secret rồi lưu; ứng dụng sẽ kiểm tra ngay xem key có dùng được không.";
+"网页端右上角头像进入「API 管理」（手机 App 在左上角头像 →「安全中心 / 更多 → API 管理」），点「创建 API Key」，在「账户类型」弹窗里选「交易账户」，备注随便填（如 Pearl Hub），API Key 类型选「API v4 Key」。" = "Trên web, mở biểu tượng hồ sơ góc trên bên phải → «Quản lý API» (trên ứng dụng: hồ sơ góc trên bên trái → «Bảo mật / Thêm → Quản lý API»), nhấn «Tạo API Key», chọn «Tài khoản giao dịch» trong hộp thoại «Loại tài khoản», điền ghi chú (ví dụ Pearl Hub) và chọn «API v4 Key».";
+"「账户类型」弹窗有三种：选「交易账户」。不要选「模拟交易」（虚拟盘，无法读写实盘资产），也不要选「第三方应用」（仅限 Gate 预设的合作托管平台固定服务器 IP，Pearl Hub 由你的设备本机直连 Gate）。" = "Hộp thoại «Loại tài khoản» có ba lựa chọn: hãy chọn «Tài khoản giao dịch». Đừng chọn «Giao dịch thử» (chỉ dùng tiền ảo) hay «Ứng dụng bên thứ ba» (chỉ dành cho IP máy chủ cố định của nền tảng đối tác; Pearl Hub kết nối trực tiếp từ thiết bị của bạn).";
+"开启「现货 → 读写」（仅查余额可选「只读」）和「钱包 → 只读」（查充值地址、提币手续费与地址簿必需）；「提现 → 读写」按需开启，其余合约、杠杆等全部保持关闭。" = "Bật «Spot → Đọc và ghi» (hoặc «Chỉ đọc» nếu chỉ xem số dư) và «Ví → Chỉ đọc» (bắt buộc để lấy địa chỉ nạp, phí rút và sổ địa chỉ). Chỉ bật «Rút tiền → Đọc và ghi» khi cần rút; tắt toàn bộ hợp đồng, ký quỹ và các mục khác.";
+"只开「现货 + 提现」而不勾「钱包 → 只读」会导致充值和提现页无法读取地址与手续费。开启 API 提币时，Gate 还要求目标收款地址已先在 Gate 后台加入提币白名单（或手动成功提过一次）。" = "Nếu chỉ bật Spot + Rút tiền mà bỏ qua «Ví → Chỉ đọc», trang Nạp và Rút sẽ không tải được địa chỉ và phí mạng. Khi rút qua API, Gate cũng yêu cầu địa chỉ nhận phải có sẵn trong danh sách trắng trên Gate (hoặc đã từng rút thủ công).";
+"Gate 拒绝了读取充值地址的请求：请到 Gate「API 管理」为这把密钥开启「钱包 → 只读」权限。" = "Gate từ chối yêu cầu lấy địa chỉ nạp: vui lòng bật quyền «Ví → Chỉ đọc» cho khóa này trong mục «Quản lý API» trên Gate.";
+"收款地址不在 Gate 提币白名单中。请先到 Gate 网站将该地址加入白名单并完成验证。" = "Địa chỉ nhận chưa có trong danh sách trắng rút tiền trên Gate. Vui lòng thêm và xác minh địa chỉ này trên trang web Gate trước.";
