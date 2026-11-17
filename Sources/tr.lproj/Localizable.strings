@@ -1387,7 +1387,7 @@
 "尚未确认长期折损；观测产出仍包含出块运气的影响。" = "Kalıcı bir verim kaybı doğrulanmadı; gözlenen üretim hâlâ blok şansından etkilenir.";
 "以矿池记录的已接受 share 工作量为基准，手续费 %@ 与孤块损失各计一次。区间不包含算力上报和矿池计数误差。" = "Havuzun kaydettiği kabul edilmiş share işi esas alınır. %@ ücret ve yetim blok kayıpları birer kez sayılır. Aralık, telemetri ve havuz raporlama hatalarını içermez.";
 "暂无可用的滚动估计；需要至少五个完整 UTC 日、100 个块及其工作量记录。" = "Güncel hareketli tahmin yok. Tur işi kayıtlarıyla birlikte en az beş tam UTC günü ve 100 blok gereklidir.";
-"HeroMiners 使用最近 30 天内的完整 UTC 日记录，至少需要五天和 100 个块，区间包含出块运气。其他 PPLNS／PROP 估算需要最近七天内至少五天观测、逐块 effort，且理论工作量足够产生至少 100 个块。" = "HeroMiners en az beş gün ve 100 blok olmak üzere 30 tam UTC gününe kadar veri kullanır; aralık blok şansını içerir. Diğer PPLNS/PROP tahminleri son yedi günde beş gözlem günü, blok effort verisi ve en az 100 beklenen blok gerektirir.";
+"HeroMiners 使用最近 30 天内的完整 UTC 日记录，至少需要五天和 100 个块，区间包含出块运气。其他 PPLNS／PROP 估算需要最近七天内至少五天观测、逐块 effort，且理论工作量足够产生至少 100 个块。" = "HeroMiners ve PearlHash en az beş gün ve 100 blok olmak üzere 30 tam UTC gününe kadar veri kullanır; aralık blok şansını içerir. Diğer PPLNS/PROP tahminleri son yedi günde beş gözlem günü, blok effort verisi ve en az 100 beklenen blok gerektirir.";
 
 "Real Cost 以矿工实报工作量为基准，包含矿工费、工作量认可损失与结算扣减，不计入出块运气。" = "Real Cost, madencinin bildirdiği işi temel alır; madenci ücretlerini, tanınmayan işi ve ödeme kesintilerini içerir, blok şansını içermez.";
 
@@ -1465,3 +1465,10 @@
 "只开「现货 + 提现」而不勾「钱包 → 只读」会导致充值和提现页无法读取地址与手续费。开启 API 提币时，Gate 还要求目标收款地址已先在 Gate 后台加入提币白名单（或手动成功提过一次）。" = "«Cüzdan → Salt Okunur» seçilmeden yalnızca Spot + Çekim açılırsa Yatırma ve Çekim sayfaları adresleri ve ağ ücretlerini okuyamaz. Ayrıca API ile çekim için hedef adresin önceden Gate çekim beyaz listesine eklenmiş (veya manuel çekimde kullanılmış) olması gerekir.";
 "Gate 拒绝了读取充值地址的请求：请到 Gate「API 管理」为这把密钥开启「钱包 → 只读」权限。" = "Gate yatırma adresi isteğini reddetti: lütfen Gate «API Yönetimi»nde bu anahtar için «Cüzdan → Salt Okunur» iznini açın.";
 "收款地址不在 Gate 提币白名单中。请先到 Gate 网站将该地址加入白名单并完成验证。" = "Alıcı adresi Gate çekim beyaz listenizde yok. Lütfen önce Gate web sitesinde bu adresi beyaz listeye ekleyip doğrulayın.";
+
+/* Real Cost warning notes & PearlHash rolling sample */
+"公开样本取自链上大额收款地址，可能含大额补贴或跨日补结，且该池未公开逐日结算明细；普通地址按公示费率扣费，预估收益仍按公示费率计算。" = "Açık örnekler zincirdeki büyük ödeme adreslerinden alınır; özel iadeler veya günler arası mahsuplar içerebilir ve günlük hesap dökümü açık değildir. Normal adresler ilan edilen ücreti öder; tahmini getiri bu ücreti esas alır.";
+"PearlHash 仅允许自家封闭协议客户端接入，且不公开区块列表、逐块 effort 与分账明细，外部无法独立核验其上报的 share 速率。" = "PearlHash yalnızca kendi kapalı protokol istemcisini kabul eder ve blok listesi, blok başına effort veya dağıtım dökümü yayımlamaz; bildirdiği share oranı bağımsız olarak doğrulanamaz.";
+"主链出块 %1$@ 个；已接受 share 工作量对应约 %2$@ 个理论块。" = "%1$@ ana zincir bloğu bulundu. Kabul edilen share işi yaklaşık %2$@ blok öngörür.";
+"Peryn 对大算力地址设有非公开返点分层（重算已剔除 > 50 PH/s 及标有特殊返点身份的地址），且不提供历史 API，地址页面仅保留 7 天、3 位有效数字的每日算力，无法对早期窗口回溯复核。" = "Peryn büyük hesaplara kamuya açık olmayan iade kademeleri uygular (50 PH/s üzeri veya özel iade rozeti taşıyan adresler burada hariç tutulmuştur) ve geçmiş API’si sunmaz; adres sayfaları 3 anlamlı basamağa yuvarlanmış günlük hashrate’i yalnızca 7 gün sakladığından eski dönemler yeniden denetlenemez.";
+"F2Pool 不公开任何账户页面、区块列表或逐笔结算明细；该数值仅基于单一只读账户的每日汇总测算，且比其公布价格高约 0.5～0.7 个百分点，差额来源未公开。" = "F2Pool herkese açık hesap sayfaları, blok listesi veya mutabakat dökümü yayımlamaz; bu değer tek bir salt okunur hesabın günlük toplamlarından hesaplanır ve açıklanmayan nedenlerle ana sayfa fiyatının 0,5–0,7 puan üzerindedir.";

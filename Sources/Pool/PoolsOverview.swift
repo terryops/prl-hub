@@ -164,6 +164,7 @@ struct PoolOverview: Identifiable {
                                      theoreticalPerPH: theoreticalEarningsPerPH,
                                      estimated: isPPS || blocksEstimated || blocksSample < 20,
                                      solo: isSolo, measurement: ppsMeasurement,
+                                     poolWarning: !isSolo ? PoolPayoutComparison.poolWarning(id: id, name: name) : nil,
                                      mergeBonus: name == "F2Pool" && !isSolo ? .f2poolNOCK : nil)]
     }
 
@@ -318,6 +319,15 @@ struct RealFeeBreakdown: Equatable {
 /// Income shortfall against theory: a PPS settlement measurement, or the service's estimate
 /// for a shared-reward payout. SOLO leaves real cost blank.
 struct PoolPayoutComparison {
+    enum RealCostWarning: Equatable, Sendable { case negative, closedProtocol, peryn, f2pool }
+
+    static func poolWarning(id: String, name: String) -> RealCostWarning? {
+        if id == "https://pearlhash.xyz/" || name == "PearlHash" { return .closedProtocol }
+        if id == "https://peryn.ai/" || name == "Peryn" { return .peryn }
+        if id == "https://www.f2pool.com/" || name == "F2Pool" { return .f2pool }
+        return nil
+    }
+
     let scheme: String
     let feePercent: Double?
     var grossPerPH: Double?
@@ -330,6 +340,7 @@ struct PoolPayoutComparison {
     /// Shared-reward payouts only; a PPS payout's Real Cost is its `measurement`.
     var sharedEstimate: SharedRealFee? = nil
     var rollingRequired = false
+    var poolWarning: RealCostWarning? = nil
     /// Merged-mining income shown under 预估收益 ("另得 NOCK 约 1–2%"); never part of the yield or cost.
     var mergeBonus: PoolMergeBonus? = nil
     /// Founding members' fee, in an ⓘ beside the fee (Peryn).
@@ -341,13 +352,20 @@ struct PoolPayoutComparison {
 
     var isPPS: Bool { scheme.uppercased().hasPrefix("PPS") || scheme.uppercased().hasPrefix("FPPS") }
 
-    /// The percentage the pool keeps from this payout. PPS-family: the measured Real Cost, or
-    /// the tariff until one is measured — every PPS pool is quoted at the same network figure,
-    /// so this is all that tells them apart. Shared-reward: the fee only; luck is already in
-    /// the gross figure. Same rule as Web's `payoutCost`.
+    /// The percentage the pool keeps from this payout. PPS-family: the measured Real Cost when
+    /// non-negative, or the stated fee when unmeasured or negative — private rebates / cross-day
+    /// adjustments on large sampled addresses must not inflate general Est. yield above 100%.
+    /// Shared-reward: the fee only; luck is already in the gross figure. Same rule as Web's `payoutCost`.
     var costPercent: Double? {
-        guard let cost = isPPS ? (realFeePercent ?? feePercent) : feePercent, cost.isFinite else { return nil }
+        let measured = realFeePercent.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+        guard let cost = isPPS ? (measured ?? feePercent) : feePercent, cost.isFinite else { return nil }
         return cost
+    }
+
+    var realCostWarning: RealCostWarning? {
+        guard !solo, let cost = realFeePercent, cost.isFinite else { return nil }
+        if cost < 0 { return .negative }
+        return poolWarning
     }
 
     /// 预估收益 as shown: what a miner keeps, PRL per PH·day — the gross figure less
@@ -486,9 +504,8 @@ final class PoolsOverviewStore: ObservableObject {
         guard let data, let measurements = try? JSONDecoder().decode([PPSFeeMeasurement].self, from: data) else { return rows }
         return rows.map { original in
             var row = original
-            // A pool measured per fee tier (Peryn): the Founding tier while its payouts carry the Founding fee, as the
-            // service picks it; otherwise everyone else's.
-            let preferred = row.payoutComparisons.contains { $0.isPPS && $0.founding != nil } ? "founding" : "standard"
+            // A pool measured per fee tier (Peryn): prefer the standard ("Other addresses") tier, as the service does.
+            let preferred = "standard"
             row.ppsMeasurement = measurements.filter { observation in
                 observation.pool == row.name && observation.realFeePercent != nil &&
                     row.payoutComparisons.contains { $0.isPPS && $0.scheme.uppercased() == observation.scheme.uppercased() }
@@ -540,10 +557,11 @@ final class PoolsOverviewStore: ObservableObject {
                 payout.mergeBonus = $0.mergeBonus
                 payout.founding = $0.founding
                 payout.feeTiers = $0.feeTiers
+                payout.poolWarning = !row.solo && !$0.solo ? PoolPayoutComparison.poolWarning(id: row.id, name: row.name) : nil
                 // A shared-reward payout's Real Cost is the service's estimate; a PPS one keeps
                 // coming from the dated settlement measurement below.
                 if !payout.isPPS, !payout.solo, !row.solo {
-                    payout.rollingRequired = row.name == "HeroMiners"
+                    payout.rollingRequired = row.name == "HeroMiners" || row.name == "PearlHash"
                     let rolling = $0.realFeeEstimate?.validated(percent: $0.realFeePercent, period: $0.realFeePeriod)
                     if (!payout.rollingRequired && !$0.hasRollingEstimate) || rolling != nil {
                         payout.sharedEstimate = SharedRealFee(percent: $0.realFeePercent, period: $0.realFeePeriod, rolling: rolling)
@@ -1516,7 +1534,27 @@ private struct RealFeeHelpButton: View {
                                 to: Date(timeIntervalSince1970: window.end))
     }
 
-    private var explanation: String {
+    private var warningText: String? {
+        switch payout?.realCostWarning {
+        case .negative:
+            Loc("公开样本取自链上大额收款地址，可能含大额补贴或跨日补结，且该池未公开逐日结算明细；普通地址按公示费率扣费，预估收益仍按公示费率计算。")
+        case .closedProtocol:
+            Loc("PearlHash 仅允许自家封闭协议客户端接入，且不公开区块列表、逐块 effort 与分账明细，外部无法独立核验其上报的 share 速率。")
+        case .peryn:
+            Loc("Peryn 对大算力地址设有非公开返点分层（重算已剔除 > 50 PH/s 及标有特殊返点身份的地址），且不提供历史 API，地址页面仅保留 7 天、3 位有效数字的每日算力，无法对早期窗口回溯复核。")
+        case .f2pool:
+            Loc("F2Pool 不公开任何账户页面、区块列表或逐笔结算明细；该数值仅基于单一只读账户的每日汇总测算，且比其公布价格高约 0.5～0.7 个百分点，差额来源未公开。")
+        case nil:
+            nil
+        }
+    }
+
+    private func withWarning(_ base: String) -> String {
+        guard let warn = warningText else { return base }
+        return warn + "\n\n" + base
+    }
+
+    private var baseExplanation: String {
         if payout?.rollingRequired == true, payout?.sharedEstimate == nil {
             return Loc("暂无可用的滚动估计；需要至少五个完整 UTC 日、100 个块及其工作量记录。")
         }
@@ -1540,14 +1578,18 @@ private struct RealFeeHelpButton: View {
             : Loc("这是 %@ 期间按矿池出块和公示池费估算的折损率，已扣除出块运气，剩下的是池费和矿池损耗的算力。", period)
     }
 
+    private var explanation: String { withWarning(baseExplanation) }
+
     private static func percent(_ value: Double) -> String { f(value, 2) + "%" }
     private static func tierName(_ tier: PoolFeeTiers.Tier) -> String { Loc(tier == .founding ? "创始矿工地址" : "普通地址") }
     private static func tierValue(_ percent: Double?) -> String { percent.map { "≈" + Self.percent($0) } ?? "—" }
 
     private func rollingExplanation(_ value: RollingPoolCost, period: String) -> String {
-        var lines = [Loc("%@ 天统计估计", value.days.formatted()), period,
-            Loc("发现 %1$@ 个块，其中 %2$@ 个孤块；已接受 share 工作量对应约 %3$@ 个理论块。",
-                value.poolBlocks.formatted(), value.orphans.formatted(), f(value.work, 2)),
+        let sampleLine = value.theoryBasis == "accepted_share_work"
+            ? Loc("主链出块 %1$@ 个；已接受 share 工作量对应约 %2$@ 个理论块。", value.blocksSample.formatted(), f(value.work, 2))
+            : Loc("发现 %1$@ 个块，其中 %2$@ 个孤块；已接受 share 工作量对应约 %3$@ 个理论块。",
+                  value.poolBlocks.formatted(), value.orphans.formatted(), f(value.work, 2))
+        var lines = [Loc("%@ 天统计估计", value.days.formatted()), period, sampleLine,
             Loc("发现块效率：%1$@；95%% 计数误差参考区间：%2$@～%3$@。", Self.percent(value.foundYield * 100),
                 Self.percent(value.foundYield95[0] * 100), Self.percent(value.foundYield95[1] * 100)),
             Loc("成本的 95%% 计数误差参考区间：%1$@～%2$@。", Self.percent(value.cost95[0]), Self.percent(value.cost95[1]))]
@@ -1559,13 +1601,23 @@ private struct RealFeeHelpButton: View {
     @ViewBuilder private var content: some View {
         if let payout, let period, let rolling = payout.sharedEstimate?.rolling {
             ScrollView {
-                Text(rollingExplanation(rolling, period: period))
-                    .font(.callout)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 10) {
+                    if let warn = warningText {
+                        Text(warn).font(.callout).foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Text(rollingExplanation(rolling, period: period))
+                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }.frame(maxHeight: 400)
         } else if let payout, let period, let tiers = payout.realFeeTiers {
             // Peryn: measured per fee tier, the figure's tier first and bold.
             VStack(alignment: .leading, spacing: 12) {
+                if let warn = warningText {
+                    Text(warn).font(.callout).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text(Loc("这是 %@ 期间，实际结算收益相对理论收益的折损率。", period))
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1577,6 +1629,10 @@ private struct RealFeeHelpButton: View {
             }
         } else if let payout, let period, let parts = payout.realFeeBreakdown {
             VStack(alignment: .leading, spacing: 12) {
+                if let warn = warningText {
+                    Text(warn).font(.callout).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text(Loc("%@ · 已扣除出块运气", period))
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1599,9 +1655,15 @@ private struct RealFeeHelpButton: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         } else {
-            Text(explanation)
-                .font(.callout)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 10) {
+                if let warn = warningText {
+                    Text(warn).font(.callout).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text(baseExplanation)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -1626,10 +1688,11 @@ private struct RealFeeHelpButton: View {
     }
 
     var body: some View {
+        let hasWarning = payout?.realCostWarning != nil
         Button { showingExplanation = true } label: {
-            Image(systemName: "info.circle")
-                .font(.system(size: 14))
-                .foregroundStyle(.secondary)
+            Image(systemName: hasWarning ? "exclamationmark.circle" : "info.circle")
+                .font(.system(size: 14, weight: hasWarning ? .medium : .regular))
+                .foregroundStyle(hasWarning ? Color.orange : .secondary)
                 .frame(width: 28, height: 28)
                 .contentShape(Rectangle())
         }
@@ -1720,7 +1783,7 @@ private struct PoolComparisonNotes: View {
             } else {
                 Text(Loc("收益/PH·天 = 该池实际挖到的块 × 单块奖励 ÷ 算力 ×（1 − 手续费），即到手 PRL；绿色 = 最高。"))
             }
-            if pools.contains(where: { $0.name == "HeroMiners" }) {
+            if pools.contains(where: { $0.name == "HeroMiners" || $0.name == "PearlHash" }) {
                 Text(Loc("HeroMiners 使用最近 30 天内的完整 UTC 日记录，至少需要五天和 100 个块，区间包含出块运气。其他 PPLNS／PROP 估算需要最近七天内至少五天观测、逐块 effort，且理论工作量足够产生至少 100 个块。"))
             } else {
                 Text(Loc("真实费用 =（1 − 扣池费后收益 ÷ 理论收益）× 100%；负值表示收益高于理论。PPS、PPS+ 与 FPPS 使用有统计区间的结算样本。PPLNS、PROP 根据统计期内的矿池出块和公示池费估算，并扣除出块运气：矿池自己公布的每块工作量（effort）说明这些块用了多少算力，剩下的就是池费和矿池损耗的算力。不公布每块工作量的矿池（如 PearlHash）显示「—」，数据不足或其他方案同样显示「—」。不含矿工软件抽水及转账费。PF 分别展示 PPS 与 PPLNS。PPLNS 与 PROP 需要最近 7 天内至少 5 天的数据、矿池自己公布的这段时间每个块的工作量（effort），且这段时间按矿池算力应出至少 100 个块；否则显示「—」。"))

@@ -140,6 +140,7 @@ struct SharedPublicDataTests {
             }
             rows += [row("https://pearl.herominers.com/", "HeroMiners", scheme: "PROP", fee: 0, cost: -0.77),
                      row("https://pearlhash.xyz/", "PearlHash", scheme: NSNull(), fee: 1, cost: 3.5),
+                     row("https://pearl.luckypool.io/", "Lucky Pool", scheme: NSNull(), fee: 1, cost: 3.5),
                      row("https://solo.example/", "Solo", scheme: "SOLO", fee: 1, cost: 40, solo: true)]
         }
         let pools = PoolsOverviewStore.build(decoded)
@@ -148,7 +149,11 @@ struct SharedPublicDataTests {
         #expect(hero.realFeePercent == nil)                             // HeroMiners requires rolling evidence, including its uncertainty.
         let pearlhash = try #require(pools.first { $0.name == "PearlHash" })
         #expect(pearlhash.payoutComparisons.map(\.scheme) == ["—"])
-        #expect(close(try #require(pearlhash.realFeePercent), 3.5))
+        #expect(pearlhash.realFeePercent == nil)                        // PearlHash also requires rolling evidence.
+        let lucky = try #require(pools.first { $0.name == "Lucky Pool" })
+        #expect(lucky.payoutComparisons.map(\.scheme) == ["—"])
+        #expect(close(try #require(lucky.realFeePercent), 3.5))
+        #expect(lucky.payoutComparisons[0].realCostWarning == nil)
         let solo = try #require(pools.first { $0.name == "Solo" })
         #expect(solo.realFeePercent == nil)
         #expect(!solo.payoutComparisons[0].realFeeEstimated)
@@ -660,9 +665,11 @@ struct TakeHomeYieldTests {
         #expect(close(try #require(f2pool.netPerPH), 18.36908537496546 * (1 - 0.03594200702636696), 1e-9))
         let kept = try [kryptex, fortune, f2pool].map { try #require($0.netPerPH) }
         #expect(kept == kept.sorted() && Set(kept).count == 3)
-        // A measured zero is kept, and so is a pool that paid above the network figure.
+        // A measured zero is kept; a negative PPS Real Cost falls back to the stated fee and carries the negative warning.
         #expect(close(try #require(payout("FPPS", fee: 2, gross: 100, realCost: 0).netPerPH), 100))
-        #expect(close(try #require(payout("PPS", fee: 2, gross: 100, realCost: -1).netPerPH), 101))
+        let negativePPS = payout("PPS", fee: 2, gross: 100, realCost: -1)
+        #expect(close(try #require(negativePPS.netPerPH), 98))
+        #expect(negativePPS.realCostWarning == .negative)
         // Until Real Cost is measured, the tariff stands in.
         #expect(close(try #require(payout("PPS", fee: 4, gross: 100).netPerPH), 96))
         #expect(close(try #require(payout("PPS", fee: 4, gross: 100, realCost: 6).costPercent), 6))
@@ -919,20 +926,22 @@ struct RealFeeTierTests {
         }
     }
 
-    @Test func theFallbackPicksTheFoundingTierOnlyWhileTheFoundingFeeIsShown() throws {
+    @Test func theFallbackPrefersTheStandardTierOverFounding() throws {
         func tiered(_ tier: String, net: Double) -> PPSFeeMeasurement {
             var o = PPSFeeMeasurement(pool: "Peryn", scheme: "PPS+", netPRL: net, expectedPRL: 100, start: 100, end: 200,
                                       measuredAt: 300, estimated: true, sampleCount: 5, theoryBasis: "hashrate_chain")
             o.tier = tier
             return o
         }
-        let data = try JSONEncoder().encode([tiered("standard", net: 98.74), tiered("founding", net: 99.22)])
+        let data = try JSONEncoder().encode([tiered("founding", net: 99.22), tiered("standard", net: 98.74)])
         var pool = PoolOverview(id: "peryn", name: "Peryn", site: "https://peryn.ai/", gradient: Pearl.wash, feeType: "PPS+")
         #expect(abs(try #require(PoolsOverviewStore.applyMeasurements([pool], data: data).first?.realFeePercent) - 1.26) < 1e-9)
         var payout = PoolPayoutComparison(scheme: "PPS+", feePercent: 1, grossPerPH: nil, theoreticalPerPH: nil, estimated: true)
         payout.founding = PoolFounding(fee: 0.5, afterFP8Months: nil)
         pool.sharedPayouts = [payout]
-        #expect(abs(try #require(PoolsOverviewStore.applyMeasurements([pool], data: data).first?.realFeePercent) - 0.78) < 1e-9)
+        #expect(abs(try #require(PoolsOverviewStore.applyMeasurements([pool], data: data).first?.realFeePercent) - 1.26) < 1e-9)
+        let foundingOnly = try JSONEncoder().encode([tiered("founding", net: 99.22)])
+        #expect(abs(try #require(PoolsOverviewStore.applyMeasurements([pool], data: foundingOnly).first?.realFeePercent) - 0.78) < 1e-9)
     }
 }
 
@@ -988,16 +997,53 @@ struct RollingPoolCostTests {
         return try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
     }
 
-    private func comparison(_ payout: [String: Any]) throws -> PoolPayoutComparison {
+    private func comparison(_ payout: [String: Any], id: String = "https://pearl.herominers.com/", name: String = "HeroMiners") throws -> PoolPayoutComparison {
         let original = try #require(JSONSerialization.jsonObject(with: Fixture.data("shared_overview.json")) as? [String: Any])
         var snapshot = try #require(original["snapshot"] as? [String: Any])
         var row = try #require((snapshot["rows"] as? [[String: Any]])?.first)
-        row["id"] = "https://pearl.herominers.com/"; row["url"] = "https://pearl.herominers.com/"
-        row["name"] = "HeroMiners"; row["scheme"] = "PROP"; row["solo"] = false
+        row["id"] = id; row["url"] = id
+        row["name"] = name; row["scheme"] = "PROP"; row["solo"] = false
         row["payouts"] = [payout]
         snapshot["rows"] = [row]
         let wire = try JSONDecoder().decode(SharedOverview.self, from: JSONSerialization.data(withJSONObject: snapshot))
         return try #require(PoolsOverviewStore.build(wire).first?.payoutComparisons.first)
+    }
+
+    @Test func pearlHashRollingShareWorkEstimateCarriesClosedWarningAndAcceptsOverThreeThousandBlocks() throws {
+        var value = try payload()
+        let blocks = 3200, work = 3350.0, foundYield = Double(blocks) / work, ratio = 0.99 * foundYield, percent = (1 - ratio) * 100
+        value["fee"] = 1
+        value["realFeePercent"] = percent
+        var detail = try #require(value["realFeeEstimate"] as? [String: Any])
+        detail["id"] = "https://pearlhash.xyz/"
+        detail["pool"] = "PearlHash"
+        detail["scheme"] = "PROP"
+        detail["theoryBasis"] = "accepted_share_work"
+        detail["poolBlocks"] = blocks
+        detail["blocksSample"] = blocks
+        detail["orphans"] = 0
+        detail["work"] = work
+        detail["feePercent"] = 1
+        detail["foundYield"] = foundYield
+        detail["foundYield95"] = [foundYield - 0.035, foundYield + 0.036]
+        detail["ratio"] = ratio
+        detail["cost95"] = [percent - 3.5, percent + 3.5]
+        value["realFeeEstimate"] = detail
+        let ph = try comparison(value, id: "https://pearlhash.xyz/", name: "PearlHash")
+        #expect(ph.rollingRequired)
+        #expect(close(try #require(ph.realFeePercent), percent))
+        #expect(ph.realCostWarning == .closedProtocol)
+        var perynPool = PoolOverview(id: "https://peryn.ai/", name: "Peryn", site: "https://peryn.ai/", gradient: Pearl.wash, feeType: "PPS+")
+        perynPool.ppsMeasurement = PPSFeeMeasurement(pool: "Peryn", scheme: "PPS+", netPRL: 98.96, expectedPRL: 100, start: 100, end: 200,
+                                                     measuredAt: 300, estimated: true, sampleCount: 5, theoryBasis: "hashrate_chain")
+        #expect(perynPool.payoutComparisons[0].realCostWarning == .peryn)
+        var f2Pool = PoolOverview(id: "https://www.f2pool.com/", name: "F2Pool", site: "https://www.f2pool.com/", gradient: Pearl.wash, feeType: "PPS")
+        f2Pool.ppsMeasurement = PPSFeeMeasurement(pool: "F2Pool", scheme: "PPS", netPRL: 95.63, expectedPRL: 100, start: 100, end: 200,
+                                                  measuredAt: 300, estimated: true, sampleCount: 5, theoryBasis: "hashrate_chain")
+        #expect(f2Pool.payoutComparisons[0].realCostWarning == .f2pool)
+        detail["orphans"] = 1; detail["blocksSample"] = blocks - 1
+        value["realFeeEstimate"] = detail
+        #expect(try comparison(value, id: "https://pearlhash.xyz/", name: "PearlHash").realFeePercent == nil)
     }
 
     @Test func historicalRollingEstimateKeepsItsIntervalAndAvoidsTheLuckFreeBreakdown() throws {

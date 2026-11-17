@@ -1387,7 +1387,7 @@
 "尚未确认长期折损；观测产出仍包含出块运气的影响。" = "Kehilangan hasil jangka panjang belum terbukti; hasil pengamatan masih dipengaruhi keberuntungan blok.";
 "以矿池记录的已接受 share 工作量为基准，手续费 %@ 与孤块损失各计一次。区间不包含算力上报和矿池计数误差。" = "Berdasarkan kerja share yang dicatat pool. Biaya %@ dan kerugian blok yatim dihitung masing-masing sekali. Interval tidak mencakup kesalahan telemetri atau laporan pool.";
 "暂无可用的滚动估计；需要至少五个完整 UTC 日、100 个块及其工作量记录。" = "Belum ada perkiraan bergulir saat ini. Diperlukan minimal lima hari UTC penuh dan 100 blok beserta catatan kerja putaran.";
-"HeroMiners 使用最近 30 天内的完整 UTC 日记录，至少需要五天和 100 个块，区间包含出块运气。其他 PPLNS／PROP 估算需要最近七天内至少五天观测、逐块 effort，且理论工作量足够产生至少 100 个块。" = "HeroMiners memakai hingga 30 hari UTC penuh, minimal lima hari dan 100 blok; interval mencakup keberuntungan blok. Perkiraan PPLNS/PROP lain memerlukan lima hari pengamatan dari tujuh hari terakhir, effort blok, dan minimal 100 blok yang diharapkan.";
+"HeroMiners 使用最近 30 天内的完整 UTC 日记录，至少需要五天和 100 个块，区间包含出块运气。其他 PPLNS／PROP 估算需要最近七天内至少五天观测、逐块 effort，且理论工作量足够产生至少 100 个块。" = "HeroMiners dan PearlHash memakai hingga 30 hari UTC penuh, minimal lima hari dan 100 blok; interval mencakup keberuntungan blok. Perkiraan PPLNS/PROP lain memerlukan lima hari pengamatan dari tujuh hari terakhir, effort blok, dan minimal 100 blok yang diharapkan.";
 
 "Real Cost 以矿工实报工作量为基准，包含矿工费、工作量认可损失与结算扣减，不计入出块运气。" = "Real Cost memakai kerja yang dilaporkan miner, termasuk biaya miner, kerja yang tidak diakui dan potongan penyelesaian, tanpa keberuntungan blok.";
 
@@ -1465,3 +1465,10 @@
 "只开「现货 + 提现」而不勾「钱包 → 只读」会导致充值和提现页无法读取地址与手续费。开启 API 提币时，Gate 还要求目标收款地址已先在 Gate 后台加入提币白名单（或手动成功提过一次）。" = "Mengaktifkan Spot + Penarikan saja tanpa «Dompet → Baca Saja» akan membuat halaman Deposit dan Penarikan gagal memuat alamat serta biaya jaringan. Untuk penarikan API, alamat tujuan juga wajib sudah masuk whitelist penarikan Gate (atau pernah ditarik manual).";
 "Gate 拒绝了读取充值地址的请求：请到 Gate「API 管理」为这把密钥开启「钱包 → 只读」权限。" = "Gate menolak permintaan alamat deposit: aktifkan izin «Dompet → Baca Saja» untuk kunci ini di «Manajemen API» Gate.";
 "收款地址不在 Gate 提币白名单中。请先到 Gate 网站将该地址加入白名单并完成验证。" = "Alamat tujuan belum ada di daftar putih penarikan Gate Anda. Tambahkan dan verifikasi alamat ini terlebih dahulu di situs web Gate.";
+
+/* Real Cost warning notes & PearlHash rolling sample */
+"公开样本取自链上大额收款地址，可能含大额补贴或跨日补结，且该池未公开逐日结算明细；普通地址按公示费率扣费，预估收益仍按公示费率计算。" = "Sampel publik berasal dari alamat penerima besar di rantai dan dapat mencakup rabat khusus atau penyesuaian lintas hari tanpa rincian harian terbuka; alamat biasa membayar biaya tertera sehingga estimasi hasil memakai biaya tertera.";
+"PearlHash 仅允许自家封闭协议客户端接入，且不公开区块列表、逐块 effort 与分账明细，外部无法独立核验其上报的 share 速率。" = "PearlHash hanya menerima perangkat lunak protokol tertutup miliknya sendiri dan tidak mempublikasikan daftar blok, effort per blok, atau rincian pembagian; laju share yang dilaporkan tidak dapat diverifikasi secara independen.";
+"主链出块 %1$@ 个；已接受 share 工作量对应约 %2$@ 个理论块。" = "%1$@ blok rantai utama ditemukan. Kerja share yang diterima memperkirakan sekitar %2$@ blok.";
+"Peryn 对大算力地址设有非公开返点分层（重算已剔除 > 50 PH/s 及标有特殊返点身份的地址），且不提供历史 API，地址页面仅保留 7 天、3 位有效数字的每日算力，无法对早期窗口回溯复核。" = "Peryn menerapkan tingkat rabat tertutup bagi alamat besar (alamat di atas 50 PH/s atau berlabel rabat khusus telah dikecualikan) dan tidak menyediakan API riwayat; halaman alamat hanya menyimpan hashrate harian 3 angka penting selama 7 hari sehingga periode lama tidak dapat diaudit ulang.";
+"F2Pool 不公开任何账户页面、区块列表或逐笔结算明细；该数值仅基于单一只读账户的每日汇总测算，且比其公布价格高约 0.5～0.7 个百分点，差额来源未公开。" = "F2Pool tidak mempublikasikan halaman akun publik, daftar blok, atau rincian penyelesaian; angka ini berasal dari rekap harian satu akun baca-saja dan lebih tinggi 0,5–0,7 poin persentase dari harga halaman utamanya tanpa penjelasan terbuka.";

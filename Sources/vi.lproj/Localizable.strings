@@ -1387,7 +1387,7 @@
 "尚未确认长期折损；观测产出仍包含出块运气的影响。" = "Chưa xác nhận tổn thất dài hạn; sản lượng quan sát vẫn chịu ảnh hưởng của may rủi tìm khối.";
 "以矿池记录的已接受 share 工作量为基准，手续费 %@ 与孤块损失各计一次。区间不包含算力上报和矿池计数误差。" = "Dựa trên công việc share được pool ghi nhận. Phí %@ và tổn thất khối mồ côi được tính mỗi khoản một lần. Khoảng không bao gồm sai số báo hashrate hoặc số liệu pool.";
 "暂无可用的滚动估计；需要至少五个完整 UTC 日、100 个块及其工作量记录。" = "Chưa có ước tính trượt hiện tại. Cần ít nhất năm ngày UTC đầy đủ và 100 khối có dữ liệu công việc từng vòng.";
-"HeroMiners 使用最近 30 天内的完整 UTC 日记录，至少需要五天和 100 个块，区间包含出块运气。其他 PPLNS／PROP 估算需要最近七天内至少五天观测、逐块 effort，且理论工作量足够产生至少 100 个块。" = "HeroMiners dùng tối đa 30 ngày UTC đầy đủ, ít nhất năm ngày và 100 khối; khoảng bao gồm may rủi. Ước tính PPLNS/PROP khác cần năm ngày quan sát trong bảy ngày gần nhất, effort từng khối và ít nhất 100 khối kỳ vọng.";
+"HeroMiners 使用最近 30 天内的完整 UTC 日记录，至少需要五天和 100 个块，区间包含出块运气。其他 PPLNS／PROP 估算需要最近七天内至少五天观测、逐块 effort，且理论工作量足够产生至少 100 个块。" = "HeroMiners và PearlHash dùng tối đa 30 ngày UTC đầy đủ, ít nhất năm ngày và 100 khối; khoảng bao gồm may rủi. Ước tính PPLNS/PROP khác cần năm ngày quan sát trong bảy ngày gần nhất, effort từng khối và ít nhất 100 khối kỳ vọng.";
 
 "Real Cost 以矿工实报工作量为基准，包含矿工费、工作量认可损失与结算扣减，不计入出块运气。" = "Real Cost dựa trên công việc phần mềm đào báo cáo, gồm phí phần mềm, công việc không được ghi nhận và khoản khấu trừ thanh toán, không gồm may mắn tìm khối.";
 
@@ -1465,3 +1465,10 @@
 "只开「现货 + 提现」而不勾「钱包 → 只读」会导致充值和提现页无法读取地址与手续费。开启 API 提币时，Gate 还要求目标收款地址已先在 Gate 后台加入提币白名单（或手动成功提过一次）。" = "Nếu chỉ bật Spot + Rút tiền mà bỏ qua «Ví → Chỉ đọc», trang Nạp và Rút sẽ không tải được địa chỉ và phí mạng. Khi rút qua API, Gate cũng yêu cầu địa chỉ nhận phải có sẵn trong danh sách trắng trên Gate (hoặc đã từng rút thủ công).";
 "Gate 拒绝了读取充值地址的请求：请到 Gate「API 管理」为这把密钥开启「钱包 → 只读」权限。" = "Gate từ chối yêu cầu lấy địa chỉ nạp: vui lòng bật quyền «Ví → Chỉ đọc» cho khóa này trong mục «Quản lý API» trên Gate.";
 "收款地址不在 Gate 提币白名单中。请先到 Gate 网站将该地址加入白名单并完成验证。" = "Địa chỉ nhận chưa có trong danh sách trắng rút tiền trên Gate. Vui lòng thêm và xác minh địa chỉ này trên trang web Gate trước.";
+
+/* Real Cost warning notes & PearlHash rolling sample */
+"公开样本取自链上大额收款地址，可能含大额补贴或跨日补结，且该池未公开逐日结算明细；普通地址按公示费率扣费，预估收益仍按公示费率计算。" = "Mẫu công khai lấy từ các địa chỉ nhận lớn trên chuỗi, có thể gồm khoản hoàn riêng hoặc bù trừ qua ngày và không có bảng kê hằng ngày công khai; địa chỉ thường vẫn chịu phí công bố nên lợi suất ước tính tính theo phí công bố.";
+"PearlHash 仅允许自家封闭协议客户端接入，且不公开区块列表、逐块 effort 与分账明细，外部无法独立核验其上报的 share 速率。" = "PearlHash chỉ cho phép phần mềm giao thức đóng riêng và không công bố danh sách khối, effort từng khối hay sổ chia thưởng; tốc độ share báo cáo không thể kiểm chứng độc lập.";
+"主链出块 %1$@ 个；已接受 share 工作量对应约 %2$@ 个理论块。" = "Đã tìm thấy %1$@ khối chuỗi chính. Công việc share được chấp nhận dự báo khoảng %2$@ khối.";
+"Peryn 对大算力地址设有非公开返点分层（重算已剔除 > 50 PH/s 及标有特殊返点身份的地址），且不提供历史 API，地址页面仅保留 7 天、3 位有效数字的每日算力，无法对早期窗口回溯复核。" = "Peryn áp dụng mức hoàn phí riêng không công khai cho các địa chỉ lớn (đã loại trừ địa chỉ trên 50 PH/s hoặc có nhãn hoàn phí đặc biệt) và không cung cấp API lịch sử; trang địa chỉ chỉ lưu hashrate ngày làm tròn 3 chữ số có nghĩa trong 7 ngày nên không thể đối chiếu lại các kỳ trước.";
+"F2Pool 不公开任何账户页面、区块列表或逐笔结算明细；该数值仅基于单一只读账户的每日汇总测算，且比其公布价格高约 0.5～0.7 个百分点，差额来源未公开。" = "F2Pool không công bố trang tài khoản công khai, danh sách khối hay chi tiết thanh toán; con số này tính từ tổng hợp ngày của một tài khoản chỉ đọc duy nhất và cao hơn giá trang chủ khoảng 0,5–0,7 điểm phần trăm mà chưa rõ nguyên nhân.";

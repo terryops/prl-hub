@@ -176,13 +176,15 @@ struct RollingPoolCost: Decodable, Sendable, Equatable {
     var lossUnconfirmed: Bool { foundYield95.count == 2 && foundYield95[1] >= 1 }
 
     func validated(percent: Double?, period: SharedOverview.Row.Payout.Period?) -> RollingPoolCost? {
+        let hero = id == "https://pearl.herominers.com/" && pool == "HeroMiners" && theoryBasis == "accepted_share_rounds"
+        let pearlhash = id == "https://pearlhash.xyz/" && pool == "PearlHash" && theoryBasis == "accepted_share_work" && orphans == 0
         guard let percent, percent.isFinite, let period,
-              id == "https://pearl.herominers.com/", pool == "HeroMiners",
-              theoryBasis == "accepted_share_rounds", sourceVersion == 2, confidenceMethod == "poisson_count_only", confidence == 0.95,
+              hero || pearlhash,
+              sourceVersion == 2, confidenceMethod == "poisson_count_only", confidence == 0.95,
               start.isFinite, end.isFinite, start > 0, end - start >= 5 * 86400, end - start <= 30 * 86400,
               start.truncatingRemainder(dividingBy: 86400) == 0, end.truncatingRemainder(dividingBy: 86400) == 0,
               targetDays == 30, measuredAt.isFinite, measuredAt >= end, period.start == start, period.end == end,
-              poolBlocks >= 100, poolBlocks <= 3000, orphans >= 0, orphans <= poolBlocks, blocksSample == poolBlocks - orphans,
+              poolBlocks >= 100, poolBlocks <= 10_000, orphans >= 0, orphans <= poolBlocks, blocksSample == poolBlocks - orphans,
               work.isFinite, work > 0, feePercent.isFinite, (0...100).contains(feePercent),
               foundYield.isFinite, abs(foundYield - Double(poolBlocks) / work) < 1e-9,
               ratio.isFinite, (0...2).contains(ratio),
